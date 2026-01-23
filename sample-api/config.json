@@ -1,0 +1,89 @@
+{
+  "name": "sample-api",
+  "version": "1.0.0",
+  "description": "Sample API integration for testing validation workflow",
+  "entry_point": "sample_api.py",
+  "auth": {
+    "type": "custom",
+    "title": "API Key Authentication",
+    "fields": {
+      "type": "object",
+      "properties": {
+        "api_key": {
+          "type": "string",
+          "format": "password",
+          "label": "API Key",
+          "help_text": "Enter your API key from the dashboard"
+        }
+      },
+      "required": ["api_key"]
+    }
+  },
+  "actions": {
+    "list_items": {
+      "display_name": "List Items",
+      "description": "Retrieves a list of items from the API",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of items to return",
+            "default": 10,
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "boolean",
+            "description": "Whether the operation was successful"
+          },
+          "items": {
+            "type": "array",
+            "description": "List of items"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message if result is false"
+          }
+        }
+      }
+    },
+    "get_item": {
+      "display_name": "Get Item",
+      "description": "Retrieves a single item by ID",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "description": "The ID of the item to retrieve"
+          }
+        },
+        "required": ["item_id"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "boolean",
+            "description": "Whether the operation was successful"
+          },
+          "item": {
+            "type": "object",
+            "description": "The item data"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message if result is false"
+          }
+        }
+      }
+    }
+  }
+}

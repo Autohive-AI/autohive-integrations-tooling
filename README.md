@@ -48,3 +48,4 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 | Integration | Description | Auth Type |
 |-------------|-------------|-----------|
 | good-integration | Example valid integration | Custom |
+| sample-api | Sample API integration for testing | Custom |
