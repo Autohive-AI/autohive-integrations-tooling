@@ -45,20 +45,28 @@ flowchart TD
     A[Read Python file] --> B[Parse into AST]
     B --> C[Walk all AST nodes]
     C --> D{Node type?}
-    D -->|ast.Import| E[Extract module name]
-    D -->|ast.ImportFrom| F[Extract from-module name]
+    D -->|ast.Import| E[Extract full module path]
+    D -->|ast.ImportFrom| F{Relative import?}
     D -->|Other| C
-    E --> G[Get top-level package]
-    F --> G
-    G --> H{find_spec succeeds?}
-    H -->|Yes| C
-    H -->|No| I[Add to errors]
-    I --> C
-    C --> J{More nodes?}
-    J -->|Yes| D
-    J -->|No| K{Errors found?}
-    K -->|Yes| L[Print errors, exit 1]
-    K -->|No| M[Exit 0]
+    F -->|Yes| G[Resolve to absolute path]
+    F -->|No| H[Use module directly]
+    E --> I{Module available?}
+    G --> J{File exists?}
+    H --> I
+    I -->|No| K[Add to errors]
+    J -->|No| K
+    I -->|Yes| L{--verify-names?}
+    J -->|Yes| C
+    L -->|Yes| M{Names exist?}
+    L -->|No| C
+    M -->|No| K
+    M -->|Yes| C
+    K --> C
+    C --> N{More nodes?}
+    N -->|Yes| D
+    N -->|No| O{Errors found?}
+    O -->|Yes| P[Print errors, exit 1]
+    O -->|No| Q[Exit 0]
 ```
 
 ### Step-by-Step
@@ -66,9 +74,11 @@ flowchart TD
 1. **Read** the Python source file
 2. **Parse** it into an Abstract Syntax Tree (no code execution)
 3. **Walk** the AST to find all `Import` and `ImportFrom` nodes
-4. **Extract** the top-level module name from each import
-5. **Check** if the module is available using `importlib.util.find_spec()`
-6. **Report** any missing modules
+4. **Check imports**:
+   - Absolute imports: verify full module path with `importlib.util.find_spec()`
+   - Relative imports: resolve to absolute path and check file existence
+5. **Verify names** (if `--verify-names`): import module and check `hasattr()`
+6. **Report** any missing modules or names
 
 ## Supported Import Styles
 
