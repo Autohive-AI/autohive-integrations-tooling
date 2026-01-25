@@ -168,14 +168,20 @@ def resolve_relative_import(
     package_parts = package_parts[:-1]
 
     # Go up 'level' directories (level=1 means current package, level=2 means parent, etc.)
+    # level > len(package_parts) means we're trying to go above the package root
     if level > len(package_parts):
         return None, None
 
+    # Slice to get the base package after going up 'level' directories
+    # e.g., ['mypackage', 'sub'] with level=1 -> ['mypackage', 'sub']
+    #       ['mypackage', 'sub'] with level=2 -> ['mypackage']
     base_parts = package_parts[:len(package_parts) - level + 1]
 
     if module:
         base_parts.append(module)
 
+    # base_parts can be empty if level equals len(package_parts) and no module specified
+    # This means "from . import x" at the top-level package with no target module
     if not base_parts:
         return None, None
 
