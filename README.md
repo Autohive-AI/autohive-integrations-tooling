@@ -2,15 +2,18 @@
 
 Validation tools and CI/CD workflows for Autohive integrations.
 
+**Requires: Python 3.13+**
+
 ## What's Included
 
 | File | Description |
 |------|-------------|
 | `.github/workflows/validate-integration.yml` | GitHub Action for PR validation |
 | `scripts/validate_integration.py` | Structure validation script |
-| `scripts/check_imports.py` | Import validation script |
+| `scripts/check_imports.py` | Import validation script ([docs](scripts/docs/check_imports.md)) |
+| `scripts/docs/` | Detailed script documentation |
 | `INTEGRATION_CHECKLIST.md` | Manual review checklist |
-| `good-integration/` | Example valid integration |
+| `tests/examples/` | Test cases for validation scripts |
 
 ## How It Works
 
