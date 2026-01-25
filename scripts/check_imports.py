@@ -16,12 +16,11 @@ How it works:
 
 Supported import styles:
     - `import module`           -> checks 'module'
-    - `import module.submodule` -> checks 'module' (top-level only)
+    - `import module.submodule` -> checks 'module.submodule' (full path)
     - `from module import name` -> checks 'module'
-    - `from pkg.sub import x`   -> checks 'pkg' (top-level only)
+    - `from pkg.sub import x`   -> checks 'pkg.sub' (full path)
 
 Limitations:
-    - Only checks if the top-level package exists, not submodules
     - Relative imports (from . import x) are skipped (node.module is None)
     - Does not verify that specific names exist within modules
 
@@ -44,7 +43,40 @@ Examples:
 import ast
 import sys
 import importlib.util
-from typing import List
+from typing import List, Optional
+
+
+def is_module_available(module_name: str) -> bool:
+    """
+    Check if a module (including submodules) is available.
+
+    Attempts to find the module spec for the full module path.
+    For submodules, first imports the parent package to ensure
+    lazy-loaded submodules can be found.
+
+    Args:
+        module_name: Full module path (e.g., 'requests.auth' or 'os.path').
+
+    Returns:
+        True if the module is available, False otherwise.
+    """
+    try:
+        # For submodules, we need to import the parent first
+        # because some packages use lazy loading
+        if '.' in module_name:
+            parts = module_name.split('.')
+            # Try to import parent packages progressively
+            for i in range(1, len(parts)):
+                parent = '.'.join(parts[:i])
+                try:
+                    __import__(parent)
+                except ImportError:
+                    return False
+
+        spec = importlib.util.find_spec(module_name)
+        return spec is not None
+    except (ModuleNotFoundError, ValueError, AttributeError, ImportError):
+        return False
 
 
 def check_imports(filepath: str) -> int:
@@ -52,8 +84,8 @@ def check_imports(filepath: str) -> int:
     Check if all imports in a Python file are available in the current environment.
 
     This function parses the given Python file using the AST module to extract
-    all import statements. For each import, it checks whether the top-level
-    module can be found using importlib.util.find_spec().
+    all import statements. For each import, it checks whether the full module
+    path can be found using importlib.util.find_spec().
 
     Args:
         filepath: Path to the Python file to check.
@@ -62,7 +94,7 @@ def check_imports(filepath: str) -> int:
         Exit code: 0 if all imports available, 1 if missing imports, 2 if error occurred.
 
     Note:
-        - Only the top-level module is checked (e.g., for 'os.path', only 'os' is verified)
+        - Full module paths are checked (e.g., 'os.path' is verified, not just 'os')
         - Relative imports (from . import x) are skipped since they depend on package context
         - The file is parsed but never executed, making this safe for untrusted code
     """
@@ -81,21 +113,16 @@ def check_imports(filepath: str) -> int:
             # Handle: import module / import module.submodule / import mod as alias
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    # Extract top-level module (e.g., 'requests' from 'requests.auth')
-                    top_level_module = alias.name.split('.')[0]
-
-                    # Check if module exists in current Python environment
-                    if importlib.util.find_spec(top_level_module) is None:
+                    # Check full module path (e.g., 'requests.auth')
+                    if not is_module_available(alias.name):
                         errors.append(f"Missing module: {alias.name}")
 
             # Handle: from module import name / from pkg.sub import name
             elif isinstance(node, ast.ImportFrom):
                 # node.module is None for relative imports like "from . import x"
                 if node.module:
-                    # Extract top-level module
-                    top_level_module = node.module.split('.')[0]
-
-                    if importlib.util.find_spec(top_level_module) is None:
+                    # Check full module path
+                    if not is_module_available(node.module):
                         errors.append(f"Missing module: {node.module}")
 
         # Report all missing modules

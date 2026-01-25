@@ -68,9 +68,9 @@ flowchart TD
 | Import Statement | Module Checked |
 |------------------|----------------|
 | `import module` | `module` |
-| `import module.submodule` | `module` (top-level only) |
+| `import module.submodule` | `module.submodule` (full path) |
 | `from module import name` | `module` |
-| `from pkg.sub import x` | `pkg` (top-level only) |
+| `from pkg.sub import x` | `pkg.sub` (full path) |
 
 ## Key Components
 
@@ -84,7 +84,6 @@ flowchart TD
 
 ## Limitations
 
-- **Top-level only**: Only checks if the top-level package exists, not submodules (e.g., for `requests.auth`, only `requests` is verified)
 - **Relative imports skipped**: Imports like `from . import x` are skipped because `node.module` is `None`
 - **No name verification**: Does not verify that specific names exist within modules (e.g., `from os import nonexistent` would pass if `os` exists)
 
