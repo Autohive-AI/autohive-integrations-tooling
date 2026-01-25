@@ -30,7 +30,8 @@ Usage:
 
 Exit codes:
     0 - All imports are available
-    1 - One or more imports are missing or an error occurred
+    1 - One or more imports are missing
+    2 - An error occurred during processing (file not found, syntax error, etc.)
 
 Examples:
     $ python scripts/check_imports.py my_integration/main.py
@@ -46,7 +47,7 @@ import importlib.util
 from typing import List
 
 
-def check_imports(filepath: str) -> bool:
+def check_imports(filepath: str) -> int:
     """
     Check if all imports in a Python file are available in the current environment.
 
@@ -58,7 +59,7 @@ def check_imports(filepath: str) -> bool:
         filepath: Path to the Python file to check.
 
     Returns:
-        True if all imports are available, False if any are missing or on error.
+        Exit code: 0 if all imports available, 1 if missing imports, 2 if error occurred.
 
     Note:
         - Only the top-level module is checked (e.g., for 'os.path', only 'os' is verified)
@@ -101,29 +102,25 @@ def check_imports(filepath: str) -> bool:
         if errors:
             for error in errors:
                 print(error)
-            return False
+            return 1  # Missing imports
 
-        return True
+        return 0  # Success - all imports available
 
     except SyntaxError as e:
         print(f"Syntax error in {filepath}: {e}")
-        return False
+        return 2  # Processing error
     except FileNotFoundError:
         print(f"File not found: {filepath}")
-        return False
+        return 2  # Processing error
     except Exception as e:
         print(f"Error: {e}")
-        return False
+        return 2  # Processing error
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: check_imports.py <file.py>")
-        sys.exit(1)
+        sys.exit(2)  # Usage error is a processing error
 
     filepath = sys.argv[1]
-
-    if check_imports(filepath):
-        sys.exit(0)  # Success - all imports available
-    else:
-        sys.exit(1)  # Failure - missing imports or error
+    sys.exit(check_imports(filepath))

@@ -17,7 +17,8 @@ python scripts/check_imports.py <file.py>
 | Code | Meaning |
 |------|---------|
 | `0`  | All imports are available |
-| `1`  | One or more imports are missing, or an error occurred |
+| `1`  | One or more imports are missing |
+| `2`  | An error occurred during processing (file not found, syntax error, usage error) |
 
 ### Examples
 
