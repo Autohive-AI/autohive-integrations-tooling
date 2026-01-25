@@ -71,6 +71,8 @@ flowchart TD
 | `import module.submodule` | `module.submodule` (full path) |
 | `from module import name` | `module` |
 | `from pkg.sub import x` | `pkg.sub` (full path) |
+| `from . import sibling` | Resolves to `pkg.sibling` and checks file exists |
+| `from ..pkg import x` | Resolves to `parent.pkg` and checks file exists |
 
 ## Key Components
 
@@ -84,7 +86,6 @@ flowchart TD
 
 ## Limitations
 
-- **Relative imports skipped**: Imports like `from . import x` are skipped because `node.module` is `None`
 - **No name verification**: Does not verify that specific names exist within modules (e.g., `from os import nonexistent` would pass if `os` exists)
 
 ## Integration with CI

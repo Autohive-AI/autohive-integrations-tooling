@@ -19,9 +19,10 @@ Supported import styles:
     - `import module.submodule` -> checks 'module.submodule' (full path)
     - `from module import name` -> checks 'module'
     - `from pkg.sub import x`   -> checks 'pkg.sub' (full path)
+    - `from . import sibling`   -> resolves to absolute path and checks
+    - `from ..pkg import x`     -> resolves to absolute path and checks
 
 Limitations:
-    - Relative imports (from . import x) are skipped (node.module is None)
     - Does not verify that specific names exist within modules
 
 Usage:
@@ -43,6 +44,7 @@ Examples:
 import ast
 import sys
 import importlib.util
+from pathlib import Path
 from typing import List, Optional
 
 
@@ -79,6 +81,129 @@ def is_module_available(module_name: str) -> bool:
         return False
 
 
+def find_package_root(filepath: Path) -> Optional[Path]:
+    """
+    Find the root of the Python package containing the given file.
+
+    Walks up the directory tree looking for the topmost directory
+    that still contains an __init__.py file.
+
+    Args:
+        filepath: Path to a Python file.
+
+    Returns:
+        Path to the package root directory, or None if not in a package.
+    """
+    filepath = filepath.resolve()
+    current = filepath.parent
+    package_root = None
+
+    while current != current.parent:
+        init_file = current / "__init__.py"
+        if init_file.exists():
+            package_root = current
+            current = current.parent
+        else:
+            break
+
+    return package_root
+
+
+def get_package_name(filepath: Path, package_root: Path) -> str:
+    """
+    Determine the full package name for a file within a package.
+
+    Args:
+        filepath: Path to the Python file.
+        package_root: Path to the package root directory.
+
+    Returns:
+        Dotted package name (e.g., 'mypackage.subpackage.module').
+    """
+    filepath = filepath.resolve()
+    relative = filepath.relative_to(package_root.parent)
+
+    # Remove .py extension and convert path to dotted name
+    parts = list(relative.parts)
+    if parts[-1].endswith('.py'):
+        parts[-1] = parts[-1][:-3]
+
+    return '.'.join(parts)
+
+
+def resolve_relative_import(
+    filepath: Path,
+    level: int,
+    module: Optional[str]
+) -> tuple[Optional[str], Optional[Path]]:
+    """
+    Resolve a relative import to an absolute module path.
+
+    Args:
+        filepath: Path to the file containing the import.
+        level: Number of dots in the relative import (1 for '.', 2 for '..', etc.).
+        module: The module part after the dots (e.g., 'sibling' in 'from . import sibling'),
+                or None for 'from . import x'.
+
+    Returns:
+        Tuple of (absolute module path, path to check for file existence).
+        Returns (None, None) if resolution fails.
+    """
+    filepath = Path(filepath).resolve()
+    package_root = find_package_root(filepath)
+
+    if package_root is None:
+        return None, None
+
+    # Get the current package path
+    current_package = get_package_name(filepath, package_root)
+    package_parts = current_package.split('.')
+
+    # Remove the module name (last part) to get the package
+    package_parts = package_parts[:-1]
+
+    # Go up 'level' directories (level=1 means current package, level=2 means parent, etc.)
+    if level > len(package_parts):
+        return None, None
+
+    base_parts = package_parts[:len(package_parts) - level + 1]
+
+    if module:
+        base_parts.append(module)
+
+    if not base_parts:
+        return None, None
+
+    # Calculate the file path for this module
+    module_path = package_root.parent
+    for part in base_parts:
+        module_path = module_path / part
+
+    return '.'.join(base_parts), module_path
+
+
+def is_relative_import_valid(module_path: Path) -> bool:
+    """
+    Check if a resolved relative import points to an existing module.
+
+    Args:
+        module_path: Path to the expected module location.
+
+    Returns:
+        True if the module exists as a .py file or package directory.
+    """
+    # Check if it's a package (directory with __init__.py)
+    if module_path.is_dir() and (module_path / "__init__.py").exists():
+        return True
+
+    # Check if it's a module file
+    py_file = module_path.with_suffix('.py')
+    if py_file.is_file():
+        return True
+
+    return False
+
+
 def check_imports(filepath: str) -> int:
     """
     Check if all imports in a Python file are available in the current environment.
@@ -95,7 +220,7 @@ def check_imports(filepath: str) -> int:
 
     Note:
         - Full module paths are checked (e.g., 'os.path' is verified, not just 'os')
-        - Relative imports (from . import x) are skipped since they depend on package context
+        - Relative imports are resolved to absolute paths when possible
         - The file is parsed but never executed, making this safe for untrusted code
     """
     try:
@@ -119,10 +244,30 @@ def check_imports(filepath: str) -> int:
 
             # Handle: from module import name / from pkg.sub import name
             elif isinstance(node, ast.ImportFrom):
-                # node.module is None for relative imports like "from . import x"
-                if node.module:
-                    # Check full module path
-                    if not is_module_available(node.module):
+                # Handle relative imports (level > 0 means dots present)
+                if node.level > 0:
+                    if node.module:
+                        # from ..module import name - check the module
+                        resolved_name, resolved_path = resolve_relative_import(
+                            Path(filepath), node.level, node.module
+                        )
+                        if resolved_path is None:
+                            continue
+                        if not is_relative_import_valid(resolved_path):
+                            errors.append(f"Missing module: {resolved_name} (relative import)")
+                    else:
+                        # from . import name - each name is a module to check
+                        for alias in node.names:
+                            resolved_name, resolved_path = resolve_relative_import(
+                                Path(filepath), node.level, alias.name
+                            )
+                            if resolved_path is None:
+                                continue
+                            if not is_relative_import_valid(resolved_path):
+                                errors.append(f"Missing module: {resolved_name} (relative import)")
+                else:
+                    # Absolute import
+                    if node.module and not is_module_available(node.module):
                         errors.append(f"Missing module: {node.module}")
 
         # Report all missing modules
