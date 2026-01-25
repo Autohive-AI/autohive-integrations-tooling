@@ -10,7 +10,14 @@ This script validates that all imports in a Python file can be resolved in the c
 
 ```bash
 python scripts/check_imports.py <file.py>
+python scripts/check_imports.py --verify-names <file.py>
 ```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--verify-names` | Verify that imported names exist within modules. **WARNING**: This imports modules and may execute code. |
 
 ### Exit Codes
 
@@ -84,9 +91,22 @@ flowchart TD
 | `ast.ImportFrom` | Represents `from x import y` statements |
 | `importlib.util.find_spec()` | Checks if a module can be located in the current Python environment |
 
-## Limitations
+## Name Verification (--verify-names)
 
-- **No name verification**: Does not verify that specific names exist within modules (e.g., `from os import nonexistent` would pass if `os` exists)
+By default, the script only checks if modules exist. With `--verify-names`, it also verifies that imported names exist within those modules.
+
+```bash
+# Without flag: passes (os module exists)
+python scripts/check_imports.py file_with_bad_names.py
+
+# With flag: fails (os.nonexistent doesn't exist)
+python scripts/check_imports.py --verify-names file_with_bad_names.py
+# Output: Missing name: os.nonexistent
+```
+
+### Security Warning
+
+The `--verify-names` flag imports modules to check for name existence. This means **module-level code will be executed**. Only use with trusted code.
 
 ## Integration with CI
 

@@ -22,11 +22,12 @@ Supported import styles:
     - `from . import sibling`   -> resolves to absolute path and checks
     - `from ..pkg import x`     -> resolves to absolute path and checks
 
-Limitations:
-    - Does not verify that specific names exist within modules
+Options:
+    --verify-names  Enable name verification (imports modules, may execute code)
 
 Usage:
     python scripts/check_imports.py <file.py>
+    python scripts/check_imports.py --verify-names <file.py>
 
 Exit codes:
     0 - All imports are available
@@ -41,9 +42,11 @@ Examples:
     (no output = success)
 """
 
+import argparse
 import ast
-import sys
+import importlib
 import importlib.util
+import sys
 from pathlib import Path
 from typing import List, Optional
 
@@ -204,7 +207,36 @@ def is_relative_import_valid(module_path: Path) -> bool:
     return False
 
 
-def check_imports(filepath: str) -> int:
+def verify_imported_names(module_name: str, names: List[str]) -> List[str]:
+    """
+    Verify that specific names exist within a module.
+
+    WARNING: This function imports the module, which executes module-level code.
+    Only use with trusted code.
+
+    Args:
+        module_name: The module to import and check.
+        names: List of names that should exist in the module.
+
+    Returns:
+        List of missing names (empty if all exist).
+    """
+    missing = []
+    try:
+        module = importlib.import_module(module_name)
+        for name in names:
+            if not hasattr(module, name):
+                missing.append(f"{module_name}.{name}")
+    except ImportError:
+        # Module itself is missing - handled elsewhere
+        pass
+    except Exception:
+        # Other errors during import - skip name verification
+        pass
+    return missing
+
+
+def check_imports(filepath: str, verify_names: bool = False) -> int:
     """
     Check if all imports in a Python file are available in the current environment.
 
@@ -214,6 +246,8 @@ def check_imports(filepath: str) -> int:
 
     Args:
         filepath: Path to the Python file to check.
+        verify_names: If True, also verify that imported names exist within modules.
+                      WARNING: This imports modules and may execute code.
 
     Returns:
         Exit code: 0 if all imports available, 1 if missing imports, 2 if error occurred.
@@ -221,7 +255,8 @@ def check_imports(filepath: str) -> int:
     Note:
         - Full module paths are checked (e.g., 'os.path' is verified, not just 'os')
         - Relative imports are resolved to absolute paths when possible
-        - The file is parsed but never executed, making this safe for untrusted code
+        - Without verify_names, the file is parsed but never executed (safe for untrusted code)
+        - With verify_names, modules are imported which may execute arbitrary code
     """
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
@@ -267,8 +302,15 @@ def check_imports(filepath: str) -> int:
                                 errors.append(f"Missing module: {resolved_name} (relative import)")
                 else:
                     # Absolute import
-                    if node.module and not is_module_available(node.module):
-                        errors.append(f"Missing module: {node.module}")
+                    if node.module:
+                        if not is_module_available(node.module):
+                            errors.append(f"Missing module: {node.module}")
+                        elif verify_names:
+                            # Verify that imported names exist in the module
+                            names = [alias.name for alias in node.names]
+                            missing = verify_imported_names(node.module, names)
+                            for name in missing:
+                                errors.append(f"Missing name: {name}")
 
         # Report all missing modules
         if errors:
@@ -289,10 +331,36 @@ def check_imports(filepath: str) -> int:
         return 2  # Processing error
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: check_imports.py <file.py>")
-        sys.exit(2)  # Usage error is a processing error
+def main() -> int:
+    """Parse arguments and run import checking."""
+    parser = argparse.ArgumentParser(
+        description="Check if all imports in a Python file are available.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Exit codes:
+  0  All imports are available
+  1  One or more imports are missing
+  2  An error occurred during processing
 
-    filepath = sys.argv[1]
-    sys.exit(check_imports(filepath))
+Examples:
+  %(prog)s my_integration/main.py
+  %(prog)s --verify-names my_integration/main.py
+        """
+    )
+    parser.add_argument(
+        "filepath",
+        help="Path to the Python file to check"
+    )
+    parser.add_argument(
+        "--verify-names",
+        action="store_true",
+        help="Verify that imported names exist within modules. "
+             "WARNING: This imports modules and may execute code."
+    )
+
+    args = parser.parse_args()
+    return check_imports(args.filepath, verify_names=args.verify_names)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
