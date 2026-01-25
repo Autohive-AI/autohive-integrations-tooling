@@ -2,6 +2,8 @@
 
 Import availability checker for Python files.
 
+**Requires: Python 3.13+**
+
 ## Overview
 
 This script validates that all imports in a Python file can be resolved in the current Python environment. It uses AST (Abstract Syntax Tree) parsing to extract import statements **without executing the code**, making it safe for untrusted files.
