@@ -1,0 +1,8 @@
+name: Test Hello World
+
+on:
+  workflow_dispatch:
+
+jobs:
+  call-hello:
+    uses: ./.github/workflows/hello-world.yml
