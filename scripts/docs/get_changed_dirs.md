@@ -102,7 +102,7 @@ The following directories are excluded from the output because they are infrastr
 
 ## Integration with CI
 
-This script is called in the `validate-integration.yml` workflow to determine which integrations need validation:
+This script is called in the `validate-integration.yml` workflow (on pull requests) to determine which integrations need validation:
 
 ```yaml
 - name: Get changed integration folders

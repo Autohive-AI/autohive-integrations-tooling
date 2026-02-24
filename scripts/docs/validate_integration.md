@@ -199,7 +199,7 @@ flowchart TD
 When no arguments are provided, the script auto-discovers integration folders at the repository root by:
 
 1. Iterating all directories in the repository root
-2. Skipping known infrastructure directories (`.github`, `.git`, `scripts`, `template-structure`, `__pycache__`, `.vscode`, `.idea`, `node_modules`)
+2. Skipping known infrastructure directories (`.github`, `.git`, `scripts`, `tests`, `template-structure`, `__pycache__`, `.vscode`, `.idea`, `node_modules`)
 3. Skipping hidden directories (starting with `.`)
 4. Including directories that contain `config.json` or any `.py` file
 
@@ -242,10 +242,12 @@ Total warnings: 1
 
 ## Integration with CI
 
-Called by the `validate-integration.yml` workflow as the **Structure Check** step:
+Called by the `validate-integration.yml` workflow (on pull requests) as the **Structure Check** step:
 
 ```yaml
 - name: Structure Check
   if: steps.changed.outputs.dirs != ''
   run: python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }}
 ```
+
+The script is also exercised by the `self-test.yml` workflow, which runs it against the test examples in `tests/examples/` as a regression guard whenever `scripts/` or `tests/` change.

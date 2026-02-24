@@ -185,10 +185,12 @@ The script uses `set -uo pipefail` (note: no `-e` so that individual check failu
 
 ## Integration with CI
 
-Called by the `validate-integration.yml` workflow:
+Called by the `validate-integration.yml` workflow (on pull requests):
 
 ```yaml
 - name: Code Check
   if: steps.changed.outputs.dirs != ''
   run: bash scripts/check_code.sh ${{ steps.changed.outputs.dirs }}
 ```
+
+Also exercised by the `self-test.yml` workflow against test examples in `tests/examples/` as a regression guard.

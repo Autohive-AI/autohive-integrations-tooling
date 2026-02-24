@@ -140,6 +140,9 @@ flowchart LR
     A --> D[check_code.sh]
     A --> E[check_readme.sh]
     D --> F[check_imports.py]
+    G[self-test.yml] --> C
+    G --> D
+    G --> F
 ```
 
 | Step | Script | Purpose |
@@ -148,3 +151,5 @@ flowchart LR
 | 2 | [`validate_integration.py`](validate_integration.md) | Validate folder structure and config |
 | 3 | [`check_code.sh`](check_code.md) | Syntax, imports, and JSON checks |
 | 4 | [`check_readme.sh`](check_readme.md) | Ensure README is updated for new integrations |
+
+The `self-test.yml` workflow also exercises `check_imports.py`, `validate_integration.py`, and `check_code.sh` against test examples in `tests/examples/` as a regression guard.
