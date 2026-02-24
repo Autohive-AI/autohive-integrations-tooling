@@ -10,6 +10,7 @@ This script performs five sequential code quality checks on each given integrati
 2. **Import availability check** — imports `check_imports()` as a function to verify modules exist
 3. **JSON validity check** — uses `json.load()` directly to ensure all `.json` files are parseable
 4. **Lint check** — runs `ruff check` to catch code quality issues (undefined names, unused imports, style errors)
+5. **Format check** — runs `ruff format --check` to enforce consistent code formatting
 
 Before running checks, it installs the integration's dependencies from `requirements.txt` so that import checks can find third-party packages.
 
