@@ -1,14 +1,6 @@
 name: Validate Integration
 
 on:
-  push:
-    paths:
-      - '**'
-      - '!.github/**'
-      - '!README.md'
-      - '!INTEGRATION_CHECKLIST.md'
-      - '!scripts/**'
-
   pull_request:
     branches: [master, main]
 

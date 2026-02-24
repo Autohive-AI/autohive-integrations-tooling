@@ -12,11 +12,10 @@ Usage:
 """
 
 import json
-import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 # Fix Windows console encoding for unicode characters
 if sys.platform == 'win32':
@@ -27,19 +26,12 @@ SKIP_FOLDERS = {
     '.github',
     '.git',
     'scripts',
+    'tests',
     'template-structure',
     '__pycache__',
     '.vscode',
     '.idea',
     'node_modules',
-}
-
-# Files to skip at root level
-SKIP_FILES = {
-    'README.md',
-    'INTEGRATION_CHECKLIST.md',
-    '.gitignore',
-    'LICENSE',
 }
 
 
