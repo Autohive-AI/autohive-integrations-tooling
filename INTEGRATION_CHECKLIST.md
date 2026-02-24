@@ -10,7 +10,7 @@ Use this checklist to verify your new integration follows all conventions and is
 |-------|-------------|
 | [Folder Structure](#1-folder-structure) | Correct files in correct locations |
 | [config.json](#2-configjson-validation) | Valid schema, descriptions, scopes |
-| [__init__.py](#3-initpy-files) | Must be minimal/empty |
+| [\_\_init\_\_.py](#3-initpy-files) | Must be minimal/empty |
 | [Main Python File](#4-main-python-file) | Correct patterns and conventions |
 | [Tests](#5-test-files) | Proper test structure |
 | [Requirements](#6-requirementstxt) | SDK dependency present |
@@ -643,7 +643,7 @@ integration-name/
 ## 11. Pre-PR Final Checks
 
 ### Code Quality
-- [ ] Run linter (if available)
+- [ ] Run `python scripts/check_code.py <dir>` (syntax, imports, lint, format, security, deps)
 - [ ] Run all tests locally
 - [ ] Test with real API credentials
 - [ ] Check for API error handling
@@ -704,8 +704,8 @@ test -f your_integration/requirements.txt && echo "requirements.txt OK" || echo 
 # Validate JSON syntax
 python -m json.tool your_integration/config.json
 
-# Check for unused imports (requires pylint)
-pylint your_integration/*.py --disable=all --enable=unused-import
+# Run all code quality checks (syntax, imports, lint, format, security, deps)
+python scripts/check_code.py your_integration
 
 # Run tests
 cd your_integration && python -m pytest tests/ -v

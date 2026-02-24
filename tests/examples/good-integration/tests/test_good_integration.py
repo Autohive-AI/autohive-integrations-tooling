@@ -5,17 +5,11 @@ from autohive_integrations_sdk import ExecutionContext
 
 async def test_get_data():
     """Test get_data action."""
-    auth = {
-        "credentials": {"api_key": "test_key"}
-    }
+    auth = {"credentials": {"api_key": "test_key"}}
 
     async with ExecutionContext(auth=auth) as context:
         try:
-            result = await good_integration.execute_action(
-                "get_data",
-                {"limit": 5},
-                context
-            )
+            result = await good_integration.execute_action("get_data", {"limit": 5}, context)
 
             data = result.data
             assert "result" in data
