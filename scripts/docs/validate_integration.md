@@ -8,7 +8,7 @@ Integration structure and configuration validator.
 
 This script validates that integration directories follow the required folder structure, naming conventions, and configuration schema. It checks for required files, validates `config.json` structure and content, verifies auth configuration, inspects action definitions, and detects potentially unused OAuth scopes.
 
-This is the most comprehensive validation tool in the tooling suite, covering structural and configuration correctness rather than code quality (which is handled by `check_code.sh`).
+This is the most comprehensive validation tool in the tooling suite, covering structural and configuration correctness rather than code quality (which is handled by `check_code.py`).
 
 ## Usage
 
@@ -45,8 +45,8 @@ python scripts/validate_integration.py my-integration another-api
 # Validate all integrations in the repo
 python scripts/validate_integration.py
 
-# Combine with get_changed_dirs.sh
-python scripts/validate_integration.py $(scripts/get_changed_dirs.sh origin/main)
+# Combine with get_changed_dirs.py
+python scripts/validate_integration.py $(python scripts/get_changed_dirs.py origin/main)
 ```
 
 ## Validations Performed

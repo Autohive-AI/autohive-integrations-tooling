@@ -122,11 +122,12 @@ The `--verify-names` flag imports modules to check for name existence. This mean
 
 ## Integration with CI
 
-This script is called by [`check_code.sh`](check_code.md) during the import check step, which is in turn called by the `validate-integration.yml` workflow. It runs after dependencies from `requirements.txt` are installed, ensuring that declared dependencies are actually available.
+This script is called by [`check_code.py`](check_code.md) during the import check step — imported directly as a function rather than via subprocess. It is in turn called by the `validate-integration.yml` workflow. It runs after dependencies from `requirements.txt` are installed, ensuring that declared dependencies are actually available.
 
-```bash
-# Called internally by check_code.sh:
-python scripts/check_imports.py "$dir/$ENTRY_POINT"
+```python
+# Called internally by check_code.py:
+from check_imports import check_imports
+check_imports(str(entry_file))
 ```
 
 See the [CI pipeline overview](#ci-pipeline-overview) below for how all scripts fit together.
@@ -135,10 +136,10 @@ See the [CI pipeline overview](#ci-pipeline-overview) below for how all scripts 
 
 ```mermaid
 flowchart LR
-    A[validate-integration.yml] --> B[get_changed_dirs.sh]
+    A[validate-integration.yml] --> B[get_changed_dirs.py]
     A --> C[validate_integration.py]
-    A --> D[check_code.sh]
-    A --> E[check_readme.sh]
+    A --> D[check_code.py]
+    A --> E[check_readme.py]
     D --> F[check_imports.py]
     G[self-test.yml] --> C
     G --> D
@@ -147,9 +148,9 @@ flowchart LR
 
 | Step | Script | Purpose |
 |------|--------|---------|
-| 1 | [`get_changed_dirs.sh`](get_changed_dirs.md) | Detect which integration dirs changed |
+| 1 | [`get_changed_dirs.py`](get_changed_dirs.md) | Detect which integration dirs changed |
 | 2 | [`validate_integration.py`](validate_integration.md) | Validate folder structure and config |
-| 3 | [`check_code.sh`](check_code.md) | Syntax, imports, and JSON checks |
-| 4 | [`check_readme.sh`](check_readme.md) | Ensure README is updated for new integrations |
+| 3 | [`check_code.py`](check_code.md) | Syntax, imports, and JSON checks |
+| 4 | [`check_readme.py`](check_readme.md) | Ensure README is updated for new integrations |
 
-The `self-test.yml` workflow also exercises `check_imports.py`, `validate_integration.py`, and `check_code.sh` against test examples in `tests/examples/` as a regression guard.
+The `self-test.yml` workflow also exercises `check_imports.py`, `validate_integration.py`, and `check_code.py` against test examples in `tests/examples/` as a regression guard.

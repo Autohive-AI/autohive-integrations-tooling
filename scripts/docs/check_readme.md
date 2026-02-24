@@ -1,4 +1,4 @@
-# check_readme.sh
+# check_readme.py
 
 Verifies that the main `README.md` is updated when new integrations are added.
 
@@ -11,7 +11,7 @@ This check only makes sense in the context of a pull request, where there is a c
 ## Usage
 
 ```bash
-scripts/check_readme.sh <base_ref> <dir> [dir ...]
+python scripts/check_readme.py <base_ref> <dir> [dir ...]
 ```
 
 ### Arguments
@@ -33,13 +33,13 @@ scripts/check_readme.sh <base_ref> <dir> [dir ...]
 
 ```bash
 # Check a single integration against main
-scripts/check_readme.sh origin/main my-new-integration
+python scripts/check_readme.py origin/main my-new-integration
 
 # Check multiple integrations
-scripts/check_readme.sh origin/main integration-a integration-b
+python scripts/check_readme.py origin/main integration-a integration-b
 
-# Combine with get_changed_dirs.sh
-scripts/check_readme.sh origin/main $(scripts/get_changed_dirs.sh origin/main)
+# Combine with get_changed_dirs.py
+python scripts/check_readme.py origin/main $(python scripts/get_changed_dirs.py origin/main)
 ```
 
 ## How It Works
@@ -115,24 +115,14 @@ The `--diff-filter=A` flag is important: it only shows **A**dded files, not modi
 | Directory argument doesn't exist on disk | Skipped silently |
 | No arguments provided | Exits with code 2 (usage error) |
 
-## Shell Options
-
-The script uses `set -euo pipefail`:
-
-| Option | Effect |
-|--------|--------|
-| `-e` | Exit immediately on any command failure |
-| `-u` | Treat unset variables as errors |
-| `-o pipefail` | Return the exit code of the last failed command in a pipeline |
-
 ## Integration with CI
 
 Called by the `validate-integration.yml` workflow, **only during pull requests**:
 
 ```yaml
 - name: README Check
-  if: github.event_name == 'pull_request' && steps.changed.outputs.dirs != ''
-  run: bash scripts/check_readme.sh "origin/${{ github.base_ref }}" ${{ steps.changed.outputs.dirs }}
+  if: steps.changed.outputs.dirs != ''
+  run: python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.changed.outputs.dirs }}
 ```
 
 This check is skipped on direct pushes since there is no meaningful base ref to compare against for README changes.

@@ -1,4 +1,6 @@
-# get_changed_dirs.sh
+# get_changed_dirs.py
+
+Requires: Python 3.13+
 
 Detects which integration directories have changed between two git refs.
 
@@ -11,7 +13,7 @@ This is the **first step** in the CI validation pipeline — it determines _whic
 ## Usage
 
 ```bash
-scripts/get_changed_dirs.sh <base_ref>
+python scripts/get_changed_dirs.py <base_ref>
 ```
 
 ### Arguments
@@ -35,13 +37,13 @@ Space-separated list of changed integration directory names, printed to stdout. 
 
 ```bash
 # Check what changed in the last commit
-scripts/get_changed_dirs.sh HEAD~1
+python scripts/get_changed_dirs.py HEAD~1
 
 # Check what changed compared to main (typical PR scenario)
-scripts/get_changed_dirs.sh origin/main
+python scripts/get_changed_dirs.py origin/main
 
 # Check changes across the last 5 commits
-scripts/get_changed_dirs.sh HEAD~5
+python scripts/get_changed_dirs.py HEAD~5
 ```
 
 #### Example Output
@@ -108,23 +110,8 @@ This script is called in the `validate-integration.yml` workflow (on pull reques
 - name: Get changed integration folders
   id: changed
   run: |
-    if [ "${{ github.event_name }}" == "pull_request" ]; then
-      BASE_REF="origin/${{ github.base_ref }}"
-    else
-      BASE_REF="HEAD~1"
-    fi
-    DIRS=$(bash scripts/get_changed_dirs.sh "$BASE_REF")
+    DIRS=$(python scripts/get_changed_dirs.py "origin/${{ github.base_ref }}")
     echo "dirs=$DIRS" >> $GITHUB_OUTPUT
 ```
 
 The output is stored as a GitHub Actions step output and used by subsequent steps to conditionally run validation only on changed integrations.
-
-## Shell Options
-
-The script uses `set -euo pipefail`:
-
-| Option | Effect |
-|--------|--------|
-| `-e` | Exit immediately on any command failure |
-| `-u` | Treat unset variables as errors |
-| `-o pipefail` | Return the exit code of the last failed command in a pipeline |

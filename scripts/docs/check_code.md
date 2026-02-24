@@ -1,4 +1,4 @@
-# check_code.sh
+# check_code.py
 
 Runs code quality checks on one or more integration directories.
 
@@ -6,16 +6,16 @@ Runs code quality checks on one or more integration directories.
 
 This script performs three sequential code quality checks on each given integration directory:
 
-1. **Python syntax check** — compiles all `.py` files to catch syntax errors
-2. **Import availability check** — validates that imported modules exist (via `check_imports.py`)
-3. **JSON validity check** — ensures all `.json` files are parseable
+1. **Python syntax check** — uses `py_compile.compile()` directly to catch syntax errors
+2. **Import availability check** — imports `check_imports()` as a function to verify modules exist
+3. **JSON validity check** — uses `json.load()` directly to ensure all `.json` files are parseable
 
 Before running checks, it installs the integration's dependencies from `requirements.txt` so that import checks can find third-party packages.
 
 ## Usage
 
 ```bash
-scripts/check_code.sh <dir> [dir ...]
+python scripts/check_code.py <dir> [dir ...]
 ```
 
 ### Arguments
@@ -36,13 +36,13 @@ scripts/check_code.sh <dir> [dir ...]
 
 ```bash
 # Check a single integration
-scripts/check_code.sh my-integration
+python scripts/check_code.py my-integration
 
 # Check multiple integrations
-scripts/check_code.sh my-integration another-api
+python scripts/check_code.py my-integration another-api
 
-# Combine with get_changed_dirs.sh
-scripts/check_code.sh $(scripts/get_changed_dirs.sh origin/main)
+# Combine with get_changed_dirs.py
+python scripts/check_code.py $(python scripts/get_changed_dirs.py origin/main)
 ```
 
 ## Checks Performed
@@ -84,7 +84,7 @@ python scripts/check_imports.py <dir>/<entry_point>
 ```
 
 - Reads `entry_point` from `config.json` to determine the main Python file
-- Calls `check_imports.py` (see [check_imports.md](check_imports.md)) to verify all imports
+- Calls `check_imports()` directly as a function (see [check_imports.md](check_imports.md)) to verify all imports
 - Skips gracefully if `config.json` or the entry point file doesn't exist
 
 **On failure:**
@@ -170,18 +170,9 @@ Checking: my-integration
 
 ## Dependencies
 
-- **Python** — for `py_compile`, `json.tool`, and `check_imports.py`
+- **Python** — for `py_compile`, `json`, and `check_imports`
 - **pip** — for installing integration dependencies
-- **scripts/check_imports.py** — import validation (resolved via `$SCRIPT_DIR`)
-
-## Shell Options
-
-The script uses `set -uo pipefail` (note: no `-e` so that individual check failures don't abort the entire script — failures are tracked via the `$FAILED` variable):
-
-| Option | Effect |
-|--------|--------|
-| `-u` | Treat unset variables as errors |
-| `-o pipefail` | Return the exit code of the last failed command in a pipeline |
+- **check_imports** — imported as a module for import validation
 
 ## Integration with CI
 
@@ -190,7 +181,7 @@ Called by the `validate-integration.yml` workflow (on pull requests):
 ```yaml
 - name: Code Check
   if: steps.changed.outputs.dirs != ''
-  run: bash scripts/check_code.sh ${{ steps.changed.outputs.dirs }}
+  run: python scripts/check_code.py ${{ steps.changed.outputs.dirs }}
 ```
 
 Also exercised by the `self-test.yml` workflow against test examples in `tests/examples/` as a regression guard.
