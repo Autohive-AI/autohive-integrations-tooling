@@ -5,13 +5,15 @@ Code Quality Checker
 Requires: Python 3.13+
 
 This script runs code quality checks on one or more integration directories.
-It validates Python syntax, import availability, and JSON file correctness.
+It validates Python syntax, import availability, JSON file correctness,
+and code quality via linting.
 
 Checks performed per directory:
     1. Install dependencies from requirements.txt (via pip)
     2. Python syntax check (py_compile)
     3. Import availability check (check_imports)
     4. JSON validity check
+    5. Lint check (ruff)
 
 Usage:
     python scripts/check_code.py <dir> [dir ...]
@@ -50,6 +52,12 @@ def check_code(dirs: list[str]) -> int:
         0 if all checks passed, 1 if any check failed.
     """
     failed = False
+
+    # Ensure ruff is available for linting
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "ruff", "-q"],
+        capture_output=True,
+    )
 
     for dir_name in dirs:
         dir_path = Path(dir_name)
@@ -140,6 +148,24 @@ def check_code(dirs: list[str]) -> int:
             print()
             print("   Fix: Check for missing commas, quotes, or brackets")
             print("   Validate at: https://jsonlint.com/")
+        print()
+
+        # Lint check
+        print("🔍 Linting with ruff...")
+        ruff_result = subprocess.run(
+            [sys.executable, "-m", "ruff", "check", str(dir_path)],
+            capture_output=True,
+            text=True,
+        )
+        if ruff_result.returncode != 0:
+            for line in ruff_result.stdout.splitlines():
+                print(f"   {line}")
+            print(f"   ❌ Lint errors found")
+            print()
+            print("   Fix: Run 'ruff check --fix' to auto-fix some issues")
+            failed = True
+        else:
+            print("   ✅ Lint OK")
         print()
 
     print("========================================")

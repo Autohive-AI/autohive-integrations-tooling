@@ -4,11 +4,12 @@ Runs code quality checks on one or more integration directories.
 
 ## Overview
 
-This script performs three sequential code quality checks on each given integration directory:
+This script performs four sequential code quality checks on each given integration directory:
 
 1. **Python syntax check** — uses `py_compile.compile()` directly to catch syntax errors
 2. **Import availability check** — imports `check_imports()` as a function to verify modules exist
 3. **JSON validity check** — uses `json.load()` directly to ensure all `.json` files are parseable
+4. **Lint check** — runs `ruff check` to catch code quality issues (undefined names, unused imports, style errors)
 
 Before running checks, it installs the integration's dependencies from `requirements.txt` so that import checks can find third-party packages.
 
@@ -116,6 +117,27 @@ python -m json.tool <file.json>
    Validate at: https://jsonlint.com/
 ```
 
+### 5. Lint Check (ruff)
+
+```bash
+ruff check <dir>
+```
+
+- Runs [ruff](https://docs.astral.sh/ruff/) linter on all Python files in the directory
+- Checks for pyflakes errors (F), pycodestyle errors (E), and pycodestyle warnings (W)
+- Configuration is defined in `ruff.toml` at the repository root
+- Ruff is installed automatically if not already available
+
+**On failure:**
+```
+🔍 Linting with ruff...
+   my-integration/main.py:5:1: F401 `os` imported but unused
+
+   ❌ Lint errors found
+
+   Fix: Run 'ruff check --fix' to auto-fix some issues
+```
+
 ## How It Works
 
 ```mermaid
@@ -137,7 +159,10 @@ flowchart TD
     L --> M[Validate each with json.tool]
     M --> N{JSON OK?}
     N -->|No| H
-    N -->|Yes| A
+    N -->|Yes| R[Run ruff check on directory]
+    R --> S{Lint OK?}
+    S -->|No| H
+    S -->|Yes| A
     A --> O{Any failures?}
     O -->|Yes| P[Exit 1]
     O -->|No| Q[Exit 0]
@@ -163,6 +188,9 @@ Checking: my-integration
 📄 Checking JSON files...
    ✅ JSON files OK
 
+🔍 Linting with ruff...
+   ✅ Lint OK
+
 ========================================
 ✅ CODE CHECK PASSED
 ========================================
@@ -173,6 +201,7 @@ Checking: my-integration
 - **Python** — for `py_compile`, `json`, and `check_imports`
 - **pip** — for installing integration dependencies
 - **check_imports** — imported as a module for import validation
+- **ruff** — installed automatically for linting (configured via `ruff.toml`)
 
 ## Integration with CI
 

@@ -9,13 +9,14 @@ Validation tools and CI/CD workflows for Autohive integrations.
 | File | Description |
 |------|-------------|
 | `scripts/validate_integration.py` | Structure and config validation ([docs](scripts/docs/validate_integration.md)) |
-| `scripts/check_code.py` | Syntax, import, and JSON checks ([docs](scripts/docs/check_code.md)) |
+| `scripts/check_code.py` | Syntax, import, JSON, and lint checks ([docs](scripts/docs/check_code.md)) |
 | `scripts/check_imports.py` | Import availability checker ([docs](scripts/docs/check_imports.md)) |
 | `scripts/check_readme.py` | README update verification ([docs](scripts/docs/check_readme.md)) |
 | `scripts/get_changed_dirs.py` | Changed directory detection ([docs](scripts/docs/get_changed_dirs.md)) |
 | `.github/workflows/validate-integration.yml` | PR validation pipeline |
 | `.github/workflows/self-test.yml` | Regression guard for tooling scripts |
 | `.github/workflows/conv-commits.yml` | Conventional commit enforcement |
+| `ruff.toml` | Ruff linter configuration |
 | `INTEGRATION_CHECKLIST.md` | Manual review checklist |
 | `tests/examples/` | Test fixtures for validation scripts |
 
@@ -35,7 +36,7 @@ flowchart TB
         GCD -->|"dirs (space-separated)"| COND{dirs empty?}
         COND -->|Yes| SKIP[Skip all checks]
         COND -->|No| VI["validate_integration.py\n─────────────────\n① Folder name\n② Required files\n③ config.json schema\n④ __init__.py minimality\n⑤ requirements.txt\n⑥ tests/ folder\n⑦ Main Python file\n⑧ Unused scopes"]
-        VI --> CC["check_code.py\n─────────────────\n① pip install requirements.txt\n② py_compile.compile() all .py\n③ check_imports() on entry_point\n④ json.load() all .json"]
+        VI --> CC["check_code.py\n─────────────────\n① pip install requirements.txt\n② py_compile.compile() all .py\n③ check_imports() on entry_point\n④ json.load() all .json\n⑤ ruff check all .py"]
         CC --> CR["check_readme.py\n─────────────────\ngit diff: new files added?\nREADME.md also changed?"]
     end
 
@@ -68,7 +69,7 @@ flowchart TB
 # Validate structure and config
 python scripts/validate_integration.py my-integration
 
-# Run code quality checks (syntax, imports, JSON)
+# Run code quality checks (syntax, imports, JSON, lint)
 python scripts/check_code.py my-integration
 
 # Check all imports in a file
