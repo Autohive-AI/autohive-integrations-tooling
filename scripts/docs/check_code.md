@@ -4,7 +4,7 @@ Runs code quality checks on one or more integration directories.
 
 ## Overview
 
-This script performs four sequential code quality checks on each given integration directory:
+This script performs five sequential code quality checks on each given integration directory:
 
 1. **Python syntax check** — uses `py_compile.compile()` directly to catch syntax errors
 2. **Import availability check** — imports `check_imports()` as a function to verify modules exist
@@ -138,6 +138,26 @@ ruff check <dir>
    Fix: Run 'ruff check --fix' to auto-fix some issues
 ```
 
+### 6. Format Check (ruff format)
+
+```bash
+ruff format --check <dir>
+```
+
+- Checks that all Python files are formatted consistently
+- Uses the same ruff tool (already installed for linting)
+- Does not modify files — only reports which files would be reformatted
+
+**On failure:**
+```
+🎨 Checking formatting with ruff...
+   Would reformat: my-integration/main.py
+
+   ❌ Formatting issues found
+
+   Fix: Run 'ruff format' to auto-format
+```
+
 ## How It Works
 
 ```mermaid
@@ -162,7 +182,10 @@ flowchart TD
     N -->|Yes| R[Run ruff check on directory]
     R --> S{Lint OK?}
     S -->|No| H
-    S -->|Yes| A
+    S -->|Yes| T[Run ruff format --check]
+    T --> U{Format OK?}
+    U -->|No| H
+    U -->|Yes| A
     A --> O{Any failures?}
     O -->|Yes| P[Exit 1]
     O -->|No| Q[Exit 0]
@@ -191,6 +214,9 @@ Checking: my-integration
 🔍 Linting with ruff...
    ✅ Lint OK
 
+🎨 Checking formatting with ruff...
+   ✅ Formatting OK
+
 ========================================
 ✅ CODE CHECK PASSED
 ========================================
@@ -201,7 +227,7 @@ Checking: my-integration
 - **Python** — for `py_compile`, `json`, and `check_imports`
 - **pip** — for installing integration dependencies
 - **check_imports** — imported as a module for import validation
-- **ruff** — installed automatically for linting (configured via `ruff.toml`)
+- **ruff** — installed automatically for linting and formatting (configured via `ruff.toml`)
 
 ## Integration with CI
 

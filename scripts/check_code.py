@@ -14,6 +14,7 @@ Checks performed per directory:
     3. Import availability check (check_imports)
     4. JSON validity check
     5. Lint check (ruff)
+    6. Format check (ruff format)
 
 Usage:
     python scripts/check_code.py <dir> [dir ...]
@@ -166,6 +167,24 @@ def check_code(dirs: list[str]) -> int:
             failed = True
         else:
             print("   ✅ Lint OK")
+        print()
+
+        # Format check
+        print("🎨 Checking formatting with ruff...")
+        fmt_result = subprocess.run(
+            [sys.executable, "-m", "ruff", "format", "--check", str(dir_path)],
+            capture_output=True,
+            text=True,
+        )
+        if fmt_result.returncode != 0:
+            for line in fmt_result.stderr.splitlines():
+                print(f"   {line}")
+            print(f"   ❌ Formatting issues found")
+            print()
+            print("   Fix: Run 'ruff format' to auto-format")
+            failed = True
+        else:
+            print("   ✅ Formatting OK")
         print()
 
     print("========================================")
