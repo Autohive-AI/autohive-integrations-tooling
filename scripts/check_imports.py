@@ -2,7 +2,7 @@
 """
 Import Availability Checker
 
-Requires: Python 3.12+
+Requires: Python 3.13+
 
 This script validates that all imports in a Python file can be resolved
 in the current Python environment. It uses AST (Abstract Syntax Tree)

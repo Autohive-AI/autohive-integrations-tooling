@@ -2,7 +2,7 @@
 """
 Changed Integration Directory Detector
 
-Requires: Python 3.12+
+Requires: Python 3.13+
 
 This script identifies which integration directories have changed
 relative to a given git base ref. It diffs HEAD against the provided

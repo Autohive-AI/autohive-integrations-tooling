@@ -2,7 +2,7 @@
 """
 README Update Checker
 
-Requires: Python 3.12+
+Requires: Python 3.13+
 
 This script checks that the main README.md is updated when new integrations
 are added. It compares the current branch against a base ref (e.g.,
