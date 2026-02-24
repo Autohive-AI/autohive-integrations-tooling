@@ -93,7 +93,6 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 
 ## Integrations
 
+<!-- Add your integration here when submitting a PR -->
 | Integration | Description | Auth Type |
 |-------------|-------------|-----------|
-| good-integration | Example valid integration | Custom |
-| sample-api | Sample API integration for testing | Custom |
