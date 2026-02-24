@@ -1,0 +1,102 @@
+name: Self Test
+
+on:
+  push:
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - '.github/workflows/self-test.yml'
+
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - '.github/workflows/self-test.yml'
+
+jobs:
+  test-scripts:
+    runs-on: ubuntu-latest
+    name: Test Validation Scripts
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Test validate_integration.py — good integrations pass
+        run: |
+          python scripts/validate_integration.py tests/examples/good-integration
+          python scripts/validate_integration.py tests/sample-api
+          python scripts/validate_integration.py tests/examples/netlify
+
+      - name: Test validate_integration.py — bad integration fails
+        run: |
+          if python scripts/validate_integration.py tests/examples/Bad-Integration 2>&1; then
+            echo "❌ Expected validation to fail for Bad-Integration"
+            exit 1
+          fi
+          echo "✅ Bad-Integration correctly rejected"
+
+      - name: Test validate_integration.py — auto-discovery skips tests/
+        run: |
+          OUTPUT=$(python scripts/validate_integration.py 2>&1)
+          if echo "$OUTPUT" | grep -q "Bad-Integration\|good-integration\|sample-api"; then
+            echo "❌ Auto-discovery should not pick up test examples"
+            exit 1
+          fi
+          echo "✅ Auto-discovery correctly skips tests/"
+
+      - name: Test check_imports.py — valid imports
+        run: |
+          python scripts/check_imports.py tests/examples/submodule-imports/valid_submodules.py
+          python scripts/check_imports.py tests/examples/relative-imports/mypackage/subpackage/valid_relative.py
+
+      - name: Test check_imports.py — invalid imports detected
+        run: |
+          if python scripts/check_imports.py tests/examples/submodule-imports/invalid_submodules.py 2>&1; then
+            echo "❌ Expected import check to fail for invalid_submodules.py"
+            exit 1
+          fi
+          echo "✅ Invalid submodule imports correctly detected"
+
+      - name: Test check_imports.py — invalid relative imports detected
+        run: |
+          if python scripts/check_imports.py tests/examples/relative-imports/mypackage/subpackage/invalid_relative.py 2>&1; then
+            echo "❌ Expected import check to fail for invalid_relative.py"
+            exit 1
+          fi
+          echo "✅ Invalid relative imports correctly detected"
+
+      - name: Test check_imports.py — verify-names flag
+        run: |
+          python scripts/check_imports.py --verify-names tests/examples/name-verification/valid_names.py
+
+          if python scripts/check_imports.py --verify-names tests/examples/name-verification/invalid_names.py 2>&1; then
+            echo "❌ Expected --verify-names to fail for invalid_names.py"
+            exit 1
+          fi
+          echo "✅ Name verification correctly detected invalid names"
+
+      - name: Test check_imports.py — error exit code for missing file
+        run: |
+          python scripts/check_imports.py nonexistent.py 2>&1 || EXIT_CODE=$?
+          if [ "${EXIT_CODE:-0}" -ne 2 ]; then
+            echo "❌ Expected exit code 2 for missing file, got ${EXIT_CODE:-0}"
+            exit 1
+          fi
+          echo "✅ Missing file correctly returns exit code 2"
+
+      - name: Test check_code.sh — good integration
+        run: bash scripts/check_code.sh tests/examples/good-integration
+
+      - name: Test get_changed_dirs.sh — missing argument
+        run: |
+          if bash scripts/get_changed_dirs.sh 2>&1; then
+            echo "❌ Expected failure with no arguments"
+            exit 1
+          fi
+          echo "✅ Missing argument correctly rejected"
