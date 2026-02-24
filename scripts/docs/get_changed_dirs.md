@@ -1,6 +1,6 @@
 # get_changed_dirs.py
 
-Requires: Python 3.13+
+Requires: Python 3.12+
 
 Detects which integration directories have changed between two git refs.
 

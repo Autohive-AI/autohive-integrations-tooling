@@ -2,7 +2,7 @@
 
 Import availability checker for Python files.
 
-**Requires: Python 3.13+**
+**Requires: Python 3.12+**
 
 ## Overview
 

@@ -2,7 +2,7 @@
 
 Integration structure and configuration validator.
 
-**Requires: Python 3.13+**
+**Requires: Python 3.12+**
 
 ## Overview
 

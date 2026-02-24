@@ -2,7 +2,7 @@
 """
 Code Quality Checker
 
-Requires: Python 3.13+
+Requires: Python 3.12+
 
 This script runs code quality checks on one or more integration directories.
 It validates Python syntax, import availability, JSON file correctness,

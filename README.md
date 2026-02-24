@@ -2,7 +2,7 @@
 
 Validation tools and CI/CD workflows for Autohive integrations.
 
-**Requires: Python 3.13+**
+**Requires: Python 3.12+**
 
 ## What's Included
 
