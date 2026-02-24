@@ -18,6 +18,7 @@ Validation tools and CI/CD workflows for Autohive integrations.
 | `.github/workflows/conv-commits.yml` | Conventional commit enforcement |
 | `requirements-dev.txt` | Dev tool dependencies (ruff, bandit, pip-audit) |
 | `ruff.toml` | Ruff linter and formatter configuration |
+| `CONTRIBUTING.md` | Contributor guide |
 | `INTEGRATION_CHECKLIST.md` | Manual review checklist |
 | `tests/examples/` | Test fixtures for validation scripts |
 
