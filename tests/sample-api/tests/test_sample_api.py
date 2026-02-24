@@ -5,17 +5,11 @@ from autohive_integrations_sdk import ExecutionContext
 
 async def test_list_items():
     """Test list_items action."""
-    auth = {
-        "credentials": {"api_key": "test_key"}
-    }
+    auth = {"credentials": {"api_key": "test_key"}}
 
     async with ExecutionContext(auth=auth) as context:
         try:
-            result = await sample_api.execute_action(
-                "list_items",
-                {"limit": 5},
-                context
-            )
+            result = await sample_api.execute_action("list_items", {"limit": 5}, context)
 
             data = result.data
             assert "result" in data
@@ -26,17 +20,11 @@ async def test_list_items():
 
 async def test_get_item():
     """Test get_item action."""
-    auth = {
-        "credentials": {"api_key": "test_key"}
-    }
+    auth = {"credentials": {"api_key": "test_key"}}
 
     async with ExecutionContext(auth=auth) as context:
         try:
-            result = await sample_api.execute_action(
-                "get_item",
-                {"item_id": "123"},
-                context
-            )
+            result = await sample_api.execute_action("get_item", {"item_id": "123"}, context)
 
             data = result.data
             assert "result" in data
