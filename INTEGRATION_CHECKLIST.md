@@ -10,7 +10,7 @@ Use this checklist to verify your new integration follows all conventions and is
 |-------|-------------|
 | [Folder Structure](#1-folder-structure) | Correct files in correct locations |
 | [config.json](#2-configjson-validation) | Valid schema, descriptions, scopes |
-| [__init__.py](#3-initpy-files) | Must be minimal/empty |
+| [\_\_init\_\_.py](#3-initpy-files) | Must be minimal/empty |
 | [Main Python File](#4-main-python-file) | Correct patterns and conventions |
 | [Tests](#5-test-files) | Proper test structure |
 | [Requirements](#6-requirementstxt) | SDK dependency present |
