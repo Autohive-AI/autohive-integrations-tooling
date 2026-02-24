@@ -2,15 +2,28 @@
 """
 Integration Structure Validator
 
+Requires: Python 3.13+
+
 This script validates that integrations follow the required folder structure
 and conventions. Run this before submitting a PR to catch common issues.
 
 Usage:
-    python scripts/validate_integration.py [integration_folder ...]
+    python scripts/validate_integration.py [dir ...]
 
-    If no folders specified, validates all integration folders.
+    If no directories specified, validates all integration folders.
+
+Exit codes:
+    0 - All validations passed (possibly with warnings)
+    1 - One or more validation errors found
+    2 - An error occurred (folder not found, missing arguments)
+
+Examples:
+    python scripts/validate_integration.py my-integration
+    python scripts/validate_integration.py my-integration another-api
+    python scripts/validate_integration.py
 """
 
+import argparse
 import json
 import re
 import sys
@@ -379,36 +392,34 @@ def get_integration_folders(root_path: Path) -> List[Path]:
     return sorted(folders)
 
 
-def main():
-    """Main entry point."""
+def validate(dirs: list[str]) -> int:
+    """Validate the given integration directories.
+
+    Args:
+        dirs: List of directory names to validate. If empty, auto-discovers
+              integration folders at the repository root.
+
+    Returns:
+        0 if all validations passed, 1 if errors found, 2 on processing errors.
+    """
     root_path = Path(__file__).parent.parent
 
-    # Get folders to validate
-    has_missing = False
-    if len(sys.argv) > 1:
-        # Validate specific folders passed as arguments
+    if dirs:
         folders = []
-        for folder_name in sys.argv[1:]:
-            folder_name = folder_name.strip()
-            if not folder_name:
-                continue
+        for folder_name in dirs:
             folder_path = root_path / folder_name
             if folder_path.exists() and folder_path.is_dir():
                 if folder_name not in SKIP_FOLDERS:
                     folders.append(folder_path)
             else:
                 print(f"❌ Folder not found: {folder_name}")
-                has_missing = True
+                return 2
     else:
-        # Validate all integration folders
         folders = get_integration_folders(root_path)
-
-    if has_missing:
-        sys.exit(2)
 
     if not folders:
         print("No integration folders to validate.")
-        sys.exit(0)
+        return 0
 
     print(f"Validating {len(folders)} integration(s)...")
 
@@ -433,14 +444,42 @@ def main():
 
     if total_errors > 0:
         print("\n❌ Validation FAILED - please fix errors before submitting PR")
-        sys.exit(1)
+        return 1
     elif total_warnings > 0:
         print("\n⚠️ Validation passed with warnings - please review")
-        sys.exit(0)
+        return 0
     else:
         print("\n✅ All validations passed!")
-        sys.exit(0)
+        return 0
+
+
+def main() -> int:
+    """Parse arguments and run validation."""
+    parser = argparse.ArgumentParser(
+        description="Validate integration folder structure and configuration.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+Exit codes:
+  0  All validations passed (possibly with warnings)
+  1  One or more validation errors found
+  2  An error occurred (folder not found)
+
+Examples:
+  %(prog)s my-integration
+  %(prog)s my-integration another-api
+  %(prog)s
+""",
+    )
+    parser.add_argument(
+        "dirs",
+        nargs="*",
+        metavar="dir",
+        help="Integration directories to validate. If omitted, auto-discovers all.",
+    )
+
+    args = parser.parse_args()
+    return validate(args.dirs)
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
