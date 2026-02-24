@@ -90,12 +90,12 @@ jobs:
           fi
           echo "✅ Missing file correctly returns exit code 2"
 
-      - name: Test check_code.sh — good integration
-        run: bash scripts/check_code.sh tests/examples/good-integration
+      - name: Test check_code.py — good integration
+        run: python scripts/check_code.py tests/examples/good-integration
 
-      - name: Test get_changed_dirs.sh — missing argument
+      - name: Test get_changed_dirs.py — missing argument
         run: |
-          if bash scripts/get_changed_dirs.sh 2>&1; then
+          if python scripts/get_changed_dirs.py 2>&1; then
             echo "❌ Expected failure with no arguments"
             exit 1
           fi
