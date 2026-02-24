@@ -27,10 +27,12 @@ Examples:
 """
 
 import argparse
+import io
 import json
 import py_compile
 import subprocess
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 
 # Allow importing check_imports from the same directory regardless of cwd
@@ -101,7 +103,12 @@ def check_code(dirs: list[str]) -> int:
             entry_file = dir_path / entry_point if entry_point else None
 
             if entry_file and entry_file.is_file():
-                if check_imports(str(entry_file)) != 0:
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    result = check_imports(str(entry_file))
+                if result != 0:
+                    for line in buf.getvalue().splitlines():
+                        print(f"   {line}")
                     print(f"   ❌ Import errors in {entry_file}")
                     print()
                     print("   Fix: Install missing packages in requirements.txt")
