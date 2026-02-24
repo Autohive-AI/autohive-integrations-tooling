@@ -122,11 +122,29 @@ The `--verify-names` flag imports modules to check for name existence. This mean
 
 ## Integration with CI
 
-This script is called by the GitHub Actions workflow during the **Code Check** step:
+This script is called by [`check_code.sh`](check_code.md) during the import check step, which is in turn called by the `validate-integration.yml` workflow. It runs after dependencies from `requirements.txt` are installed, ensuring that declared dependencies are actually available.
 
-```yaml
-# From .github/workflows/validate-integration.yml
+```bash
+# Called internally by check_code.sh:
 python scripts/check_imports.py "$dir/$ENTRY_POINT"
 ```
 
-It runs after dependencies from `requirements.txt` are installed, ensuring that declared dependencies are actually available.
+See the [CI pipeline overview](#ci-pipeline-overview) below for how all scripts fit together.
+
+## CI Pipeline Overview
+
+```mermaid
+flowchart LR
+    A[validate-integration.yml] --> B[get_changed_dirs.sh]
+    A --> C[validate_integration.py]
+    A --> D[check_code.sh]
+    A --> E[check_readme.sh]
+    D --> F[check_imports.py]
+```
+
+| Step | Script | Purpose |
+|------|--------|---------|
+| 1 | [`get_changed_dirs.sh`](get_changed_dirs.md) | Detect which integration dirs changed |
+| 2 | [`validate_integration.py`](validate_integration.md) | Validate folder structure and config |
+| 3 | [`check_code.sh`](check_code.md) | Syntax, imports, and JSON checks |
+| 4 | [`check_readme.sh`](check_readme.md) | Ensure README is updated for new integrations |
