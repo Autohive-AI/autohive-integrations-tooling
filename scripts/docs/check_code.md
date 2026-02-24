@@ -29,7 +29,7 @@ python scripts/check_code.py <dir> [dir ...]
 | Code | Meaning |
 |------|---------|
 | `0`  | All checks passed for all directories |
-| `1`  | One or more checks failed |
+| `1`  | One or more checks failed (includes nonexistent directories) |
 | `2`  | No directories provided (usage error) |
 
 ### Examples

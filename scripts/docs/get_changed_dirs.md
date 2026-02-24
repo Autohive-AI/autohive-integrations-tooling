@@ -27,7 +27,7 @@ python scripts/get_changed_dirs.py <base_ref>
 | Code | Meaning |
 |------|---------|
 | `0`  | Success (outputs directory names, or empty string if no integration dirs changed) |
-| `1`  | Missing `base_ref` argument |
+| `2`  | An error occurred (invalid git ref, missing arguments) |
 
 ### Output
 

@@ -32,6 +32,7 @@ python scripts/validate_integration.py
 |------|---------|
 | `0`  | All validations passed (possibly with warnings) |
 | `1`  | One or more validation errors found |
+| `2`  | An error occurred (folder not found, missing arguments) |
 
 ### Examples
 

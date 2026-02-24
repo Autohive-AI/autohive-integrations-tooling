@@ -27,7 +27,7 @@ python scripts/check_readme.py <base_ref> <dir> [dir ...]
 |------|---------|
 | `0`  | README is up to date, or no new integrations were detected |
 | `1`  | New integration files detected but README.md was not updated |
-| `2`  | Missing arguments (usage error) |
+| `2`  | An error occurred (invalid git ref, missing arguments) |
 
 ### Examples
 
