@@ -384,6 +384,7 @@ def main():
     root_path = Path(__file__).parent.parent
 
     # Get folders to validate
+    has_missing = False
     if len(sys.argv) > 1:
         # Validate specific folders passed as arguments
         folders = []
@@ -396,10 +397,14 @@ def main():
                 if folder_name not in SKIP_FOLDERS:
                     folders.append(folder_path)
             else:
-                print(f"⚠️ Folder not found: {folder_name}")
+                print(f"❌ Folder not found: {folder_name}")
+                has_missing = True
     else:
         # Validate all integration folders
         folders = get_integration_folders(root_path)
+
+    if has_missing:
+        sys.exit(2)
 
     if not folders:
         print("No integration folders to validate.")

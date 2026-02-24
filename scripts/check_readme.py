@@ -18,7 +18,7 @@ How it works:
 Exit codes:
     0 - README is up to date (or no new integrations)
     1 - New integration detected but README not updated
-    2 - Missing arguments (handled by argparse)
+    2 - An error occurred (invalid git ref, missing arguments)
 
 Usage:
     python scripts/check_readme.py <base_ref> <dir> [dir ...]
@@ -37,14 +37,17 @@ from pathlib import Path
 def check_readme(base_ref: str, dirs: list[str]) -> int:
     """Check that README.md is updated when new integration files are added.
 
-    Returns 0 if the check passes, 1 if it fails.
+    Returns 0 if the check passes, 1 if it fails, 2 on git errors.
     """
     readme_diff = subprocess.run(
         ["git", "diff", "--name-only", base_ref, "HEAD"],
         capture_output=True,
         text=True,
-        check=True,
     )
+    if readme_diff.returncode != 0:
+        print(f"Error: git diff failed for ref '{base_ref}'")
+        return 2
+
     readme_changed = "README.md" in readme_diff.stdout.splitlines()
 
     failed = False
@@ -56,8 +59,10 @@ def check_readme(base_ref: str, dirs: list[str]) -> int:
             ["git", "diff", "--name-only", "--diff-filter=A", base_ref, "HEAD"],
             capture_output=True,
             text=True,
-            check=True,
         )
+        if added_diff.returncode != 0:
+            print(f"Error: git diff failed for ref '{base_ref}'")
+            return 2
         new_files = [f for f in added_diff.stdout.splitlines() if f.startswith(f"{d}/")]
 
         if new_files and not readme_changed:

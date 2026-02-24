@@ -57,6 +57,12 @@ def check_code(dirs: list[str]) -> int:
         print("----------------------------------------")
         print()
 
+        if not dir_path.is_dir():
+            print(f"   ❌ Directory not found: {dir_name}")
+            print()
+            failed = True
+            continue
+
         # Install dependencies
         req_file = dir_path / "requirements.txt"
         if req_file.is_file():

@@ -20,7 +20,7 @@ Output:
 
 Exit codes:
     0 - Success (may output empty string if no integration dirs changed)
-    1 - Missing base_ref argument
+    2 - An error occurred (invalid git ref, missing arguments)
 
 Examples:
     scripts/get_changed_dirs.py origin/main
@@ -35,15 +35,18 @@ from pathlib import PurePosixPath
 SKIP_DIRS = frozenset({".github", "scripts", "tests", "template-structure"})
 
 
-def get_changed_dirs(base_ref: str) -> list[str]:
-    """Return sorted, deduplicated integration directory names changed since *base_ref*."""
+def get_changed_dirs(base_ref: str) -> list[str] | None:
+    """Return sorted, deduplicated integration directory names changed since *base_ref*.
+
+    Returns None if the git command fails.
+    """
     result = subprocess.run(
         ["git", "diff", "--name-only", base_ref, "HEAD"],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        return []
+        return None
 
     dirs: set[str] = set()
     for line in result.stdout.splitlines():
@@ -68,6 +71,10 @@ def main() -> int:
     args = parser.parse_args()
 
     changed = get_changed_dirs(args.base_ref)
+    if changed is None:
+        print(f"Error: git diff failed for ref '{args.base_ref}'", file=sys.stderr)
+        return 2
+
     if changed:
         print(" ".join(changed))
 
