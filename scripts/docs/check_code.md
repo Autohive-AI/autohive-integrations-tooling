@@ -4,13 +4,15 @@ Runs code quality checks on one or more integration directories.
 
 ## Overview
 
-This script performs five sequential code quality checks on each given integration directory:
+This script performs seven sequential code quality checks on each given integration directory:
 
 1. **Python syntax check** — uses `py_compile.compile()` directly to catch syntax errors
 2. **Import availability check** — imports `check_imports()` as a function to verify modules exist
 3. **JSON validity check** — uses `json.load()` directly to ensure all `.json` files are parseable
 4. **Lint check** — runs `ruff check` to catch code quality issues (undefined names, unused imports, style errors)
 5. **Format check** — runs `ruff format --check` to enforce consistent code formatting
+6. **Security scan** — runs `bandit` to flag hardcoded secrets, unsafe eval/exec, insecure HTTP calls
+7. **Dependency vulnerability scan** — runs `pip-audit` to check requirements.txt for packages with known CVEs
 
 Before running checks, it installs the integration's dependencies from `requirements.txt` so that import checks can find third-party packages.
 
@@ -159,6 +161,52 @@ ruff format --check <dir>
    Fix: Run 'ruff format' to auto-format
 ```
 
+### 7. Security Scan (bandit)
+
+```bash
+bandit -r <dir> -s B101 -q
+```
+
+- Runs [bandit](https://bandit.readthedocs.io/) security linter on all Python files
+- Flags hardcoded passwords, use of `eval`/`exec`, insecure HTTP calls, and other security anti-patterns
+- Skips B101 (assert_used) since test files use assertions
+- Uses `-q` (quiet) to only show findings
+
+**On failure:**
+```
+🔒 Scanning for security issues with bandit...
+   >> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'secret123'
+      Severity: Low   Confidence: Medium
+      Location: my-integration/main.py:15:0
+
+   ❌ Security issues found
+
+   Fix: Review flagged code for security risks
+   Run locally: bandit -r <dir> -s B101
+```
+
+### 8. Dependency Vulnerability Scan (pip-audit)
+
+```bash
+pip-audit -r <dir>/requirements.txt
+```
+
+- Runs [pip-audit](https://github.com/pypa/pip-audit) against the integration's requirements.txt
+- Checks all listed dependencies for known CVEs (Common Vulnerabilities and Exposures)
+- Only runs if `requirements.txt` exists
+
+**On failure:**
+```
+🛡️ Checking dependencies for vulnerabilities with pip-audit...
+   Name    Version ID             Fix Versions
+   ------- ------- -------------- ------------
+   requests 2.25.0 PYSEC-2023-XXX 2.31.0
+
+   ❌ Vulnerable dependencies found
+
+   Fix: Update affected packages in requirements.txt
+```
+
 ## How It Works
 
 ```mermaid
@@ -186,7 +234,15 @@ flowchart TD
     S -->|Yes| T[Run ruff format --check]
     T --> U{Format OK?}
     U -->|No| H
-    U -->|Yes| A
+    U -->|Yes| V[Run bandit security scan]
+    V --> W{Security OK?}
+    W -->|No| H
+    W -->|Yes| X{requirements.txt exists?}
+    X -->|No| A
+    X -->|Yes| Y[Run pip-audit on requirements.txt]
+    Y --> Z{Deps OK?}
+    Z -->|No| H
+    Z -->|Yes| A
     A --> O{Any failures?}
     O -->|Yes| P[Exit 1]
     O -->|No| Q[Exit 0]
@@ -218,6 +274,12 @@ Checking: my-integration
 🎨 Checking formatting with ruff...
    ✅ Formatting OK
 
+🔒 Scanning for security issues with bandit...
+   ✅ Security OK
+
+🛡️ Checking dependencies for vulnerabilities with pip-audit...
+   ✅ Dependencies OK
+
 ========================================
 ✅ CODE CHECK PASSED
 ========================================
@@ -229,6 +291,8 @@ Checking: my-integration
 - **pip** — for installing integration dependencies
 - **check_imports** — imported as a module for import validation
 - **ruff** — installed automatically for linting and formatting (configured via `ruff.toml`)
+- **bandit** — installed automatically for security scanning
+- **pip-audit** — installed automatically for dependency vulnerability checking
 
 ## Integration with CI
 

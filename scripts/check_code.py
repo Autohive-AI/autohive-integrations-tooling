@@ -6,7 +6,7 @@ Requires: Python 3.13+
 
 This script runs code quality checks on one or more integration directories.
 It validates Python syntax, import availability, JSON file correctness,
-and code quality via linting.
+code quality via linting, formatting, security, and dependency vulnerabilities.
 
 Checks performed per directory:
     1. Install dependencies from requirements.txt (via pip)
@@ -15,6 +15,8 @@ Checks performed per directory:
     4. JSON validity check
     5. Lint check (ruff)
     6. Format check (ruff format)
+    7. Security scan (bandit)
+    8. Dependency vulnerability scan (pip-audit)
 
 Usage:
     python scripts/check_code.py <dir> [dir ...]
@@ -54,9 +56,9 @@ def check_code(dirs: list[str]) -> int:
     """
     failed = False
 
-    # Ensure ruff is available for linting
+    # Ensure tools are available
     subprocess.run(
-        [sys.executable, "-m", "pip", "install", "ruff", "-q"],
+        [sys.executable, "-m", "pip", "install", "ruff", "bandit", "pip-audit", "-q"],
         capture_output=True,
     )
 
@@ -161,7 +163,7 @@ def check_code(dirs: list[str]) -> int:
         if ruff_result.returncode != 0:
             for line in ruff_result.stdout.splitlines():
                 print(f"   {line}")
-            print(f"   ❌ Lint errors found")
+            print("   ❌ Lint errors found")
             print()
             print("   Fix: Run 'ruff check --fix' to auto-fix some issues")
             failed = True
@@ -179,13 +181,54 @@ def check_code(dirs: list[str]) -> int:
         if fmt_result.returncode != 0:
             for line in fmt_result.stderr.splitlines():
                 print(f"   {line}")
-            print(f"   ❌ Formatting issues found")
+            print("   ❌ Formatting issues found")
             print()
             print("   Fix: Run 'ruff format' to auto-format")
             failed = True
         else:
             print("   ✅ Formatting OK")
         print()
+
+        # Security scan
+        print("🔒 Scanning for security issues with bandit...")
+        bandit_result = subprocess.run(
+            [sys.executable, "-m", "bandit", "-r", str(dir_path), "-s", "B101", "-q"],
+            capture_output=True,
+            text=True,
+        )
+        if bandit_result.returncode != 0:
+            for line in bandit_result.stdout.splitlines():
+                if line.strip():
+                    print(f"   {line}")
+            print("   ❌ Security issues found")
+            print()
+            print("   Fix: Review flagged code for security risks")
+            print("   Run locally: bandit -r <dir> -s B101")
+            failed = True
+        else:
+            print("   ✅ Security OK")
+        print()
+
+        # Dependency vulnerability scan
+        req_file = dir_path / "requirements.txt"
+        if req_file.is_file():
+            print("🛡️ Checking dependencies for vulnerabilities with pip-audit...")
+            audit_result = subprocess.run(
+                [sys.executable, "-m", "pip_audit", "-r", str(req_file)],
+                capture_output=True,
+                text=True,
+            )
+            if audit_result.returncode != 0:
+                for line in audit_result.stdout.splitlines():
+                    if line.strip():
+                        print(f"   {line}")
+                print("   ❌ Vulnerable dependencies found")
+                print()
+                print("   Fix: Update affected packages in requirements.txt")
+                failed = True
+            else:
+                print("   ✅ Dependencies OK")
+            print()
 
     print("========================================")
     if failed:
