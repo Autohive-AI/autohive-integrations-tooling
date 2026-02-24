@@ -67,10 +67,11 @@ flowchart TB
 ## Setup
 
 ```bash
-python -m venv .venv
+uv python install 3.13
+uv venv --python 3.13
 source .venv/bin/activate   # Linux/macOS
 # .venv\Scripts\activate    # Windows
-pip install -r requirements-dev.txt
+uv pip install -r requirements-dev.txt
 ```
 
 ## Local Testing
