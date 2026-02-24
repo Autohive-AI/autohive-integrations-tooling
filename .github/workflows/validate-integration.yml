@@ -19,6 +19,9 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install dev tools
+        run: pip install -r requirements-dev.txt -q
+
       - name: Get changed integration folders
         id: changed
         run: |

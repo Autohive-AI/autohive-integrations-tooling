@@ -16,6 +16,7 @@ Validation tools and CI/CD workflows for Autohive integrations.
 | `.github/workflows/validate-integration.yml` | PR validation pipeline |
 | `.github/workflows/self-test.yml` | Regression guard for tooling scripts |
 | `.github/workflows/conv-commits.yml` | Conventional commit enforcement |
+| `requirements-dev.txt` | Dev tool dependencies (ruff, bandit, pip-audit) |
 | `ruff.toml` | Ruff linter and formatter configuration |
 | `INTEGRATION_CHECKLIST.md` | Manual review checklist |
 | `tests/examples/` | Test fixtures for validation scripts |
@@ -61,6 +62,15 @@ flowchart TB
     PR --> wf3
     PUSH_SCRIPTS --> wf2
     PUSH_MAIN --> wf3
+```
+
+## Setup
+
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Linux/macOS
+# .venv\Scripts\activate    # Windows
+pip install -r requirements-dev.txt
 ```
 
 ## Local Testing

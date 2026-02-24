@@ -27,6 +27,9 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install dev tools
+        run: pip install -r requirements-dev.txt -q
+
       - name: Test validate_integration.py — good integrations pass
         run: |
           python scripts/validate_integration.py tests/examples/good-integration
