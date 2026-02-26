@@ -161,7 +161,8 @@ Inspects the entry point file for expected patterns:
 | `Integration` imported | Warning | Should import from SDK |
 | `ActionHandler` imported | Warning | Should import from SDK |
 | `Integration.load()` called | Warning | Standard loading pattern |
-| `@integration.action("name")` decorators | Warning | Each config action should have a matching decorator |
+
+> **Note:** Action decorator matching (config ↔ code) is handled by `check_config_sync.py`, which uses AST parsing for more accurate bidirectional validation.
 
 ### 8. Unused Scopes Detection (`_check_unused_scopes`)
 

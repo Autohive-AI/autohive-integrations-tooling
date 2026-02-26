@@ -365,13 +365,6 @@ class IntegrationValidator:
         if 'Integration.load()' not in content:
             self.add_warning("Main file should use 'Integration.load()' to load the integration")
 
-        # Check for action decorators matching config
-        if 'actions' in self.config:
-            for action_name in self.config['actions'].keys():
-                decorator_pattern = f'@\\w+\\.action\\(["\']?{action_name}["\']?\\)'
-                if not re.search(decorator_pattern, content):
-                    self.add_warning(f"Action '{action_name}' defined in config but no matching @integration.action decorator found")
-
     def _check_unused_scopes(self):
         """Check for potentially unused scopes."""
         if 'auth' not in self.config:

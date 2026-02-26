@@ -96,6 +96,17 @@ jobs:
       - name: Test check_code.py — good integration
         run: python scripts/check_code.py tests/examples/good-integration
 
+      - name: Test check_config_sync.py — good integration passes
+        run: python scripts/check_config_sync.py tests/examples/good-integration
+
+      - name: Test check_config_sync.py — mismatched config detected
+        run: |
+          if python scripts/check_config_sync.py tests/examples/config-mismatch 2>&1; then
+            echo "❌ Expected config sync check to fail for config-mismatch"
+            exit 1
+          fi
+          echo "✅ Config-code mismatch correctly detected"
+
       - name: Test validate_integration.py — wrong icon size fails
         run: |
           if python scripts/validate_integration.py tests/examples/bad-icon 2>&1; then

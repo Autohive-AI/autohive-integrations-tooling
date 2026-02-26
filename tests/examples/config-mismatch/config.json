@@ -1,0 +1,43 @@
+{
+  "name": "config-mismatch",
+  "version": "1.0.0",
+  "description": "Test fixture with config/code mismatches",
+  "entry_point": "config_mismatch.py",
+  "actions": {
+    "get_data": {
+      "display_name": "Get Data",
+      "description": "Action defined in both config and code",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Limit"
+          },
+          "unused_param": {
+            "type": "string",
+            "description": "Defined in schema but never used in code"
+          }
+        },
+        "required": ["limit"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "missing_in_code": {
+      "display_name": "Missing In Code",
+      "description": "Action in config but no decorator in code",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}
