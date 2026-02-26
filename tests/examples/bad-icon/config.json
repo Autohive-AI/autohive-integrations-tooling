@@ -1,0 +1,42 @@
+{
+  "name": "bad-icon",
+  "version": "1.0.0",
+  "description": "A sample integration with a wrong-sized icon for testing",
+  "entry_point": "bad_icon.py",
+  "auth": {
+    "type": "custom",
+    "title": "API Key Authentication",
+    "fields": {
+      "type": "object",
+      "properties": {
+        "api_key": {
+          "type": "string",
+          "format": "password",
+          "label": "API Key",
+          "help_text": "Enter your API key"
+        }
+      },
+      "required": ["api_key"]
+    }
+  },
+  "actions": {
+    "get_data": {
+      "display_name": "Get Data",
+      "description": "Retrieves data from the API",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "boolean",
+            "description": "Whether the operation was successful"
+          }
+        }
+      }
+    }
+  }
+}
