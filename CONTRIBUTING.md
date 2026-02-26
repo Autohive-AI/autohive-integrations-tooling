@@ -29,7 +29,7 @@ my-integration/
 ├── __init__.py              # Minimal — only import and __all__
 ├── config.json              # Integration configuration
 ├── my_integration.py        # Main implementation (entry_point)
-├── icon.png or icon.svg     # Integration icon
+├── icon.png or icon.svg     # Integration icon (512x512 pixels)
 ├── requirements.txt         # Dependencies (must include autohive-integrations-sdk)
 ├── README.md                # Documentation
 └── tests/
@@ -85,6 +85,7 @@ python scripts/check_code.py my-integration
 | Format | `ruff format` | Consistent code formatting |
 | Security | `bandit` | No hardcoded secrets, unsafe eval/exec |
 | Dependencies | `pip-audit` | No known CVEs in requirements.txt |
+| Config sync | `check_config_sync.py` | Config.json actions and input schemas match code |
 
 ### Auto-fixing Common Issues
 

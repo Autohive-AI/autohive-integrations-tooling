@@ -4,7 +4,7 @@ Runs code quality checks on one or more integration directories.
 
 ## Overview
 
-This script performs eight sequential code quality checks on each given integration directory:
+This script performs nine sequential code quality checks on each given integration directory:
 
 1. **Python syntax check** — uses `py_compile.compile()` directly to catch syntax errors
 2. **Import availability check** — imports `check_imports()` as a function to verify modules exist
@@ -68,10 +68,9 @@ pip install -r <dir>/requirements.txt -q
 python -m py_compile <file.py>
 ```
 
-- Finds all `.py` files recursively in the directory using `find`
+- Finds all `.py` files recursively in the directory using `pathlib.glob()`
 - Uses `py_compile` module to check syntax without executing code
 - Reports each file with syntax errors individually
-- Uses null-delimited file discovery (`find -print0`) to handle filenames with spaces
 
 **On failure:**
 ```
@@ -107,10 +106,9 @@ python scripts/check_imports.py <dir>/<entry_point>
 python -m json.tool <file.json>
 ```
 
-- Finds all `.json` files recursively in the directory
-- Uses Python's built-in `json.tool` module to validate syntax
+- Finds all `.json` files recursively in the directory using `pathlib.glob()`
+- Uses Python's built-in `json.load()` to validate syntax
 - Reports each invalid JSON file individually
-- Uses null-delimited file discovery for safe filename handling
 
 **On failure:**
 ```

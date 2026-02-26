@@ -564,6 +564,7 @@ python -m pytest tests/ -v
 **Every integration MUST have an icon file.**
 
 - [ ] `icon.png` OR `icon.svg` exists in integration root folder
+- [ ] Icon must be exactly **512x512 pixels**
 - [ ] File is named exactly `icon.png` or `icon.svg`
 
 ```
@@ -765,4 +766,4 @@ CLEANUP
 
 ---
 
-*Last updated: January 2026*
+*Last updated: February 2026*

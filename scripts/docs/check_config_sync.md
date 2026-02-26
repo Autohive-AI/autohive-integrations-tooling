@@ -11,14 +11,14 @@ This script validates that the `config.json` file and the integration's entry po
 ## Usage
 
 ```bash
-python scripts/check_config_sync.py <dir>
+python scripts/check_config_sync.py <dir> [dir ...]
 ```
 
 ### Arguments
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `dir` | Yes | Path to an integration directory to check |
+| `dir` | Yes (one or more) | Path to an integration directory to check |
 
 ### Exit Codes
 

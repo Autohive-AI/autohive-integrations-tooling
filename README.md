@@ -102,7 +102,7 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 - `__init__.py` - Package init (minimal)
 - `requirements.txt` - Dependencies (must include `autohive-integrations-sdk`)
 - `README.md` - Documentation
-- `icon.png` or `icon.svg` - Integration icon
+- `icon.png` or `icon.svg` - Integration icon (512x512 pixels)
 - `tests/` - Test folder with `__init__.py`, `context.py`, and `test_*.py`
 
 ## Integrations
