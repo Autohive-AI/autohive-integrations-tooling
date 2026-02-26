@@ -4,7 +4,7 @@ Runs code quality checks on one or more integration directories.
 
 ## Overview
 
-This script performs seven sequential code quality checks on each given integration directory:
+This script performs eight sequential code quality checks on each given integration directory:
 
 1. **Python syntax check** — uses `py_compile.compile()` directly to catch syntax errors
 2. **Import availability check** — imports `check_imports()` as a function to verify modules exist
@@ -13,6 +13,7 @@ This script performs seven sequential code quality checks on each given integrat
 5. **Format check** — runs `ruff format --check` to enforce consistent code formatting
 6. **Security scan** — runs `bandit` to flag hardcoded secrets, unsafe eval/exec, insecure HTTP calls
 7. **Dependency vulnerability scan** — runs `pip-audit` to check requirements.txt for packages with known CVEs
+8. **Config-code sync** — runs `check_config_sync.py` to verify config.json actions and input schemas match the code
 
 Before running checks, it installs the integration's dependencies from `requirements.txt` so that import checks can find third-party packages.
 
@@ -207,6 +208,29 @@ pip-audit -r <dir>/requirements.txt
    Fix: Update affected packages in requirements.txt
 ```
 
+### 9. Config-Code Sync Check
+
+```bash
+check_config_sync.py <dir>
+```
+
+- Uses AST parsing to extract `@action` decorators and `inputs` access patterns from the entry point
+- Cross-validates action names and input parameters between `config.json` and code
+- Detects undocumented parameters, dead schema fields, and required/optional mismatches
+
+**On failure:**
+```
+🔗 Checking config-code sync...
+   ⚠️ Action 'send_email' in config.json but not found in code
+   ❌ Input 'recipient' declared in config.json but never accessed in code
+   ❌ Input 'priority' accessed in code but missing from config.json schema
+
+   ❌ Config-code sync errors found
+
+   Fix: Ensure config.json actions and input schemas match the code
+   Run locally: python scripts/check_config_sync.py <dir>
+```
+
 ## How It Works
 
 ```mermaid
@@ -238,11 +262,14 @@ flowchart TD
     V --> W{Security OK?}
     W -->|No| H
     W -->|Yes| X{requirements.txt exists?}
-    X -->|No| A
+    X -->|No| AA
     X -->|Yes| Y[Run pip-audit on requirements.txt]
     Y --> Z{Deps OK?}
     Z -->|No| H
-    Z -->|Yes| A
+    Z -->|Yes| AA[Run config-code sync check]
+    AA --> AB{Sync OK?}
+    AB -->|No| H
+    AB -->|Yes| A
     A --> O{Any failures?}
     O -->|Yes| P[Exit 1]
     O -->|No| Q[Exit 0]
@@ -280,6 +307,9 @@ Checking: my-integration
 🛡️ Checking dependencies for vulnerabilities with pip-audit...
    ✅ Dependencies OK
 
+🔗 Checking config-code sync...
+   ✅ Config-code sync OK
+
 ========================================
 ✅ CODE CHECK PASSED
 ========================================
@@ -293,6 +323,7 @@ Checking: my-integration
 - **ruff** — installed automatically for linting and formatting (configured via `ruff.toml`)
 - **bandit** — installed automatically for security scanning
 - **pip-audit** — installed automatically for dependency vulnerability checking
+- **check_config_sync** — imported as a module for config-code sync validation
 
 ## Integration with CI
 

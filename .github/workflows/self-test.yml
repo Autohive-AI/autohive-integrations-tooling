@@ -96,6 +96,17 @@ jobs:
       - name: Test check_code.py — good integration
         run: python scripts/check_code.py tests/examples/good-integration
 
+      - name: Test check_config_sync.py — good integration passes
+        run: python scripts/check_config_sync.py tests/examples/good-integration
+
+      - name: Test check_config_sync.py — mismatched config detected
+        run: |
+          if python scripts/check_config_sync.py tests/examples/config-mismatch 2>&1; then
+            echo "❌ Expected config sync check to fail for config-mismatch"
+            exit 1
+          fi
+          echo "✅ Config-code mismatch correctly detected"
+
       - name: Test get_changed_dirs.py — missing argument
         run: |
           if python scripts/get_changed_dirs.py 2>&1; then

@@ -17,6 +17,7 @@ Checks performed per directory:
     6. Format check (ruff format)
     7. Security scan (bandit)
     8. Dependency vulnerability scan (pip-audit)
+    9. Config-code sync check (check_config_sync)
 
 Usage:
     python scripts/check_code.py <dir> [dir ...]
@@ -42,6 +43,7 @@ from pathlib import Path
 
 # Allow importing check_imports from the same directory regardless of cwd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_config_sync import check_config_sync
 from check_imports import check_imports
 
 
@@ -229,6 +231,29 @@ def check_code(dirs: list[str]) -> int:
             else:
                 print("   ✅ Dependencies OK")
             print()
+
+        # Config-code sync check
+        print("🔗 Checking config-code sync...")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            sync_result = check_config_sync(str(dir_path))
+        if sync_result != 0:
+            for line in buf.getvalue().splitlines():
+                if line.strip():
+                    print(f"   {line}")
+            print("   ❌ Config and code are out of sync")
+            print()
+            print("   Fix: Ensure config.json actions and input_schema match the code")
+            failed = True
+        else:
+            output = buf.getvalue()
+            # Show warnings even on success
+            warning_lines = [line for line in output.splitlines() if line.startswith("⚠️")]
+            if warning_lines:
+                for line in warning_lines:
+                    print(f"   {line}")
+            print("   ✅ Config-code sync OK")
+        print()
 
     print("========================================")
     if failed:
