@@ -80,7 +80,7 @@ Checks that all mandatory files exist in the integration directory:
 | `__init__.py` | Error | Python package init |
 | `requirements.txt` | Error | Python dependencies |
 | `README.md` | Error | Integration documentation |
-| `icon.png` or `icon.svg` | Error | Integration icon (either format accepted) |
+| `icon.png` or `icon.svg` | Error | Integration icon — must be exactly 512x512 pixels |
 
 ### 3. config.json Validation (`_check_config_json`)
 
@@ -249,7 +249,7 @@ Called by the `validate-integration.yml` workflow (on pull requests) as the **St
 ```yaml
 - name: Structure Check
   if: steps.changed.outputs.dirs != ''
-  run: python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }}
+  run: python scripts/validate_integration.py "${{ steps.changed.outputs.dirs }}"
 ```
 
 The script is also exercised by the `self-test.yml` workflow, which runs it against the test examples in `tests/examples/` as a regression guard whenever `scripts/` or `tests/` change.
