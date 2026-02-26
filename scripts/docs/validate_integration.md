@@ -249,7 +249,7 @@ Called by the `validate-integration.yml` workflow (on pull requests) as the **St
 ```yaml
 - name: Structure Check
   if: steps.changed.outputs.dirs != ''
-  run: python scripts/validate_integration.py "${{ steps.changed.outputs.dirs }}"
+  run: python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }}
 ```
 
 The script is also exercised by the `self-test.yml` workflow, which runs it against the test examples in `tests/examples/` as a regression guard whenever `scripts/` or `tests/` change.
