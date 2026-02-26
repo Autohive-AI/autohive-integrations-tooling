@@ -20,6 +20,7 @@ Validation tools and CI/CD workflows for Autohive integrations.
 | `requirements-dev.txt` | Dev tool dependencies (ruff, bandit, pip-audit) |
 | `ruff.toml` | Ruff linter and formatter configuration |
 | `CONTRIBUTING.md` | Contributor guide |
+| `LOCAL_DEVELOPMENT.md` | Local development workflow and documentation map |
 | `INTEGRATION_CHECKLIST.md` | Manual review checklist |
 | `tests/examples/` | Test fixtures for validation scripts |
 
