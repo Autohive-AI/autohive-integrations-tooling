@@ -14,18 +14,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
       - name: Install dev tools
-        run: uv pip install -r requirements-dev.txt --system -q
+        run: pip install -r requirements-dev.txt -q
 
       - name: Get changed integration folders
         id: changed
