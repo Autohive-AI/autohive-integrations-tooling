@@ -14,13 +14,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
       - name: Install dev tools
-        run: pip install -r requirements-dev.txt -q
+        run: uv pip install -r requirements-dev.txt --system -q
 
       - name: Get changed integration folders
         id: changed
@@ -30,12 +35,12 @@ jobs:
 
       - name: Structure Check
         if: steps.changed.outputs.dirs != ''
-        run: python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }}
+        run: python scripts/validate_integration.py "${{ steps.changed.outputs.dirs }}"
 
       - name: Code Check
         if: steps.changed.outputs.dirs != ''
-        run: python scripts/check_code.py ${{ steps.changed.outputs.dirs }}
+        run: python scripts/check_code.py "${{ steps.changed.outputs.dirs }}"
 
       - name: README Check
         if: steps.changed.outputs.dirs != ''
-        run: python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.changed.outputs.dirs }}
+        run: python scripts/check_readme.py "origin/${{ github.base_ref }}" "${{ steps.changed.outputs.dirs }}"
