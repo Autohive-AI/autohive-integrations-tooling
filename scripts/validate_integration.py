@@ -26,7 +26,9 @@ Examples:
 import argparse
 import json
 import re
+import struct
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, List
 
@@ -116,9 +118,61 @@ class IntegrationValidator:
                 self.add_error(f"Missing required file: {filename} ({description})")
 
         # Check for icon (png or svg)
-        has_icon = (self.path / 'icon.png').exists() or (self.path / 'icon.svg').exists()
+        png_path = self.path / 'icon.png'
+        svg_path = self.path / 'icon.svg'
+        has_icon = png_path.exists() or svg_path.exists()
         if not has_icon:
             self.add_error("Missing required file: icon.png or icon.svg (Integration icon)")
+        else:
+            if png_path.exists():
+                self._check_icon_png_size(png_path)
+            elif svg_path.exists():
+                self._check_icon_svg_size(svg_path)
+
+    def _check_icon_png_size(self, path: Path):
+        """Validate PNG icon is exactly 512x512."""
+        try:
+            data = path.read_bytes()
+            if data[:8] != b'\x89PNG\r\n\x1a\n':
+                self.add_error("icon.png is not a valid PNG file")
+                return
+            width, height = struct.unpack('>II', data[16:24])
+            if width != 512 or height != 512:
+                self.add_error(f"icon.png must be 512x512 pixels (found {width}x{height})")
+        except Exception as e:
+            self.add_error(f"Could not read icon.png: {e}")
+
+    def _check_icon_svg_size(self, path: Path):
+        """Validate SVG icon declares a 512x512 viewBox or width/height."""
+        try:
+            tree = ET.parse(path)
+            root = tree.getroot()
+            tag = root.tag.split('}')[-1] if '}' in root.tag else root.tag
+            if tag != 'svg':
+                self.add_error("icon.svg root element is not <svg>")
+                return
+
+            width = root.get('width', '').replace('px', '').strip()
+            height = root.get('height', '').replace('px', '').strip()
+            viewbox = root.get('viewBox', '')
+
+            if viewbox:
+                parts = viewbox.split()
+                if len(parts) == 4:
+                    vb_w, vb_h = parts[2], parts[3]
+                    if vb_w != '512' or vb_h != '512':
+                        self.add_error(f"icon.svg viewBox must be '0 0 512 512' (found '{viewbox}')")
+                    return
+
+            if width and height:
+                if width != '512' or height != '512':
+                    self.add_error(f"icon.svg must be 512x512 (found width='{width}' height='{height}')")
+            else:
+                self.add_warning("icon.svg has no width/height or viewBox — cannot verify it is 512x512")
+        except ET.ParseError as e:
+            self.add_error(f"icon.svg is not valid XML: {e}")
+        except Exception as e:
+            self.add_error(f"Could not read icon.svg: {e}")
 
     def _check_config_json(self):
         """Validate config.json structure."""

@@ -96,6 +96,14 @@ jobs:
       - name: Test check_code.py — good integration
         run: python scripts/check_code.py tests/examples/good-integration
 
+      - name: Test validate_integration.py — wrong icon size fails
+        run: |
+          if python scripts/validate_integration.py tests/examples/bad-icon 2>&1; then
+            echo "❌ Expected validation to fail for bad-icon (100x100 PNG)"
+            exit 1
+          fi
+          echo "✅ Wrong icon size correctly rejected"
+
       - name: Test get_changed_dirs.py — missing argument
         run: |
           if python scripts/get_changed_dirs.py 2>&1; then
