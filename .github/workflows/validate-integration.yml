@@ -30,12 +30,12 @@ jobs:
 
       - name: Structure Check
         if: steps.changed.outputs.dirs != ''
-        run: python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }}
+        run: python scripts/validate_integration.py "${{ steps.changed.outputs.dirs }}"
 
       - name: Code Check
         if: steps.changed.outputs.dirs != ''
-        run: python scripts/check_code.py ${{ steps.changed.outputs.dirs }}
+        run: python scripts/check_code.py "${{ steps.changed.outputs.dirs }}"
 
       - name: README Check
         if: steps.changed.outputs.dirs != ''
-        run: python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.changed.outputs.dirs }}
+        run: python scripts/check_readme.py "origin/${{ github.base_ref }}" "${{ steps.changed.outputs.dirs }}"
