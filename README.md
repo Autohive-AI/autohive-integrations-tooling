@@ -29,35 +29,28 @@ Validation tools and CI/CD workflows for Autohive integrations.
 ```mermaid
 flowchart TB
     subgraph triggers["Triggers"]
-        PR["Pull Request → master/main"]
-        PUSH_SCRIPTS["Push (scripts/, tests/ changed)"]
-        PUSH_MAIN["Push → master/main"]
+        PR["Pull Request"]
+        PUSH_SCRIPTS["Push — scripts/ or tests/ changed"]
+        PUSH_MAIN["Push — master/main"]
     end
 
     subgraph wf1["validate-integration.yml"]
         direction TB
-        GCD["get_changed_dirs.py\n─────────────────\ngit diff → extract top-level dirs\nfilter out .github, scripts, tests"]
-        GCD -->|"dirs (space-separated)"| COND{dirs empty?}
+        GCD[get_changed_dirs.py]
+        GCD -->|dirs| COND{dirs empty?}
         COND -->|Yes| SKIP[Skip all checks]
-        COND -->|No| VI["validate_integration.py\n─────────────────\n① Folder name\n② Required files\n③ config.json schema\n④ __init__.py minimality\n⑤ requirements.txt\n⑥ tests/ folder\n⑦ Main Python file\n⑧ Unused scopes"]
-        VI --> CC["check_code.py\n─────────────────\n① pip install requirements.txt\n② py_compile.compile() all .py\n③ check_imports() on entry_point\n④ json.load() all .json\n⑤ ruff check all .py\n⑥ ruff format --check\n⑦ bandit security scan\n⑧ pip-audit requirements.txt\n⑨ check_config_sync"]
-        CC --> CR["check_readme.py\n─────────────────\ngit diff: new files added?\nREADME.md also changed?"]
-    end
-
-    subgraph ci_detail["check_code.py internals"]
-        direction LR
-        CC2["check_code.py"] -->|"imports as function"| CI["check_imports.py\n─────────────────\nAST parse → walk nodes\nfind_spec() for modules\nresolve relative imports\n--verify-names: hasattr()"]
+        COND -->|No| VI[validate_integration.py]
+        VI --> CC[check_code.py]
+        CC --> CR[check_readme.py]
     end
 
     subgraph wf2["self-test.yml"]
-        direction TB
-        ST["Run scripts against\ntests/examples/\n─────────────────\ngood-integration ✅\nBad-Integration ✗\nauto-discovery skip\nvalid/invalid imports\nrelative imports\nname verification\nexit codes"]
+        ST[Run scripts against tests/examples/]
     end
 
     subgraph wf3["conv-commits.yml"]
-        direction TB
-        PRT["Validate PR Title\n(semantic-pull-request action)"]
-        CMT["Validate Push Commits\n(regex: type(scope)?: desc)"]
+        PRT[Validate PR title]
+        CMT[Validate commit messages]
     end
 
     PR --> wf1
@@ -66,6 +59,15 @@ flowchart TB
     PUSH_SCRIPTS --> wf2
     PUSH_MAIN --> wf3
 ```
+
+**What each step checks:**
+
+| Step | Script | Checks |
+|------|--------|--------|
+| Detect changes | `get_changed_dirs.py` | `git diff` → extract top-level dirs, filter out `.github`, `scripts`, `tests` |
+| Structure check | `validate_integration.py` | Folder name, required files, config.json schema, `__init__.py`, requirements.txt, tests/, icon size, unused scopes |
+| Code check | `check_code.py` | pip install, py_compile, check_imports, JSON validity, ruff check, ruff format, bandit, pip-audit, check_config_sync |
+| README check | `check_readme.py` | New integration files added → was README.md also updated? |
 
 ## Setup
 

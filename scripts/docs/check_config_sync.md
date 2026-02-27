@@ -68,9 +68,9 @@ flowchart TD
     C --> D[Parse entry point with AST]
     D --> E[Extract @action decorators]
     D --> F[Extract inputs access patterns]
-    E --> G{Compare actions:\nconfig vs code}
+    E --> G{Actions match?}
     G -->|Mismatch| H[Record errors]
-    G -->|Match| I{Compare input params:\nconfig vs code}
+    G -->|Match| I{Input params match?}
     F --> I
     B --> I
     I -->|Mismatch| H
