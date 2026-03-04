@@ -46,6 +46,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_config_sync import check_config_sync
 from check_imports import check_imports
 
+BANDIT_EXCLUDE_DIRS = [".venv", "venv", "__pycache__", "site-packages", "dependencies"]
+
 
 def check_code(dirs: list[str]) -> int:
     """Run code quality checks on the given integration directories.
@@ -193,8 +195,9 @@ def check_code(dirs: list[str]) -> int:
 
         # Security scan
         print("🔒 Scanning for security issues with bandit...")
+        bandit_excludes = ",".join(str(dir_path / d) for d in BANDIT_EXCLUDE_DIRS)
         bandit_result = subprocess.run(
-            [sys.executable, "-m", "bandit", "-r", str(dir_path), "-s", "B101", "-q"],
+            [sys.executable, "-m", "bandit", "-r", str(dir_path), "-x", bandit_excludes, "-s", "B101", "-q"],
             capture_output=True,
             text=True,
         )
@@ -205,7 +208,7 @@ def check_code(dirs: list[str]) -> int:
             print("   ❌ Security issues found")
             print()
             print("   Fix: Review flagged code for security risks")
-            print("   Run locally: bandit -r <dir> -s B101")
+            print(f"   Run locally: bandit -r <dir> -x {','.join(BANDIT_EXCLUDE_DIRS)} -s B101")
             failed = True
         else:
             print("   ✅ Security OK")

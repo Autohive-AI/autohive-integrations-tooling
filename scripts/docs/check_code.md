@@ -163,10 +163,11 @@ ruff format --check <dir>
 ### 7. Security Scan (bandit)
 
 ```bash
-bandit -r <dir> -s B101 -q
+bandit -r <dir> -x .venv,venv,__pycache__,site-packages,dependencies -s B101 -q
 ```
 
 - Runs [bandit](https://bandit.readthedocs.io/) security linter on all Python files
+- Excludes virtual environment, cache, and dependency directories from scanning
 - Flags hardcoded passwords, use of `eval`/`exec`, insecure HTTP calls, and other security anti-patterns
 - Skips B101 (assert_used) since test files use assertions
 - Uses `-q` (quiet) to only show findings
@@ -181,7 +182,7 @@ bandit -r <dir> -s B101 -q
    ❌ Security issues found
 
    Fix: Review flagged code for security risks
-   Run locally: bandit -r <dir> -s B101
+   Run locally: bandit -r <dir> -x .venv,venv,__pycache__,site-packages,dependencies -s B101
 ```
 
 ### 8. Dependency Vulnerability Scan (pip-audit)
