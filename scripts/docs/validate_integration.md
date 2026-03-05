@@ -154,7 +154,7 @@ Allowed patterns:
 
 ### 7. Main Python File (`_check_main_python_file`)
 
-Inspects the entry point file for expected patterns:
+Inspects all `.py` files in the integration directory (not just the entry point) for expected patterns. This supports modular integrations where action handlers are split across multiple files.
 
 | Check | Severity | Description |
 |-------|----------|-------------|

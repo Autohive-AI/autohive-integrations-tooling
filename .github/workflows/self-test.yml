@@ -33,6 +33,7 @@ jobs:
       - name: Test validate_integration.py — good integrations pass
         run: |
           python scripts/validate_integration.py tests/examples/good-integration
+          python scripts/validate_integration.py tests/examples/modular-integration
           python scripts/validate_integration.py tests/sample-api
           python scripts/validate_integration.py tests/examples/netlify
 
@@ -95,6 +96,9 @@ jobs:
 
       - name: Test check_code.py — good integration
         run: python scripts/check_code.py tests/examples/good-integration
+
+      - name: Test check_code.py — modular integration
+        run: python scripts/check_code.py tests/examples/modular-integration
 
       - name: Test check_config_sync.py — good integration passes
         run: python scripts/check_config_sync.py tests/examples/good-integration
