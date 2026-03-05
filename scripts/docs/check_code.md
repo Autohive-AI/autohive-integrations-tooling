@@ -88,6 +88,7 @@ python scripts/check_imports.py <dir>/<entry_point>
 ```
 
 - Reads `entry_point` from `config.json` to determine the main Python file
+- Temporarily adds the integration directory to `sys.path` so local imports (e.g. `import actions`) are resolvable, mirroring Python's runtime behaviour for entry points
 - Calls `check_imports()` directly as a function (see [check_imports.md](check_imports.md)) to verify all imports
 - Skips gracefully if `config.json` or the entry point file doesn't exist
 

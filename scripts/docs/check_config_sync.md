@@ -6,7 +6,7 @@ Config-code sync checker for Autohive integrations.
 
 ## Overview
 
-This script validates that the `config.json` file and the integration's entry point Python file are in sync. It uses AST (Abstract Syntax Tree) parsing to extract `@action` decorators and `inputs` access patterns from the code, then cross-validates them against the actions and input schemas declared in `config.json`.
+This script validates that the `config.json` file and the integration's Python code are in sync. It scans all `.py` files in the integration directory (not just the entry point), supporting modular integrations where action handlers are split across multiple files. It uses AST (Abstract Syntax Tree) parsing to extract `@action` decorators and `inputs` access patterns from the code, then cross-validates them against the actions and input schemas declared in `config.json`.
 
 ## Usage
 
@@ -64,8 +64,8 @@ Ensures that action names in `config.json` exactly match the decorator arguments
 ```mermaid
 flowchart TD
     A[Read config.json] --> B[Parse actions and input schemas]
-    B --> C[Read entry_point from config.json]
-    C --> D[Parse entry point with AST]
+    B --> C[Find all .py files in integration dir]
+    C --> D[Parse each file with AST]
     D --> E[Extract @action decorators]
     D --> F[Extract inputs access patterns]
     E --> G{Actions match?}
@@ -83,8 +83,8 @@ flowchart TD
 ### Step-by-Step
 
 1. **Read** `config.json` and extract declared actions and their input schemas
-2. **Read** the entry point Python file (determined by `entry_point` in `config.json`)
-3. **Parse** the entry point into an Abstract Syntax Tree (no code execution)
+2. **Scan** all `.py` files in the integration directory (supporting modular layouts)
+3. **Parse** each file into an Abstract Syntax Tree (no code execution)
 4. **Extract** `@action` decorator names and `inputs` key access patterns from the AST
 5. **Compare** actions between config and code — report any mismatches
 6. **Compare** input parameters for each action — report undocumented, dead, or mismatched fields
