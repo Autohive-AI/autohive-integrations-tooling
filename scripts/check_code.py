@@ -118,9 +118,16 @@ def check_code(dirs: list[str]) -> int:
             entry_file = dir_path / entry_point if entry_point else None
 
             if entry_file and entry_file.is_file():
-                buf = io.StringIO()
-                with redirect_stdout(buf):
-                    result = check_imports(str(entry_file))
+                # Add integration dir to sys.path so local imports (e.g. 'import actions')
+                # are resolvable, mirroring Python's runtime behaviour for entry points.
+                integration_dir = str(dir_path.resolve())
+                sys.path.insert(0, integration_dir)
+                try:
+                    buf = io.StringIO()
+                    with redirect_stdout(buf):
+                        result = check_imports(str(entry_file))
+                finally:
+                    sys.path.remove(integration_dir)
                 if result != 0:
                     for line in buf.getvalue().splitlines():
                         print(f"   {line}")
