@@ -113,3 +113,5 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 <!-- Add your integration here when submitting a PR -->
 | Integration | Description | Auth Type |
 |-------------|-------------|-----------|
+| [slack](slack/) | Send messages and manage channels in Slack | Bot Token (`xoxb-`) |
+|-------------|-------------|-----------|

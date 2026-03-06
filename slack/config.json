@@ -1,0 +1,79 @@
+{
+  "name": "slack",
+  "version": "1.0.0",
+  "description": "Slack integration for sending messages and managing channels",
+  "entry_point": "slack.py",
+  "auth": {
+    "type": "custom",
+    "title": "Slack Bot Token",
+    "fields": {
+      "type": "object",
+      "properties": {
+        "bot_token": {
+          "type": "string",
+          "format": "password",
+          "label": "Bot Token",
+          "help_text": "Your Slack bot token (xoxb-...)"
+        }
+      },
+      "required": ["bot_token"]
+    }
+  },
+  "actions": {
+    "send_message": {
+      "display_name": "Send Message",
+      "description": "Send a message to a Slack channel",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "description": "Channel ID or name"
+          },
+          "text": {
+            "type": "string",
+            "description": "Message text"
+          }
+        },
+        "required": ["channel", "text"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "Whether the message was sent successfully"
+          },
+          "ts": {
+            "type": "string",
+            "description": "Timestamp of the sent message"
+          }
+        }
+      }
+    },
+    "list_channels": {
+      "display_name": "List Channels",
+      "description": "List all public channels in the workspace",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of channels to return",
+            "default": 100
+          }
+        },
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "channels": {
+            "type": "array",
+            "description": "List of channels"
+          }
+        }
+      }
+    }
+  }
+}
