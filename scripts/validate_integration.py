@@ -108,7 +108,6 @@ class IntegrationValidator:
         """Check that all required files exist."""
         required_files = [
             ('config.json', 'Integration configuration file'),
-            ('__init__.py', 'Python package init file'),
             ('requirements.txt', 'Python dependencies file'),
             ('README.md', 'Integration documentation'),
         ]
@@ -116,6 +115,13 @@ class IntegrationValidator:
         for filename, description in required_files:
             if not (self.path / filename).exists():
                 self.add_error(f"Missing required file: {filename} ({description})")
+
+        # __init__.py is optional for modular integrations (those with an actions/
+        # subdirectory) because adding it causes circular imports when action files
+        # use absolute imports like 'from <integration> import <instance>'.
+        has_actions_dir = (self.path / 'actions').is_dir()
+        if not (self.path / '__init__.py').exists() and not has_actions_dir:
+            self.add_warning("Missing __init__.py (required for package-style integrations, optional for modular integrations with actions/)")
 
         # Check for icon (png or svg)
         png_path = self.path / 'icon.png'

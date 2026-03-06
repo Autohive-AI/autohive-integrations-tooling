@@ -1,3 +1,7 @@
-from .get_data import GetDataAction
+"""
+Modular integration actions.
 
-__all__ = ["GetDataAction"]
+Importing this module registers all actions with the integration instance.
+"""
+
+from . import get_data

@@ -77,10 +77,10 @@ Checks that all mandatory files exist in the integration directory:
 | File | Severity | Description |
 |------|----------|-------------|
 | `config.json` | Error | Integration configuration |
-| `__init__.py` | Error | Python package init |
 | `requirements.txt` | Error | Python dependencies |
 | `README.md` | Error | Integration documentation |
 | `icon.png` or `icon.svg` | Error | Integration icon — must be exactly 512x512 pixels |
+| `__init__.py` | Warning | Python package init — optional for modular integrations with an `actions/` subdirectory (adding it causes circular imports) |
 
 ### 3. config.json Validation (`_check_config_json`)
 

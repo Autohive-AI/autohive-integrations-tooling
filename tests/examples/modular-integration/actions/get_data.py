@@ -1,7 +1,7 @@
 from autohive_integrations_sdk import ActionHandler, ActionResult, ExecutionContext
 from typing import Dict, Any
 
-from modular_integration import modular_integration
+from modular_integration import modular_integration  # noqa: E402
 
 BASE_URL = "https://api.example.com/v1"
 

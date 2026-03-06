@@ -27,7 +27,7 @@ Use this checklist to verify your new integration follows all conventions and is
 - [ ] Integration folder is **lowercase** (e.g., `netlify/`, `shopify-admin/`)
 - [ ] `config.json` exists in root of integration folder
 - [ ] `{integration_name}.py` exists (main implementation)
-- [ ] `__init__.py` exists in root of integration folder
+- [ ] `__init__.py` exists in root of integration folder (optional for modular integrations with `actions/`)
 - [ ] `requirements.txt` exists
 - [ ] `README.md` exists **(REQUIRED)**
 - [ ] `icon.png` or `icon.svg` exists **(REQUIRED)**
@@ -39,7 +39,7 @@ Use this checklist to verify your new integration follows all conventions and is
 ### Complete Folder Structure
 ```
 integration-name/
-├── __init__.py              (Required - minimal)
+├── __init__.py              (Optional for modular integrations with actions/)
 ├── config.json              (Required - integration config)
 ├── {integration_name}.py    (Required - main implementation)
 ├── icon.png or icon.svg     (Required - integration icon)
