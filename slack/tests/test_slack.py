@@ -7,15 +7,12 @@ Uses mock credentials and responses — no real Slack workspace required.
 import asyncio
 from context import slack
 
-# Fake bot token used for testing only — not a real credential
-FAKE_BOT_TOKEN = "xoxb-test-fake-token-not-real-1234567890"
-
 
 class MockContext:
     """Mock ExecutionContext for testing."""
 
     def __init__(self, responses: dict):
-        self.auth = {"credentials": {"bot_token": FAKE_BOT_TOKEN}}
+        self.auth = {"credentials": {"bot_token": "test_token"}}
         self._responses = responses
 
     async def fetch(self, url: str, method: str = "GET", **kwargs):
@@ -30,7 +27,7 @@ class MockContext:
 
 
 async def test_send_message():
-    """Test send_message action with a fake token and mock response."""
+    """Test send_message action with mock response."""
     context = MockContext(
         responses={
             "POST chat.postMessage": {
