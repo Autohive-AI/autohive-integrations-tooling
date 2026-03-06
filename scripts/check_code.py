@@ -46,6 +46,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_config_sync import check_config_sync
 from check_imports import check_imports
 
+BANDIT_EXCLUDE_DIRS = [".venv", "venv", "__pycache__", "site-packages", "dependencies"]
+
 
 def check_code(dirs: list[str]) -> int:
     """Run code quality checks on the given integration directories.
@@ -116,9 +118,16 @@ def check_code(dirs: list[str]) -> int:
             entry_file = dir_path / entry_point if entry_point else None
 
             if entry_file and entry_file.is_file():
-                buf = io.StringIO()
-                with redirect_stdout(buf):
-                    result = check_imports(str(entry_file))
+                # Add integration dir to sys.path so local imports (e.g. 'import actions')
+                # are resolvable, mirroring Python's runtime behaviour for entry points.
+                integration_dir = str(dir_path.resolve())
+                sys.path.insert(0, integration_dir)
+                try:
+                    buf = io.StringIO()
+                    with redirect_stdout(buf):
+                        result = check_imports(str(entry_file))
+                finally:
+                    sys.path.remove(integration_dir)
                 if result != 0:
                     for line in buf.getvalue().splitlines():
                         print(f"   {line}")
@@ -193,8 +202,9 @@ def check_code(dirs: list[str]) -> int:
 
         # Security scan
         print("🔒 Scanning for security issues with bandit...")
+        bandit_excludes = ",".join(str(dir_path / d) for d in BANDIT_EXCLUDE_DIRS)
         bandit_result = subprocess.run(
-            [sys.executable, "-m", "bandit", "-r", str(dir_path), "-s", "B101", "-q"],
+            [sys.executable, "-m", "bandit", "-r", str(dir_path), "-x", bandit_excludes, "-s", "B101", "-q"],
             capture_output=True,
             text=True,
         )
@@ -205,7 +215,7 @@ def check_code(dirs: list[str]) -> int:
             print("   ❌ Security issues found")
             print()
             print("   Fix: Review flagged code for security risks")
-            print("   Run locally: bandit -r <dir> -s B101")
+            print(f"   Run locally: bandit -r <dir> -x {','.join(BANDIT_EXCLUDE_DIRS)} -s B101")
             failed = True
         else:
             print("   ✅ Security OK")

@@ -182,10 +182,11 @@ def check_config_sync(dir_path: str) -> int:
         print(f"Entry point not found: {entry_file}")
         return 2
 
-    code_actions = extract_actions_from_code(entry_file)
-    if code_actions is None:
-        print(f"Failed to parse {entry_file}")
-        return 2
+    code_actions: dict[str, dict] = {}
+    for pyfile in sorted(path.rglob("*.py")):
+        file_actions = extract_actions_from_code(pyfile)
+        if file_actions is not None:
+            code_actions.update(file_actions)
 
     config_actions = extract_actions_from_config(config)
 

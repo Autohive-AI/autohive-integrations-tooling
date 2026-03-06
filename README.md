@@ -102,7 +102,7 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 ### Required Files
 - `config.json` - Integration configuration
 - `{name}.py` - Main implementation
-- `__init__.py` - Package init (minimal)
+- `__init__.py` - Package init (minimal, optional for modular integrations with `actions/`)
 - `requirements.txt` - Dependencies (must include `autohive-integrations-sdk`)
 - `README.md` - Documentation
 - `icon.png` or `icon.svg` - Integration icon (512x512 pixels)

@@ -77,10 +77,10 @@ Checks that all mandatory files exist in the integration directory:
 | File | Severity | Description |
 |------|----------|-------------|
 | `config.json` | Error | Integration configuration |
-| `__init__.py` | Error | Python package init |
 | `requirements.txt` | Error | Python dependencies |
 | `README.md` | Error | Integration documentation |
 | `icon.png` or `icon.svg` | Error | Integration icon — must be exactly 512x512 pixels |
+| `__init__.py` | Warning | Python package init — optional for modular integrations with an `actions/` subdirectory (adding it causes circular imports) |
 
 ### 3. config.json Validation (`_check_config_json`)
 
@@ -154,7 +154,7 @@ Allowed patterns:
 
 ### 7. Main Python File (`_check_main_python_file`)
 
-Inspects the entry point file for expected patterns:
+Inspects all `.py` files in the integration directory (not just the entry point) for expected patterns. This supports modular integrations where action handlers are split across multiple files.
 
 | Check | Severity | Description |
 |-------|----------|-------------|

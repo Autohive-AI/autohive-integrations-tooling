@@ -108,7 +108,6 @@ class IntegrationValidator:
         """Check that all required files exist."""
         required_files = [
             ('config.json', 'Integration configuration file'),
-            ('__init__.py', 'Python package init file'),
             ('requirements.txt', 'Python dependencies file'),
             ('README.md', 'Integration documentation'),
         ]
@@ -116,6 +115,13 @@ class IntegrationValidator:
         for filename, description in required_files:
             if not (self.path / filename).exists():
                 self.add_error(f"Missing required file: {filename} ({description})")
+
+        # __init__.py is optional for modular integrations (those with an actions/
+        # subdirectory) because adding it causes circular imports when action files
+        # use absolute imports like 'from <integration> import <instance>'.
+        has_actions_dir = (self.path / 'actions').is_dir()
+        if not (self.path / '__init__.py').exists() and not has_actions_dir:
+            self.add_warning("Missing __init__.py (required for package-style integrations, optional for modular integrations with actions/)")
 
         # Check for icon (png or svg)
         png_path = self.path / 'icon.png'
@@ -340,7 +346,7 @@ class IntegrationValidator:
             self.add_error("Missing test file: tests/test_*.py")
 
     def _check_main_python_file(self):
-        """Check main Python file structure."""
+        """Check main Python file and integration modules for required patterns."""
         if 'entry_point' not in self.config:
             return
 
@@ -348,22 +354,25 @@ class IntegrationValidator:
         if not main_file.exists():
             return  # Already reported
 
-        with open(main_file, 'r', encoding='utf-8') as f:
-            content = f.read()
+        # Collect content from all .py files in the integration directory
+        all_content = ""
+        for pyfile in sorted(self.path.rglob("*.py")):
+            with open(pyfile, 'r', encoding='utf-8') as f:
+                all_content += f.read() + "\n"
 
-        # Check for required imports
+        # Check for required imports across all Python files
         required_imports = [
             ('Integration', 'from autohive_integrations_sdk'),
             ('ActionHandler', 'from autohive_integrations_sdk'),
         ]
 
         for item, source in required_imports:
-            if item not in content:
-                self.add_warning(f"Main file may be missing import: {item} ({source})")
+            if item not in all_content:
+                self.add_warning(f"Integration may be missing import: {item} ({source})")
 
-        # Check for Integration.load()
-        if 'Integration.load()' not in content:
-            self.add_warning("Main file should use 'Integration.load()' to load the integration")
+        # Check for Integration.load() across all Python files
+        if 'Integration.load()' not in all_content:
+            self.add_warning("Integration should use 'Integration.load()' to load the integration")
 
     def _check_unused_scopes(self):
         """Check for potentially unused scopes."""
