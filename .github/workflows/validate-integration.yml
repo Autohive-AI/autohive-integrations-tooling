@@ -87,6 +87,8 @@ jobs:
           message: |
             ## 🔍 Integration Validation Results
 
+            **Commit:** `${{ github.event.pull_request.head.sha }}` · **Updated:** ${{ github.event.pull_request.updated_at }}
+
             **Changed directories:** `${{ steps.changed.outputs.dirs }}`
 
             | Check | Result |
