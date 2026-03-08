@@ -72,6 +72,13 @@ jobs:
           echo 'EOF' >> $GITHUB_OUTPUT
           exit $EXIT_CODE
 
+      - name: Delete stale PR comment
+        if: always() && steps.changed.outputs.dirs == ''
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: validation-results
+          delete: true
+
       - name: Post PR comment
         if: always() && steps.changed.outputs.dirs != ''
         uses: marocchino/sticky-pull-request-comment@v2
