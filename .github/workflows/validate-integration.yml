@@ -73,45 +73,44 @@ jobs:
           exit $EXIT_CODE
 
       - name: Post PR comment
-        if: always()
+        if: always() && steps.changed.outputs.dirs != ''
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: validation-results
           message: |
             ## 🔍 Integration Validation Results
 
-            **Changed directories:** `${{ steps.changed.outputs.dirs || '(none)' }}`
+            **Changed directories:** `${{ steps.changed.outputs.dirs }}`
 
             | Check | Result |
             |-------|--------|
-            | Structure | ${{ steps.changed.outputs.dirs == '' && '⏭️ Skipped' || (steps.structure.outcome == 'success' && '✅ Passed' || '❌ Failed') }} |
-            | Code | ${{ steps.changed.outputs.dirs == '' && '⏭️ Skipped' || (steps.code.outcome == 'success' && '✅ Passed' || '❌ Failed') }} |
-            | README | ${{ steps.changed.outputs.dirs == '' && '⏭️ Skipped' || (steps.readme.outcome == 'success' && '✅ Passed' || '❌ Failed') }} |
+            | Structure | ${{ steps.structure.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |
+            | Code | ${{ steps.code.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |
+            | README | ${{ steps.readme.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |
 
-            ${{ steps.structure.outcome == 'failure' && format('
-            <details><summary>❌ Structure Check output</summary>
-
-            ```
-            {0}
-            ```
-
-            </details>', steps.structure.outputs.output) || '' }}
-            ${{ steps.code.outcome == 'failure' && format('
-            <details><summary>❌ Code Check output</summary>
+            <details><summary>${{ steps.structure.outcome == 'success' && '✅' || '❌' }} Structure Check output</summary>
 
             ```
-            {0}
+            ${{ steps.structure.outputs.output }}
             ```
 
-            </details>', steps.code.outputs.output) || '' }}
-            ${{ steps.readme.outcome == 'failure' && format('
-            <details><summary>❌ README Check output</summary>
+            </details>
+
+            <details><summary>${{ steps.code.outcome == 'success' && '✅' || '❌' }} Code Check output</summary>
 
             ```
-            {0}
+            ${{ steps.code.outputs.output }}
             ```
 
-            </details>', steps.readme.outputs.output) || '' }}
+            </details>
+
+            <details><summary>${{ steps.readme.outcome == 'success' && '✅' || '❌' }} README Check output</summary>
+
+            ```
+            ${{ steps.readme.outputs.output }}
+            ```
+
+            </details>
 
       - name: Fail if any check failed
         if: always() && (steps.structure.outcome == 'failure' || steps.code.outcome == 'failure' || steps.readme.outcome == 'failure')
