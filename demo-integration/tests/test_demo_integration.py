@@ -1,5 +1,5 @@
 import asyncio
-from context import good_integration
+from context import demo_integration
 from autohive_integrations_sdk import ExecutionContext
 
 
@@ -9,7 +9,7 @@ async def test_get_data():
 
     async with ExecutionContext(auth=auth) as context:
         try:
-            result = await good_integration.execute_action("get_data", {"limit": 5}, context)
+            result = await demo_integration.execute_action("get_data", {"limit": 5}, context)
 
             data = result.data
             assert "result" in data

@@ -1,7 +1,7 @@
 from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult
 from typing import Dict, Any
 
-good_integration = Integration.load()
+demo_integration = Integration.load()
 
 BASE_URL = "https://api.example.com/v1"
 
@@ -13,7 +13,7 @@ def get_headers(context: ExecutionContext) -> Dict[str, str]:
     return {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
 
-@good_integration.action("get_data")
+@demo_integration.action("get_data")
 class GetDataAction(ActionHandler):
     """Retrieves data from the API."""
 

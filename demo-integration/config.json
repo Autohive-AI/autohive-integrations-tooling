@@ -1,8 +1,8 @@
 {
-  "name": "good-integration",
+  "name": "demo-integration",
   "version": "1.0.0",
   "description": "A sample valid integration for testing",
-  "entry_point": "good_integration.py",
+  "entry_point": "demo_integration.py",
   "auth": {
     "type": "custom",
     "title": "API Key Authentication",
