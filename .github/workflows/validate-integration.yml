@@ -29,6 +29,8 @@ jobs:
         run: |
           DIRS=$(python scripts/get_changed_dirs.py "origin/${{ github.base_ref }}")
           echo "dirs=$DIRS" >> $GITHUB_OUTPUT
+          MSG=$(git log -1 --format=%s)
+          echo "commit_msg=$MSG" >> $GITHUB_OUTPUT
 
       - name: Structure Check
         id: structure
@@ -87,7 +89,8 @@ jobs:
           message: |
             ## 🔍 Integration Validation Results
 
-            **Commit:** `${{ github.event.pull_request.head.sha }}` · **Updated:** ${{ github.event.pull_request.updated_at }}
+            **Commit:** [`${{ github.event.pull_request.head.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }}) · ${{ steps.changed.outputs.commit_msg }}
+            **Updated:** ${{ github.event.pull_request.updated_at }}
 
             **Changed directories:** `${{ steps.changed.outputs.dirs }}`
 
