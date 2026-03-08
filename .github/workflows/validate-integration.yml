@@ -35,36 +35,42 @@ jobs:
         if: steps.changed.outputs.dirs != ''
         continue-on-error: true
         run: |
-          OUTPUT=$(python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }} 2>&1) || true
+          set +e
+          OUTPUT=$(python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }} 2>&1)
+          EXIT_CODE=$?
           echo "$OUTPUT"
           echo 'output<<EOF' >> $GITHUB_OUTPUT
           echo "$OUTPUT" >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT
-          python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }}
+          exit $EXIT_CODE
 
       - name: Code Check
         id: code
         if: steps.changed.outputs.dirs != ''
         continue-on-error: true
         run: |
-          OUTPUT=$(python scripts/check_code.py ${{ steps.changed.outputs.dirs }} 2>&1) || true
+          set +e
+          OUTPUT=$(python scripts/check_code.py ${{ steps.changed.outputs.dirs }} 2>&1)
+          EXIT_CODE=$?
           echo "$OUTPUT"
           echo 'output<<EOF' >> $GITHUB_OUTPUT
           echo "$OUTPUT" >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT
-          python scripts/check_code.py ${{ steps.changed.outputs.dirs }}
+          exit $EXIT_CODE
 
       - name: README Check
         id: readme
         if: steps.changed.outputs.dirs != ''
         continue-on-error: true
         run: |
-          OUTPUT=$(python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.changed.outputs.dirs }} 2>&1) || true
+          set +e
+          OUTPUT=$(python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.changed.outputs.dirs }} 2>&1)
+          EXIT_CODE=$?
           echo "$OUTPUT"
           echo 'output<<EOF' >> $GITHUB_OUTPUT
           echo "$OUTPUT" >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT
-          python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.changed.outputs.dirs }}
+          exit $EXIT_CODE
 
       - name: Post PR comment
         if: always()
