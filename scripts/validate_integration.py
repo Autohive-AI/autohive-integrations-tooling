@@ -4,8 +4,8 @@ Integration Structure Validator
 
 Requires: Python 3.13+
 
-This script validates that integrations follow the required folder structure
-and conventions. Run this before submitting a PR to catch common issues.
+Validates that integrations follow the required folder structure
+and conventions. Run before submitting a PR to catch common issues.
 
 Usage:
     python scripts/validate_integration.py [dir ...]
