@@ -29,7 +29,7 @@ jobs:
         run: |
           DIRS=$(python scripts/get_changed_dirs.py "origin/${{ github.base_ref }}")
           echo "dirs=$DIRS" >> $GITHUB_OUTPUT
-          MSG=$(git log -1 --format=%s)
+          MSG=$(git log -1 --format=%s ${{ github.event.pull_request.head.sha }})
           echo "commit_msg=$MSG" >> $GITHUB_OUTPUT
 
       - name: Structure Check
