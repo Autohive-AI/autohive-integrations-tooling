@@ -8,6 +8,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     name: Validate Integration
+    permissions:
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,13 +31,82 @@ jobs:
           echo "dirs=$DIRS" >> $GITHUB_OUTPUT
 
       - name: Structure Check
+        id: structure
         if: steps.changed.outputs.dirs != ''
-        run: python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }}
+        continue-on-error: true
+        run: |
+          OUTPUT=$(python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }} 2>&1) || true
+          echo "$OUTPUT"
+          echo 'output<<EOF' >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+          python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }}
 
       - name: Code Check
+        id: code
         if: steps.changed.outputs.dirs != ''
-        run: python scripts/check_code.py ${{ steps.changed.outputs.dirs }}
+        continue-on-error: true
+        run: |
+          OUTPUT=$(python scripts/check_code.py ${{ steps.changed.outputs.dirs }} 2>&1) || true
+          echo "$OUTPUT"
+          echo 'output<<EOF' >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+          python scripts/check_code.py ${{ steps.changed.outputs.dirs }}
 
       - name: README Check
+        id: readme
         if: steps.changed.outputs.dirs != ''
-        run: python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.changed.outputs.dirs }}
+        continue-on-error: true
+        run: |
+          OUTPUT=$(python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.changed.outputs.dirs }} 2>&1) || true
+          echo "$OUTPUT"
+          echo 'output<<EOF' >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+          python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.changed.outputs.dirs }}
+
+      - name: Post PR comment
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: validation-results
+          message: |
+            ## 🔍 Integration Validation Results
+
+            **Changed directories:** `${{ steps.changed.outputs.dirs || '(none)' }}`
+
+            | Check | Result |
+            |-------|--------|
+            | Structure | ${{ steps.changed.outputs.dirs == '' && '⏭️ Skipped' || (steps.structure.outcome == 'success' && '✅ Passed' || '❌ Failed') }} |
+            | Code | ${{ steps.changed.outputs.dirs == '' && '⏭️ Skipped' || (steps.code.outcome == 'success' && '✅ Passed' || '❌ Failed') }} |
+            | README | ${{ steps.changed.outputs.dirs == '' && '⏭️ Skipped' || (steps.readme.outcome == 'success' && '✅ Passed' || '❌ Failed') }} |
+
+            ${{ steps.structure.outcome == 'failure' && format('
+            <details><summary>❌ Structure Check output</summary>
+
+            ```
+            {0}
+            ```
+
+            </details>', steps.structure.outputs.output) || '' }}
+            ${{ steps.code.outcome == 'failure' && format('
+            <details><summary>❌ Code Check output</summary>
+
+            ```
+            {0}
+            ```
+
+            </details>', steps.code.outputs.output) || '' }}
+            ${{ steps.readme.outcome == 'failure' && format('
+            <details><summary>❌ README Check output</summary>
+
+            ```
+            {0}
+            ```
+
+            </details>', steps.readme.outputs.output) || '' }}
+
+      - name: Fail if any check failed
+        if: always() && (steps.structure.outcome == 'failure' || steps.code.outcome == 'failure' || steps.readme.outcome == 'failure')
+        run: exit 1
