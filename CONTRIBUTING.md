@@ -130,6 +130,8 @@ Your PR will automatically run:
 - **README Check** — verifies the main README.md was updated
 - **Conventional Commits** — validates PR title format
 
+Results are posted as a sticky PR comment with a summary table and expandable output for each check.
+
 All checks must pass before merge.
 
 ## Getting Help
