@@ -87,6 +87,9 @@ runs:
         echo 'output<<EOF' >> $GITHUB_OUTPUT
         echo "$OUTPUT" >> $GITHUB_OUTPUT
         echo 'EOF' >> $GITHUB_OUTPUT
+        if echo "$OUTPUT" | grep -q "⚠️"; then
+          echo "has_warnings=true" >> $GITHUB_OUTPUT
+        fi
         exit $EXIT_CODE
 
     - name: Code Check
@@ -102,6 +105,9 @@ runs:
         echo 'output<<EOF' >> $GITHUB_OUTPUT
         echo "$OUTPUT" >> $GITHUB_OUTPUT
         echo 'EOF' >> $GITHUB_OUTPUT
+        if echo "$OUTPUT" | grep -q "⚠️"; then
+          echo "has_warnings=true" >> $GITHUB_OUTPUT
+        fi
         exit $EXIT_CODE
 
     - name: README Check
@@ -117,6 +123,9 @@ runs:
         echo 'output<<EOF' >> $GITHUB_OUTPUT
         echo "$OUTPUT" >> $GITHUB_OUTPUT
         echo 'EOF' >> $GITHUB_OUTPUT
+        if echo "$OUTPUT" | grep -q "⚠️"; then
+          echo "has_warnings=true" >> $GITHUB_OUTPUT
+        fi
         exit $EXIT_CODE
 
     - name: Delete stale PR comment
@@ -141,11 +150,11 @@ runs:
 
           | Check | Result |
           |-------|--------|
-          | Structure | ${{ steps.structure.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |
-          | Code | ${{ steps.code.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |
-          | README | ${{ steps.readme.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |
+          | Structure | ${{ steps.structure.outcome == 'failure' && '❌ Failed' || (steps.structure.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
+          | Code | ${{ steps.code.outcome == 'failure' && '❌ Failed' || (steps.code.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
+          | README | ${{ steps.readme.outcome == 'failure' && '❌ Failed' || (steps.readme.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
 
-          <details><summary>${{ steps.structure.outcome == 'success' && '✅' || '❌' }} Structure Check output</summary>
+          <details><summary>${{ steps.structure.outcome == 'failure' && '❌' || (steps.structure.outputs.has_warnings == 'true' && '⚠️' || '✅') }} Structure Check output</summary>
 
           ```
           ${{ steps.structure.outputs.output }}
@@ -153,7 +162,7 @@ runs:
 
           </details>
 
-          <details><summary>${{ steps.code.outcome == 'success' && '✅' || '❌' }} Code Check output</summary>
+          <details><summary>${{ steps.code.outcome == 'failure' && '❌' || (steps.code.outputs.has_warnings == 'true' && '⚠️' || '✅') }} Code Check output</summary>
 
           ```
           ${{ steps.code.outputs.output }}
@@ -161,7 +170,7 @@ runs:
 
           </details>
 
-          <details><summary>${{ steps.readme.outcome == 'success' && '✅' || '❌' }} README Check output</summary>
+          <details><summary>${{ steps.readme.outcome == 'failure' && '❌' || (steps.readme.outputs.has_warnings == 'true' && '⚠️' || '✅') }} README Check output</summary>
 
           ```
           ${{ steps.readme.outputs.output }}
