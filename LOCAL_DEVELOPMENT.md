@@ -132,7 +132,7 @@ Once everything passes, run `validate_integration.py` for a final structure chec
 
 ## What CI Runs on Your PR
 
-The `validate-integration.yml` workflow runs three steps on every PR:
+The `validate-integration.yml` workflow uses the composite action defined in `action.yml` to run three checks on every PR:
 
 | Step | Script | What It Does |
 |------|--------|-------------|
@@ -142,6 +142,10 @@ The `validate-integration.yml` workflow runs three steps on every PR:
 | 4 | `check_readme.py` | Checks that the main README.md was updated for new integrations |
 
 If no integration directories changed (only `scripts/`, `tests/`, etc.), steps 2–4 are skipped.
+
+Results are posted as a sticky PR comment showing ✅ Passed, ⚠️ Passed with warnings, or ❌ Failed for each check.
+
+Other repositories can use the same action — see [Usage as GitHub Action](README.md#usage-as-github-action) in the README.
 
 ## Documentation Map
 

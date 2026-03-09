@@ -8,6 +8,7 @@ Validation tools and CI/CD workflows for Autohive integrations.
 
 | File | Description |
 |------|-------------|
+| `action.yml` | Composite GitHub Action for cross-repo integration validation ([usage](#usage-as-github-action)) |
 | `scripts/validate_integration.py` | Structure and config validation ([docs](scripts/docs/validate_integration.md)) |
 | `scripts/check_code.py` | Syntax, import, JSON, lint, format, security, dependency, and config sync checks ([docs](scripts/docs/check_code.md)) |
 | `scripts/check_imports.py` | Import availability checker ([docs](scripts/docs/check_imports.md)) |
@@ -35,13 +36,14 @@ flowchart TB
     end
 
     subgraph wf1["validate-integration.yml"]
-        direction TB
-        GCD[get_changed_dirs.py]
+        ACTION["action.yml (composite action)"]
+        ACTION --> GCD[get_changed_dirs.py]
         GCD -->|dirs| COND{dirs empty?}
         COND -->|Yes| SKIP[Skip all checks]
         COND -->|No| VI[validate_integration.py]
         VI --> CC[check_code.py]
         CC --> CR[check_readme.py]
+        CR --> CMT_POST[Post PR comment]
     end
 
     subgraph wf2["self-test.yml"]
@@ -53,11 +55,16 @@ flowchart TB
         CMT[Validate commit messages]
     end
 
+    subgraph external["External Repos"]
+        EXT["uses: autohive-ai/autohive-integrations-tooling@1.0.0"]
+    end
+
     PR --> wf1
     PR --> wf2
     PR --> wf3
     PUSH_SCRIPTS --> wf2
     PUSH_MAIN --> wf3
+    EXT -.-> ACTION
 ```
 
 **What each step checks:**
@@ -68,6 +75,62 @@ flowchart TB
 | Structure check | `validate_integration.py` | Folder name, required files, config.json schema, `__init__.py`, requirements.txt, tests/, icon size, unused scopes |
 | Code check | `check_code.py` | pip install, py_compile, check_imports, JSON validity, ruff check, ruff format, bandit, pip-audit, check_config_sync |
 | README check | `check_readme.py` | New integration files added → was README.md also updated? |
+
+## Usage as GitHub Action
+
+This repository provides a composite GitHub Action that other repos can use to validate integrations.
+
+### Basic usage
+
+```yaml
+name: Validate Integration
+
+on:
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: autohive-ai/autohive-integrations-tooling@1.0.0
+        with:
+          base_ref: origin/${{ github.base_ref }}
+```
+
+### Inputs
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `base_ref` | No* | — | Git ref to diff against for detecting changed directories |
+| `directories` | No* | — | Space-separated list of directories to validate (skips auto-detection) |
+| `python_version` | No | `3.13` | Python version to use |
+| `post_comment` | No | `true` | Post a sticky PR comment with results |
+
+\* Either `base_ref` or `directories` must be provided.
+
+### Outputs
+
+| Output | Description |
+|--------|-------------|
+| `directories` | Space-separated list of validated directories |
+| `structure_result` | `success` or `failure` |
+| `code_result` | `success` or `failure` |
+| `readme_result` | `success` or `failure` |
+| `structure_output` | Full output of the structure check |
+| `code_output` | Full output of the code check |
+| `readme_output` | Full output of the README check |
+
+### PR Comment
+
+When `post_comment` is enabled, the action posts a sticky comment on the PR with a summary table showing ✅ Passed, ⚠️ Passed with warnings, or ❌ Failed for each check, along with expandable full output.
 
 ## Setup
 
