@@ -1,0 +1,90 @@
+{
+  "name": "discord",
+  "version": "1.0.0",
+  "description": "Discord integration for sending messages and retrieving server information",
+  "entry_point": "discord.py",
+  "auth": {
+    "type": "custom",
+    "title": "Discord Bot Token",
+    "fields": {
+      "type": "object",
+      "properties": {
+        "bot_token": {
+          "type": "string",
+          "format": "password",
+          "label": "Bot Token",
+          "help_text": "Your Discord bot token from the Discord Developer Portal"
+        }
+      },
+      "required": ["bot_token"]
+    }
+  },
+  "actions": {
+    "send_message": {
+      "display_name": "Send Message",
+      "description": "Send a message to a Discord channel",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "channel_id": {
+            "type": "string",
+            "description": "The ID of the channel to send the message to"
+          },
+          "content": {
+            "type": "string",
+            "description": "The message content to send"
+          }
+        },
+        "required": ["channel_id", "content"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The ID of the sent message"
+          },
+          "channel_id": {
+            "type": "string",
+            "description": "The channel the message was sent to"
+          },
+          "content": {
+            "type": "string",
+            "description": "The content of the sent message"
+          }
+        }
+      }
+    },
+    "get_guild_info": {
+      "display_name": "Get Server Info",
+      "description": "Retrieve information about a Discord server (guild)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "guild_id": {
+            "type": "string",
+            "description": "The ID of the Discord server"
+          }
+        },
+        "required": ["guild_id"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The server ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "The server name"
+          },
+          "member_count": {
+            "type": "integer",
+            "description": "Approximate number of members"
+          }
+        }
+      }
+    }
+  }
+}

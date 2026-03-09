@@ -113,3 +113,4 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 <!-- Add your integration here when submitting a PR -->
 | Integration | Description | Auth Type |
 |-------------|-------------|-----------|
+| [discord](discord/) | Send messages and retrieve server information from Discord | Custom (Bot Token) |
