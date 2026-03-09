@@ -1,0 +1,175 @@
+name: Validate Integration
+description: >
+  Validates Autohive integrations — structure, code quality, and README updates.
+  Posts a sticky PR comment with results.
+
+inputs:
+  base_ref:
+    description: >
+      Git ref to diff against for detecting changed directories (e.g. origin/main).
+      Required when directories is not provided.
+    required: false
+  directories:
+    description: >
+      Space-separated list of integration directories to validate.
+      If not provided, directories are auto-detected via git diff against base_ref.
+    required: false
+  python_version:
+    description: Python version to use
+    required: false
+    default: '3.13'
+  post_comment:
+    description: Post a sticky PR comment with results (requires pull-requests write permission)
+    required: false
+    default: 'true'
+
+outputs:
+  directories:
+    description: Space-separated list of integration directories that were validated
+    value: ${{ steps.detect.outputs.dirs }}
+  structure_result:
+    description: "'success' or 'failure'"
+    value: ${{ steps.structure.outcome }}
+  code_result:
+    description: "'success' or 'failure'"
+    value: ${{ steps.code.outcome }}
+  readme_result:
+    description: "'success' or 'failure'"
+    value: ${{ steps.readme.outcome }}
+  structure_output:
+    description: Full output of the structure check
+    value: ${{ steps.structure.outputs.output }}
+  code_output:
+    description: Full output of the code check
+    value: ${{ steps.code.outputs.output }}
+  readme_output:
+    description: Full output of the README check
+    value: ${{ steps.readme.outputs.output }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python_version }}
+
+    - name: Install dev tools
+      shell: bash
+      run: pip install -r ${{ github.action_path }}/requirements-dev.txt -q
+
+    - name: Detect changed directories
+      id: detect
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.directories }}" ]; then
+          echo "dirs=${{ inputs.directories }}" >> $GITHUB_OUTPUT
+        elif [ -n "${{ inputs.base_ref }}" ]; then
+          DIRS=$(python ${{ github.action_path }}/scripts/get_changed_dirs.py "${{ inputs.base_ref }}")
+          echo "dirs=$DIRS" >> $GITHUB_OUTPUT
+        else
+          echo "::error::Either 'base_ref' or 'directories' input is required"
+          exit 1
+        fi
+        MSG=$(git log -1 --format=%s ${{ github.event.pull_request.head.sha }})
+        echo "commit_msg=$MSG" >> $GITHUB_OUTPUT
+
+    - name: Structure Check
+      id: structure
+      if: steps.detect.outputs.dirs != ''
+      continue-on-error: true
+      shell: bash
+      run: |
+        set +e
+        OUTPUT=$(python ${{ github.action_path }}/scripts/validate_integration.py ${{ steps.detect.outputs.dirs }} 2>&1)
+        EXIT_CODE=$?
+        echo "$OUTPUT"
+        echo 'output<<EOF' >> $GITHUB_OUTPUT
+        echo "$OUTPUT" >> $GITHUB_OUTPUT
+        echo 'EOF' >> $GITHUB_OUTPUT
+        exit $EXIT_CODE
+
+    - name: Code Check
+      id: code
+      if: steps.detect.outputs.dirs != ''
+      continue-on-error: true
+      shell: bash
+      run: |
+        set +e
+        OUTPUT=$(python ${{ github.action_path }}/scripts/check_code.py ${{ steps.detect.outputs.dirs }} 2>&1)
+        EXIT_CODE=$?
+        echo "$OUTPUT"
+        echo 'output<<EOF' >> $GITHUB_OUTPUT
+        echo "$OUTPUT" >> $GITHUB_OUTPUT
+        echo 'EOF' >> $GITHUB_OUTPUT
+        exit $EXIT_CODE
+
+    - name: README Check
+      id: readme
+      if: steps.detect.outputs.dirs != ''
+      continue-on-error: true
+      shell: bash
+      run: |
+        set +e
+        OUTPUT=$(python ${{ github.action_path }}/scripts/check_readme.py "${{ inputs.base_ref }}" ${{ steps.detect.outputs.dirs }} 2>&1)
+        EXIT_CODE=$?
+        echo "$OUTPUT"
+        echo 'output<<EOF' >> $GITHUB_OUTPUT
+        echo "$OUTPUT" >> $GITHUB_OUTPUT
+        echo 'EOF' >> $GITHUB_OUTPUT
+        exit $EXIT_CODE
+
+    - name: Delete stale PR comment
+      if: always() && steps.detect.outputs.dirs == '' && inputs.post_comment == 'true'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        header: validation-results
+        delete: true
+
+    - name: Post PR comment
+      if: always() && steps.detect.outputs.dirs != '' && inputs.post_comment == 'true'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        header: validation-results
+        message: |
+          ## 🔍 Integration Validation Results
+
+          **Commit:** [`${{ github.event.pull_request.head.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }}) · ${{ steps.detect.outputs.commit_msg }}
+          **Updated:** ${{ github.event.pull_request.updated_at }}
+
+          **Changed directories:** `${{ steps.detect.outputs.dirs }}`
+
+          | Check | Result |
+          |-------|--------|
+          | Structure | ${{ steps.structure.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |
+          | Code | ${{ steps.code.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |
+          | README | ${{ steps.readme.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |
+
+          <details><summary>${{ steps.structure.outcome == 'success' && '✅' || '❌' }} Structure Check output</summary>
+
+          ```
+          ${{ steps.structure.outputs.output }}
+          ```
+
+          </details>
+
+          <details><summary>${{ steps.code.outcome == 'success' && '✅' || '❌' }} Code Check output</summary>
+
+          ```
+          ${{ steps.code.outputs.output }}
+          ```
+
+          </details>
+
+          <details><summary>${{ steps.readme.outcome == 'success' && '✅' || '❌' }} README Check output</summary>
+
+          ```
+          ${{ steps.readme.outputs.output }}
+          ```
+
+          </details>
+
+    - name: Fail if any check failed
+      if: always() && (steps.structure.outcome == 'failure' || steps.code.outcome == 'failure' || steps.readme.outcome == 'failure')
+      shell: bash
+      run: exit 1
