@@ -458,12 +458,10 @@ def validate(dirs: list[str]) -> int:
     Returns:
         0 if all validations passed, 1 if errors found, 2 on processing errors.
     """
-    root_path = Path(__file__).parent.parent
-
     if dirs:
         folders = []
         for folder_name in dirs:
-            folder_path = root_path / folder_name
+            folder_path = Path(folder_name)
             if folder_path.exists() and folder_path.is_dir():
                 if folder_name not in SKIP_FOLDERS:
                     folders.append(folder_path)
@@ -471,7 +469,7 @@ def validate(dirs: list[str]) -> int:
                 print(f"❌ Folder not found: {folder_name}")
                 return 2
     else:
-        folders = get_integration_folders(root_path)
+        folders = get_integration_folders(Path.cwd())
 
     if not folders:
         print("No integration folders to validate.")
