@@ -2,7 +2,6 @@
   "name": "discord",
   "version": "1.0.0",
   "description": "Discord integration for sending messages and retrieving server information",
-  "entry_point": "discord.py",
   "auth": {
     "type": "custom",
     "title": "Discord Bot Token",
