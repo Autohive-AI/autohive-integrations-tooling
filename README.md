@@ -113,3 +113,4 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 <!-- Add your integration here when submitting a PR -->
 | Integration | Description | Auth Type |
 |-------------|-------------|-----------|
+| demo-integration | A sample valid integration for testing | Custom (API Key) |
