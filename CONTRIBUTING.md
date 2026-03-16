@@ -1,6 +1,14 @@
 # Contributing
 
-Thank you for contributing to Autohive Integrations! This guide covers everything you need to set up, build, validate, and submit an integration.
+Thank you for contributing to Autohive Integrations! This guide covers validating and submitting integrations.
+
+## Building an Integration
+
+For how to build an integration, see the **[Integrations SDK documentation](https://github.com/Autohive-AI/integrations-sdk/tree/master/docs/manual)**:
+
+- [Building Your First Integration](https://github.com/Autohive-AI/integrations-sdk/blob/master/docs/manual/building_your_first_integration.md) — end-to-end tutorial
+- [Integration Structure](https://github.com/Autohive-AI/integrations-sdk/blob/master/docs/manual/integration_structure.md) — file layout and config.json schema
+- [Starter Template](https://github.com/Autohive-AI/integrations-sdk/tree/master/samples/template) — copy this to begin
 
 ## Prerequisites
 
@@ -19,47 +27,6 @@ source .venv/bin/activate   # Linux/macOS
 # .venv\Scripts\activate    # Windows
 uv pip install -r requirements-dev.txt
 ```
-
-## Integration Structure
-
-Every integration must follow this folder structure:
-
-```
-my-integration/
-├── __init__.py              # Minimal — only import and __all__
-├── config.json              # Integration configuration
-├── my_integration.py        # Main implementation (entry_point)
-├── icon.png or icon.svg     # Integration icon (512x512 pixels)
-├── requirements.txt         # Dependencies (must include autohive-integrations-sdk)
-├── README.md                # Documentation
-└── tests/
-    ├── __init__.py          # Can be empty
-    ├── context.py           # Import setup
-    └── test_my_integration.py
-```
-
-See `INTEGRATION_CHECKLIST.md` for the full checklist with examples.
-
-## Creating an Integration
-
-1. **Create a branch** following conventional naming:
-   ```bash
-   git checkout -b feat/my-integration
-   ```
-
-2. **Create your integration folder** (lowercase, hyphens for separators):
-   ```bash
-   mkdir my-integration
-   ```
-
-3. **Add the required files** — refer to `tests/examples/good-integration/` as a working reference.
-
-4. **Key conventions:**
-   - Folder name must be lowercase (e.g., `my-integration`, not `MyIntegration`)
-   - `config.json` must include `name`, `version`, `description`, `entry_point`, and `actions`
-   - `__init__.py` should only contain the import and `__all__`
-   - `requirements.txt` must include `autohive-integrations-sdk`
-   - Action names should be `snake_case`
 
 ## Validating Your Integration
 
@@ -87,7 +54,7 @@ python scripts/check_code.py my-integration
 | Dependencies | `pip-audit` | No known CVEs in requirements.txt |
 | Config sync | `check_config_sync.py` | Config.json actions and input schemas match code |
 
-### Auto-fixing Common Issues
+### Auto-Fixing Common Issues
 
 ```bash
 # Auto-fix lint issues
@@ -136,6 +103,6 @@ All checks must pass before merge.
 
 ## Getting Help
 
-- Review `tests/examples/good-integration/` for a complete working example
-- See `INTEGRATION_CHECKLIST.md` for the detailed review checklist
-- Check `scripts/docs/` for documentation on each validation script
+- Review the [Integration Checklist](INTEGRATION_CHECKLIST.md) for the manual review checklist
+- See `scripts/docs/` for detailed documentation on each validation script
+- See `tests/examples/good-integration/` for a complete working example
