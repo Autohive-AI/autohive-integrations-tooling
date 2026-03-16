@@ -2,6 +2,8 @@
 
 Validation tools and CI/CD workflows for Autohive integrations.
 
+> 📖 **Building an integration?** See the [SDK documentation](https://github.com/autohive-ai/integrations-sdk/tree/master/docs/manual) for the tutorial, structure reference, and patterns.
+
 **Requires: Python 3.13+**
 
 ## What's Included
