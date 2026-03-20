@@ -100,6 +100,14 @@ jobs:
       - name: Test check_code.py — modular integration
         run: python scripts/check_code.py tests/examples/modular-integration
 
+      - name: Test check_code.py — long lines pass with ruff.toml config
+        run: python scripts/check_code.py tests/examples/long-lines-integration
+
+      - name: Test check_code.py — ruff.toml applied from different working directory
+        run: |
+          cd /tmp
+          python "$GITHUB_WORKSPACE/scripts/check_code.py" "$GITHUB_WORKSPACE/tests/examples/long-lines-integration"
+
       - name: Test check_config_sync.py — good integration passes
         run: python scripts/check_config_sync.py tests/examples/good-integration
 
