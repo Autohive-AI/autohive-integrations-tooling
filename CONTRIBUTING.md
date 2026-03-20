@@ -58,11 +58,13 @@ python scripts/check_code.py my-integration
 
 ```bash
 # Auto-fix lint issues
-ruff check --fix my-integration
+ruff check --fix --config /path/to/autohive-integrations-tooling/ruff.toml my-integration
 
 # Auto-format code
-ruff format my-integration
+ruff format --config /path/to/autohive-integrations-tooling/ruff.toml my-integration
 ```
+
+> **Note:** Point `--config` to `ruff.toml` in this tooling repo. If you're working inside the tooling repo, use `--config ruff.toml`. If your integration lives in a separate repo, use the full path to the tooling repo's `ruff.toml`.
 
 ## Commit Conventions
 

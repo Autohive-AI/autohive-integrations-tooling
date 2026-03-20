@@ -47,6 +47,7 @@ from check_config_sync import check_config_sync
 from check_imports import check_imports
 
 BANDIT_EXCLUDE_DIRS = [".venv", "venv", "__pycache__", "site-packages", "dependencies"]
+RUFF_CONFIG = str(Path(__file__).resolve().parent.parent / "ruff.toml")
 
 
 def check_code(dirs: list[str]) -> int:
@@ -167,7 +168,7 @@ def check_code(dirs: list[str]) -> int:
         # Lint check
         print("🔍 Linting with ruff...")
         ruff_result = subprocess.run(
-            [sys.executable, "-m", "ruff", "check", str(dir_path)],
+            [sys.executable, "-m", "ruff", "check", "--config", RUFF_CONFIG, str(dir_path)],
             capture_output=True,
             text=True,
         )
@@ -185,7 +186,7 @@ def check_code(dirs: list[str]) -> int:
         # Format check
         print("🎨 Checking formatting with ruff...")
         fmt_result = subprocess.run(
-            [sys.executable, "-m", "ruff", "format", "--check", str(dir_path)],
+            [sys.executable, "-m", "ruff", "format", "--check", "--config", RUFF_CONFIG, str(dir_path)],
             capture_output=True,
             text=True,
         )
