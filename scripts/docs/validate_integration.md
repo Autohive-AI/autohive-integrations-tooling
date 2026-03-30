@@ -88,11 +88,17 @@ Checks that all mandatory files exist in the integration directory:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Must match folder name (case-insensitive, `-` and `_` normalized) |
+| `name` | string | Integration identifier |
 | `version` | string | Semantic version format (`x.y.z`) |
 | `description` | string | Clear description of the integration |
 | `entry_point` | string | Main Python file (must exist on disk) |
 | `actions` | object | At least one action must be defined |
+
+#### Recommended Fields
+
+| Check | Severity | Description |
+|-------|----------|-------------|
+| `display_name` present and non-empty | Warning | Human-readable name for the integration |
 
 #### Auth Configuration (`_validate_auth_config`)
 

@@ -56,6 +56,7 @@ The structure check produces warnings (not errors) for these cases:
 |---------|-------------|
 | `Integration.load()` not found | The check looks for the literal string `Integration.load()`. Using `Integration.load(config_path)` triggers this warning — that's expected for multi-file integrations. |
 | Missing `__init__.py` | Optional for modular integrations with an `actions/` subdirectory |
+| Missing top-level `display_name` | Recommended but not required |
 | Missing `display_name` on actions | Recommended but not required |
 | Potentially unused OAuth scopes | Heuristic check — verify manually |
 
