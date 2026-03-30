@@ -199,12 +199,9 @@ class IntegrationValidator:
             if field not in self.config:
                 self.add_error(f"config.json missing required field: '{field}'")
 
-        # Check name matches folder
-        if 'name' in self.config:
-            config_name = self.config['name'].lower().replace('_', '-')
-            folder_name = self.name.lower().replace('_', '-')
-            if config_name != folder_name:
-                self.add_warning(f"config.json 'name' ({self.config['name']}) doesn't match folder name ({self.name})")
+        # Check display_name is present
+        if 'display_name' not in self.config:
+            self.add_warning("config.json missing recommended field: 'display_name'")
 
         # Check entry_point exists
         if 'entry_point' in self.config:
