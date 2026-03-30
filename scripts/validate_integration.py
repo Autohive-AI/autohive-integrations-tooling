@@ -199,8 +199,8 @@ class IntegrationValidator:
             if field not in self.config:
                 self.add_error(f"config.json missing required field: '{field}'")
 
-        # Check display_name is present
-        if 'display_name' not in self.config:
+        # Check display_name is present and non-empty
+        if 'display_name' not in self.config or not self.config['display_name'].strip():
             self.add_warning("config.json missing recommended field: 'display_name'")
 
         # Check entry_point exists
