@@ -44,6 +44,7 @@ from pathlib import Path
 # Allow importing check_imports from the same directory regardless of cwd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_config_sync import check_config_sync
+from check_fetch_pattern import check_fetch_pattern
 from check_imports import check_imports
 
 BANDIT_EXCLUDE_DIRS = [".venv", "venv", "__pycache__", "site-packages", "dependencies"]
@@ -264,6 +265,23 @@ def check_code(dirs: list[str]) -> int:
                 for line in warning_lines:
                     print(f"   {line}")
             print("   ✅ Config-code sync OK")
+        print()
+
+        # Fetch pattern check (SDK 2.x)
+        print("🔄 Checking fetch patterns...")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            fetch_result = check_fetch_pattern(str(dir_path))
+        if fetch_result != 0:
+            for line in buf.getvalue().splitlines():
+                if line.strip():
+                    print(f"   {line}")
+            print("   ❌ Fetch pattern issues found")
+            print()
+            print("   Fix: SDK 2.x returns FetchResponse — use response.data to access the body")
+            failed = True
+        else:
+            print("   ✅ Fetch patterns OK")
         print()
 
     print("========================================")

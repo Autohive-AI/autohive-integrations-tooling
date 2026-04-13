@@ -24,7 +24,7 @@ class ListItemsAction(ActionHandler):
 
             response = await context.fetch(f"{BASE_URL}/items?limit={limit}", method="GET", headers=headers)
 
-            return ActionResult(data={"result": True, "items": response.get("items", [])}, cost_usd=0.0)
+            return ActionResult(data={"result": True, "items": response.data.get("items", [])}, cost_usd=0.0)
         except Exception as e:
             return ActionResult(data={"result": False, "error": str(e)}, cost_usd=0.0)
 
@@ -40,6 +40,6 @@ class GetItemAction(ActionHandler):
 
             response = await context.fetch(f"{BASE_URL}/items/{item_id}", method="GET", headers=headers)
 
-            return ActionResult(data={"result": True, "item": response}, cost_usd=0.0)
+            return ActionResult(data={"result": True, "item": response.data}, cost_usd=0.0)
         except Exception as e:
             return ActionResult(data={"result": False, "error": str(e)}, cost_usd=0.0)
