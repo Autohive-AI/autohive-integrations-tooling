@@ -134,6 +134,12 @@ jobs:
 
 When `post_comment` is enabled, the action posts a sticky comment on the PR with a summary table showing ✅ Passed, ⚠️ Passed with warnings, or ❌ Failed for each check, along with expandable full output.
 
+## Versioning
+
+This tooling library's version reflects the maximum supported version of the [Autohive Integrations SDK](https://github.com/autohive-ai/integrations-sdk). For example, tooling version `2.0.0` validates integrations built with SDK versions up to `2.0.0`. When the SDK releases a new version and this tooling adds support for it, the tooling version is bumped to match.
+
+This means the tag you reference in your workflow (e.g. `autohive-ai/autohive-integrations-tooling@2.0.0`) directly tells you which SDK version it supports.
+
 ## Setup
 
 ```bash
