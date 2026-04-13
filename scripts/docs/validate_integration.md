@@ -147,7 +147,7 @@ Allowed patterns:
 | Check | Severity | Description |
 |-------|----------|-------------|
 | `autohive-integrations-sdk` present | Error | SDK dependency is mandatory |
-| Version pinned (`~=1.0` or `==`) | Warning | Should pin SDK version |
+| Version pinned and not deprecated | Warning | Should pin SDK version (e.g., `~=2.0.0`); deprecated versions warn |
 
 ### 6. Tests Folder (`_check_tests_folder`)
 

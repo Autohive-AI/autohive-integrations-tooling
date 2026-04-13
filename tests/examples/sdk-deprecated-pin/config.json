@@ -1,0 +1,26 @@
+{
+  "name": "sdk-deprecated-pin",
+  "version": "1.0.0",
+  "description": "Test fixture: deprecated SDK pin should trigger a warning",
+  "display_name": "SDK Deprecated Pin",
+  "entry_point": "sdk_deprecated_pin.py",
+  "actions": {
+    "get_data": {
+      "display_name": "Get Data",
+      "description": "Retrieves data",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

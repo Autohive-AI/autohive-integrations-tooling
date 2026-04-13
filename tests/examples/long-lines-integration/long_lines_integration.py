@@ -25,7 +25,7 @@ class GetDataAction(ActionHandler):
             # This line is 100 chars long, which exceeds ruff's default (88) but fits our config (120)
             response = await context.fetch(f"{BASE_URL}/data?limit={limit}", method="GET", headers=headers)
 
-            result_data = {"result": True, "data": response, "source": "long-lines-integration"}
+            result_data = {"result": True, "data": response.data, "source": "long-lines-integration"}
             return ActionResult(data=result_data, cost_usd=0.0)
         except Exception as e:
             return ActionResult(data={"result": False, "error": str(e)}, cost_usd=0.0)

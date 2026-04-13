@@ -24,6 +24,6 @@ class GetDataAction(ActionHandler):
 
             response = await context.fetch(f"{BASE_URL}/data?limit={limit}", method="GET", headers=headers)
 
-            return ActionResult(data={"result": True, "data": response}, cost_usd=0.0)
+            return ActionResult(data={"result": True, "data": response.data}, cost_usd=0.0)
         except Exception as e:
             return ActionResult(data={"result": False, "error": str(e)}, cost_usd=0.0)

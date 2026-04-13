@@ -119,6 +119,16 @@ jobs:
           fi
           echo "✅ Config-code mismatch correctly detected"
 
+      - name: Test validate_integration.py — deprecated SDK pin warns
+        run: |
+          OUTPUT=$(python scripts/validate_integration.py tests/examples/sdk-deprecated-pin 2>&1)
+          if ! echo "$OUTPUT" | grep -q "deprecated"; then
+            echo "❌ Expected deprecation warning for sdk-deprecated-pin (~=1.0.2)"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "✅ Deprecated SDK pin correctly warned"
+
       - name: Test validate_integration.py — wrong icon size fails
         run: |
           if python scripts/validate_integration.py tests/examples/bad-icon 2>&1; then
@@ -126,6 +136,20 @@ jobs:
             exit 1
           fi
           echo "✅ Wrong icon size correctly rejected"
+
+      - name: Test check_fetch_pattern.py — good integration passes (SDK 2.x with .data)
+        run: python scripts/check_fetch_pattern.py tests/examples/good-integration
+
+      - name: Test check_fetch_pattern.py — SDK 1.x old pattern is fine
+        run: python scripts/check_fetch_pattern.py tests/examples/sdk-deprecated-pin
+
+      - name: Test check_fetch_pattern.py — SDK 2.x old pattern detected
+        run: |
+          if python scripts/check_fetch_pattern.py tests/examples/sdk-v2-old-fetch-pattern 2>&1; then
+            echo "❌ Expected fetch pattern check to fail for sdk-v2-old-fetch-pattern"
+            exit 1
+          fi
+          echo "✅ Old fetch pattern with SDK 2.x correctly detected"
 
       - name: Test get_changed_dirs.py — missing argument
         run: |

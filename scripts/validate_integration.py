@@ -301,8 +301,15 @@ class IntegrationValidator:
                 self.add_warning(f"__init__.py should be minimal (only import and __all__). Found: '{line[:50]}...'")
                 break
 
+    # Minimum supported SDK versions per major release line.
+    # Integrations pinning older versions will receive a deprecation warning.
+    _MIN_SDK_VERSIONS = {
+        1: (1, 1, 1),   # 1.x line: minimum 1.1.1
+        2: (2, 0, 0),   # 2.x line: minimum 2.0.0
+    }
+
     def _check_requirements_txt(self):
-        """Check requirements.txt has SDK dependency."""
+        """Check requirements.txt has SDK dependency with a supported version pin."""
         req_path = self.path / 'requirements.txt'
         if not req_path.exists():
             return
@@ -312,8 +319,36 @@ class IntegrationValidator:
 
         if 'autohive-integrations-sdk' not in content:
             self.add_error("requirements.txt must include 'autohive-integrations-sdk'")
-        elif 'autohive-integrations-sdk~=1.0' not in content and 'autohive-integrations-sdk==' not in content:
-            self.add_warning("requirements.txt should pin SDK version (e.g., autohive-integrations-sdk~=1.0.2)")
+            return
+
+        # Extract version pin — accept ~= or == operators
+        match = re.search(r'autohive-integrations-sdk\s*(~=|==)\s*(\d+\.\d+(?:\.\d+)?)', content)
+        if not match:
+            self.add_warning(
+                "requirements.txt should pin SDK version "
+                "(e.g., autohive-integrations-sdk~=2.0.0)"
+            )
+            return
+
+        operator, version_str = match.group(1), match.group(2)
+        parts = tuple(int(p) for p in version_str.split('.'))
+        # Normalise to 3-part tuple
+        while len(parts) < 3:
+            parts = (*parts, 0)
+        major = parts[0]
+
+        min_version = self._MIN_SDK_VERSIONS.get(major)
+        if min_version is None:
+            self.add_warning(
+                f"Unknown SDK major version {major} in requirements.txt — "
+                f"expected major version {', '.join(str(v) for v in sorted(self._MIN_SDK_VERSIONS))}"
+            )
+        elif parts < min_version:
+            min_str = '.'.join(str(v) for v in min_version)
+            self.add_warning(
+                f"SDK version {version_str} is deprecated — "
+                f"upgrade to autohive-integrations-sdk{operator}{min_str} or later"
+            )
 
     def _check_tests_folder(self):
         """Check tests folder structure."""

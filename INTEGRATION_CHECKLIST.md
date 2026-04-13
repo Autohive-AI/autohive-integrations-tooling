@@ -142,7 +142,7 @@ but only list_sites and create_site are implemented:
 | Missing icon | Add `icon.png` or `icon.svg` (512×512 pixels) |
 | Missing or incomplete README | Document all actions, auth setup, inputs/outputs |
 | Not updating main repo README | Add integration entry in alphabetical order |
-| Unpinned SDK version | Use `autohive-integrations-sdk~=1.0.2` |
+| Unpinned SDK version | Use `autohive-integrations-sdk~=2.0.0` (or `~=1.1.1` for 1.x) |
 | Sync functions for action handlers | Must be `async def execute()` |
 
 ---

@@ -1,0 +1,34 @@
+{
+  "name": "sdk-v2-old-fetch-pattern",
+  "version": "1.0.0",
+  "description": "Test fixture: SDK 2.0 with old fetch pattern should fail",
+  "display_name": "SDK V2 Old Fetch Pattern",
+  "entry_point": "old_fetch.py",
+  "actions": {
+    "get_data": {
+      "display_name": "Get Data",
+      "description": "Retrieves data using old fetch pattern",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to fetch"
+          }
+        },
+        "required": ["url"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}
