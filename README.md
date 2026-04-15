@@ -136,9 +136,16 @@ When `post_comment` is enabled, the action posts a sticky comment on the PR with
 
 ## Versioning
 
-This tooling library's version reflects the maximum supported version of the [Autohive Integrations SDK](https://github.com/autohive-ai/integrations-sdk). For example, tooling version `2.0.0` validates integrations built with SDK versions up to `2.0.0`. When the SDK releases a new version and this tooling adds support for it, the tooling version is bumped to match.
+The **major** version of this tooling matches the [Autohive Integrations SDK](https://github.com/autohive-ai/integrations-sdk) major version it targets. The **minor** and **patch** versions are the tooling's own iteration and do _not_ correspond to SDK releases.
 
-This means the tag you reference in your workflow (e.g. `autohive-ai/autohive-integrations-tooling@2.0.0`) directly tells you which SDK version it supports.
+For example, `2.1.0` means "the second tooling release for SDK v2" — it does not imply an SDK `2.1.0` exists.
+
+| Tooling version | Meaning |
+|-----------------|---------|
+| `2.0.0` | Initial tooling release for SDK v2 |
+| `2.1.0` | New checks or features (still SDK v2) |
+| `2.1.1` | Bug-fix to the tooling (still SDK v2) |
+| `3.0.0` | Tooling targeting SDK v3 |
 
 ## Setup
 
