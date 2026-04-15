@@ -15,6 +15,7 @@ These checks run automatically on every PR. See `scripts/docs/` for detailed doc
 | Structure | [`validate_integration.py`](scripts/docs/validate_integration.md) | Folder name, required files, config.json schema, `__init__.py` minimality, requirements.txt, tests/, icon, unused scopes |
 | Code quality | [`check_code.py`](scripts/docs/check_code.md) | Syntax, imports, JSON validity, ruff lint, ruff format, bandit security, pip-audit CVEs, config-code sync |
 | README update | [`check_readme.py`](scripts/docs/check_readme.md) | Main repo README.md was updated with the new integration |
+| Version bump | [`check_version_bump.py`](scripts/docs/check_version_bump.md) | config.json version incremented; recommends major/minor/patch based on changes |
 | Conventional commits | `conv-commits.yml` | PR title follows conventional commit format |
 
 ### Running Locally

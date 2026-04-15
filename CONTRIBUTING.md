@@ -97,6 +97,7 @@ Your PR will automatically run:
 - **Structure Check** — validates folder structure and config.json
 - **Code Check** — syntax, imports, JSON, lint, format, security, dependency audit
 - **README Check** — verifies the main README.md was updated
+- **Version Check** — verifies config.json version was incremented, recommends bump level
 - **Conventional Commits** — validates PR title format
 
 Results are posted as a sticky PR comment with a summary table and expandable output for each check.

@@ -117,6 +117,7 @@ DIRS=$(python scripts/get_changed_dirs.py origin/main)
 python scripts/validate_integration.py $DIRS
 python scripts/check_code.py $DIRS
 python scripts/check_readme.py origin/main $DIRS
+python scripts/check_version_bump.py origin/main $DIRS
 ```
 
 ## Typical Iteration Cycle
@@ -142,8 +143,9 @@ The `validate-integration.yml` workflow uses the composite action defined in `ac
 | 2 | `validate_integration.py` | Structure and config validation |
 | 3 | `check_code.py` | Syntax, imports, JSON, lint, format, security, deps, config sync |
 | 4 | `check_readme.py` | Checks that the main README.md was updated for new integrations |
+| 5 | `check_version_bump.py` | Checks that config.json version was incremented, recommends bump level |
 
-If no integration directories changed (only `scripts/`, `tests/`, etc.), steps 2–4 are skipped.
+If no integration directories changed (only `scripts/`, `tests/`, etc.), steps 2–5 are skipped.
 
 Results are posted as a sticky PR comment showing ✅ Passed, ⚠️ Passed with warnings, or ❌ Failed for each check.
 
@@ -171,6 +173,7 @@ Detailed documentation for each validation script — usage, arguments, exit cod
 | [check_imports.md](scripts/docs/check_imports.md) | `check_imports.py` | Understanding how imports are resolved (AST parsing, relative imports, `--verify-names`) |
 | [check_config_sync.md](scripts/docs/check_config_sync.md) | `check_config_sync.py` | Understanding how config.json is cross-validated against code (AST-based action and input detection) |
 | [check_readme.md](scripts/docs/check_readme.md) | `check_readme.py` | Understanding the README update requirement for new integrations |
+| [check_version_bump.md](scripts/docs/check_version_bump.md) | `check_version_bump.py` | Understanding the version bump requirement and bump-level recommendations |
 | [get_changed_dirs.md](scripts/docs/get_changed_dirs.md) | `get_changed_dirs.py` | Understanding how CI detects which integrations to validate |
 
 ### Test fixtures (in `tests/examples/`)

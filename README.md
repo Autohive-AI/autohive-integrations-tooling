@@ -15,6 +15,7 @@ Validation tools and CI/CD workflows for Autohive integrations.
 | `scripts/check_code.py` | Syntax, import, JSON, lint, format, security, dependency, and config sync checks ([docs](scripts/docs/check_code.md)) |
 | `scripts/check_imports.py` | Import availability checker ([docs](scripts/docs/check_imports.md)) |
 | `scripts/check_readme.py` | README update verification ([docs](scripts/docs/check_readme.md)) |
+| `scripts/check_version_bump.py` | Version bump verification with bump-level recommendations ([docs](scripts/docs/check_version_bump.md)) |
 | `scripts/check_config_sync.py` | Config-code sync checker ([docs](scripts/docs/check_config_sync.md)) |
 | `scripts/get_changed_dirs.py` | Changed directory detection ([docs](scripts/docs/get_changed_dirs.md)) |
 | `.github/workflows/validate-integration.yml` | PR validation pipeline |
@@ -45,7 +46,8 @@ flowchart TB
         COND -->|No| VI[validate_integration.py]
         VI --> CC[check_code.py]
         CC --> CR[check_readme.py]
-        CR --> CMT_POST[Post PR comment]
+        CR --> VB[check_version_bump.py]
+        VB --> CMT_POST[Post PR comment]
     end
 
     subgraph wf2["self-test.yml"]
@@ -77,6 +79,7 @@ flowchart TB
 | Structure check | `validate_integration.py` | Folder name, required files, config.json schema, `__init__.py`, requirements.txt, tests/, icon size, unused scopes |
 | Code check | `check_code.py` | pip install, py_compile, check_imports, JSON validity, ruff check, ruff format, bandit, pip-audit, check_config_sync |
 | README check | `check_readme.py` | New integration files added → was README.md also updated? |
+| Version check | `check_version_bump.py` | Version in config.json incremented? Recommends major/minor/patch based on config and code changes |
 
 ## Usage as GitHub Action
 
@@ -126,9 +129,11 @@ jobs:
 | `structure_result` | `success` or `failure` |
 | `code_result` | `success` or `failure` |
 | `readme_result` | `success` or `failure` |
+| `version_result` | `success` or `failure` |
 | `structure_output` | Full output of the structure check |
 | `code_output` | Full output of the code check |
 | `readme_output` | Full output of the README check |
+| `version_output` | Full output of the version check |
 
 ### PR Comment
 
