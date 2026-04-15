@@ -498,8 +498,7 @@ def validate(dirs: list[str]) -> int:
                 if folder_name not in SKIP_FOLDERS:
                     folders.append(folder_path)
             else:
-                print(f"❌ Folder not found: {folder_name}")
-                return 2
+                print(f"⚠️ Folder not found (renamed or removed?): {folder_name} — skipping")
     else:
         folders = get_integration_folders(Path.cwd())
 

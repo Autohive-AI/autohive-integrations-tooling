@@ -30,15 +30,17 @@ Examples:
 import argparse
 import subprocess
 import sys
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 SKIP_DIRS = frozenset({".github", "scripts", "tests", "template-structure"})
 
 
-def get_changed_dirs(base_ref: str) -> list[str] | None:
-    """Return sorted, deduplicated integration directory names changed since *base_ref*.
+def get_changed_dirs(base_ref: str) -> tuple[list[str], list[str]] | None:
+    """Return integration directory names changed since *base_ref*.
 
-    Returns None if the git command fails.
+    Returns a tuple of (existing_dirs, renamed_dirs) where renamed_dirs are
+    directories that appear in the diff but no longer exist on disk (i.e. the
+    old side of a rename). Returns None if the git command fails.
     """
     result = subprocess.run(
         ["git", "diff", "--name-only", base_ref, "HEAD"],
@@ -57,7 +59,9 @@ def get_changed_dirs(base_ref: str) -> list[str] | None:
         if top_dir not in SKIP_DIRS:
             dirs.add(top_dir)
 
-    return sorted(dirs)
+    existing = sorted(d for d in dirs if Path(d).is_dir())
+    renamed = sorted(d for d in dirs if not Path(d).is_dir())
+    return existing, renamed
 
 
 def main() -> int:
@@ -70,13 +74,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    changed = get_changed_dirs(args.base_ref)
-    if changed is None:
+    result = get_changed_dirs(args.base_ref)
+    if result is None:
         print(f"Error: git diff failed for ref '{args.base_ref}'", file=sys.stderr)
         return 2
 
-    if changed:
-        print(" ".join(changed))
+    existing, renamed = result
+
+    if renamed:
+        print(
+            f"⚠️ Detected renamed/removed directories (skipping): {', '.join(renamed)}",
+            file=sys.stderr,
+        )
+
+    if existing:
+        print(" ".join(existing))
 
     return 0
 

@@ -77,9 +77,8 @@ def check_code(dirs: list[str]) -> int:
         print()
 
         if not dir_path.is_dir():
-            print(f"   ❌ Directory not found: {dir_name}")
+            print(f"   ⚠️ Directory not found (renamed or removed?): {dir_name} — skipping")
             print()
-            failed = True
             continue
 
         # Install dependencies
