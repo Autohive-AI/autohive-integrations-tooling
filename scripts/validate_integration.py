@@ -123,6 +123,10 @@ class IntegrationValidator:
         if not (self.path / '__init__.py').exists() and not has_actions_dir:
             self.add_warning("Missing __init__.py (required for package-style integrations, optional for modular integrations with actions/)")
 
+        # Check for forbidden files
+        if (self.path / 'integration.py').exists():
+            self.add_error("Found 'integration.py' — integrations must not include a local integration.py file")
+
         # Check for icon (png or svg)
         png_path = self.path / 'icon.png'
         svg_path = self.path / 'icon.svg'
