@@ -36,6 +36,9 @@ outputs:
   readme_result:
     description: "'success' or 'failure'"
     value: ${{ steps.readme.outcome }}
+  version_result:
+    description: "'success' or 'failure'"
+    value: ${{ steps.version.outcome }}
   structure_output:
     description: Full output of the structure check
     value: ${{ steps.structure.outputs.output }}
@@ -45,6 +48,9 @@ outputs:
   readme_output:
     description: Full output of the README check
     value: ${{ steps.readme.outputs.output }}
+  version_output:
+    description: Full output of the version check
+    value: ${{ steps.version.outputs.output }}
 
 runs:
   using: composite
@@ -128,6 +134,24 @@ runs:
         fi
         exit $EXIT_CODE
 
+    - name: Version Check
+      id: version
+      if: steps.detect.outputs.dirs != '' && inputs.base_ref != ''
+      continue-on-error: true
+      shell: bash
+      run: |
+        set +e
+        OUTPUT=$(python ${{ github.action_path }}/scripts/check_version_bump.py "${{ inputs.base_ref }}" ${{ steps.detect.outputs.dirs }} 2>&1)
+        EXIT_CODE=$?
+        echo "$OUTPUT"
+        echo 'output<<EOF' >> $GITHUB_OUTPUT
+        echo "$OUTPUT" >> $GITHUB_OUTPUT
+        echo 'EOF' >> $GITHUB_OUTPUT
+        if echo "$OUTPUT" | grep -q "⚠️"; then
+          echo "has_warnings=true" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
+
     - name: Delete stale PR comment
       if: always() && steps.detect.outputs.dirs == '' && inputs.post_comment == 'true'
       uses: marocchino/sticky-pull-request-comment@v2
@@ -153,6 +177,7 @@ runs:
           | Structure | ${{ steps.structure.outcome == 'failure' && '❌ Failed' || (steps.structure.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
           | Code | ${{ steps.code.outcome == 'failure' && '❌ Failed' || (steps.code.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
           | README | ${{ steps.readme.outcome == 'failure' && '❌ Failed' || (steps.readme.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
+          | Version | ${{ steps.version.outcome == 'failure' && '❌ Failed' || (steps.version.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
 
           <details><summary>${{ steps.structure.outcome == 'failure' && '❌' || (steps.structure.outputs.has_warnings == 'true' && '⚠️' || '✅') }} Structure Check output</summary>
 
@@ -178,7 +203,15 @@ runs:
 
           </details>
 
+          <details><summary>${{ steps.version.outcome == 'failure' && '❌' || (steps.version.outputs.has_warnings == 'true' && '⚠️' || '✅') }} Version Check output</summary>
+
+          ```
+          ${{ steps.version.outputs.output }}
+          ```
+
+          </details>
+
     - name: Fail if any check failed
-      if: always() && (steps.structure.outcome == 'failure' || steps.code.outcome == 'failure' || steps.readme.outcome == 'failure')
+      if: always() && (steps.structure.outcome == 'failure' || steps.code.outcome == 'failure' || steps.readme.outcome == 'failure' || steps.version.outcome == 'failure')
       shell: bash
       run: exit 1

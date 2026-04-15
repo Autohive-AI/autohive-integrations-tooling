@@ -151,6 +151,24 @@ jobs:
           fi
           echo "✅ Old fetch pattern with SDK 2.x correctly detected"
 
+      - name: Test check_version_bump.py — good integration passes (no changes vs HEAD)
+        run: python scripts/check_version_bump.py HEAD tests/examples/good-integration
+
+      - name: Test check_version_bump.py — missing version detected for new integration
+        run: |
+          # Create a temp integration with no version in config.json
+          mkdir -p /tmp/test-no-version
+          echo '{"name": "test", "description": "test", "entry_point": "main.py", "actions": {}}' > /tmp/test-no-version/config.json
+          if python scripts/check_version_bump.py HEAD /tmp/test-no-version 2>&1; then
+            echo "❌ Expected version check to fail for integration without version"
+            exit 1
+          fi
+          echo "✅ Missing version correctly detected"
+          rm -rf /tmp/test-no-version
+
+      - name: Test check_version_bump.py — missing directory is skipped (not failed)
+        run: python scripts/check_version_bump.py HEAD nonexistent-directory
+
       - name: Test get_changed_dirs.py — missing argument
         run: |
           if python scripts/get_changed_dirs.py 2>&1; then
