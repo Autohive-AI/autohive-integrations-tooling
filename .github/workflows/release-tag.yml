@@ -3,8 +3,6 @@ name: Move Floating Version Tag
 on:
   release:
     types: [published]
-  push:
-    branches: [master, main]
 
 jobs:
   move-tag:
@@ -15,50 +13,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Move floating major tag
         run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          MAJOR=$(echo "$VERSION" | sed 's/^v//' | cut -d. -f1)
+          FLOATING_TAG="v${MAJOR}"
+          TARGET_SHA="${{ github.sha }}"
+
+          echo "Release: $VERSION"
+          echo "Moving $FLOATING_TAG → $VERSION ($TARGET_SHA)"
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          if [ "${{ github.event_name }}" = "release" ]; then
-            # Triggered by a release — move the tag for that release version
-            VERSION="${{ github.event.release.tag_name }}"
-            MAJOR=$(echo "$VERSION" | sed 's/^v//' | cut -d. -f1)
-            FLOATING_TAG="v${MAJOR}"
-            TARGET_SHA="${{ github.sha }}"
+          git tag -d "$FLOATING_TAG" 2>/dev/null || true
+          git push origin ":refs/tags/$FLOATING_TAG" 2>/dev/null || true
+          git tag "$FLOATING_TAG" "$TARGET_SHA"
+          git push origin "$FLOATING_TAG"
 
-            echo "Release: $VERSION"
-            echo "Moving $FLOATING_TAG → $VERSION ($TARGET_SHA)"
-
-            git tag -d "$FLOATING_TAG" 2>/dev/null || true
-            git push origin ":refs/tags/$FLOATING_TAG" 2>/dev/null || true
-            git tag "$FLOATING_TAG" "$TARGET_SHA"
-            git push origin "$FLOATING_TAG"
-
-            echo "✅ $FLOATING_TAG now points to $VERSION"
-
-          else
-            # Triggered by a push to master — always move the floating tag to master HEAD
-            LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
-
-            if [ -z "$LATEST_TAG" ]; then
-              echo "No release tags found, skipping"
-              exit 0
-            fi
-
-            MAJOR=$(echo "$LATEST_TAG" | cut -d. -f1)
-            FLOATING_TAG="v${MAJOR}"
-            TARGET_SHA="${{ github.sha }}"
-
-            echo "Push to master: moving $FLOATING_TAG → $TARGET_SHA"
-
-            git tag -d "$FLOATING_TAG" 2>/dev/null || true
-            git push origin ":refs/tags/$FLOATING_TAG" 2>/dev/null || true
-            git tag "$FLOATING_TAG" "$TARGET_SHA"
-            git push origin "$FLOATING_TAG"
-
-            echo "✅ $FLOATING_TAG now points to master HEAD ($TARGET_SHA)"
-          fi
+          echo "✅ $FLOATING_TAG now points to $VERSION"
