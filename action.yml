@@ -39,6 +39,9 @@ outputs:
   version_result:
     description: "'success' or 'failure'"
     value: ${{ steps.version.outcome }}
+  tests_result:
+    description: "'success' or 'failure'"
+    value: ${{ steps.tests.outcome }}
   structure_output:
     description: Full output of the structure check
     value: ${{ steps.structure.outputs.output }}
@@ -51,6 +54,9 @@ outputs:
   version_output:
     description: Full output of the version check
     value: ${{ steps.version.outputs.output }}
+  tests_output:
+    description: Full output of the test runner
+    value: ${{ steps.tests.outputs.output }}
 
 runs:
   using: composite
@@ -106,6 +112,24 @@ runs:
       run: |
         set +e
         OUTPUT=$(python ${{ github.action_path }}/scripts/check_code.py ${{ steps.detect.outputs.dirs }} 2>&1)
+        EXIT_CODE=$?
+        echo "$OUTPUT"
+        echo 'output<<EOF' >> $GITHUB_OUTPUT
+        echo "$OUTPUT" >> $GITHUB_OUTPUT
+        echo 'EOF' >> $GITHUB_OUTPUT
+        if echo "$OUTPUT" | grep -q "⚠️"; then
+          echo "has_warnings=true" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
+
+    - name: Tests
+      id: tests
+      if: steps.detect.outputs.dirs != ''
+      continue-on-error: true
+      shell: bash
+      run: |
+        set +e
+        OUTPUT=$(python ${{ github.action_path }}/scripts/run_tests.py ${{ steps.detect.outputs.dirs }} 2>&1)
         EXIT_CODE=$?
         echo "$OUTPUT"
         echo 'output<<EOF' >> $GITHUB_OUTPUT
@@ -176,6 +200,7 @@ runs:
           |-------|--------|
           | Structure | ${{ steps.structure.outcome == 'failure' && '❌ Failed' || (steps.structure.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
           | Code | ${{ steps.code.outcome == 'failure' && '❌ Failed' || (steps.code.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
+          | Tests | ${{ steps.tests.outcome == 'failure' && '❌ Failed' || (steps.tests.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
           | README | ${{ steps.readme.outcome == 'failure' && '❌ Failed' || (steps.readme.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
           | Version | ${{ steps.version.outcome == 'failure' && '❌ Failed' || (steps.version.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
 
@@ -191,6 +216,14 @@ runs:
 
           ```
           ${{ steps.code.outputs.output }}
+          ```
+
+          </details>
+
+          <details><summary>${{ steps.tests.outcome == 'failure' && '❌' || (steps.tests.outputs.has_warnings == 'true' && '⚠️' || '✅') }} Tests output</summary>
+
+          ```
+          ${{ steps.tests.outputs.output }}
           ```
 
           </details>
@@ -212,6 +245,6 @@ runs:
           </details>
 
     - name: Fail if any check failed
-      if: always() && (steps.structure.outcome == 'failure' || steps.code.outcome == 'failure' || steps.readme.outcome == 'failure' || steps.version.outcome == 'failure')
+      if: always() && (steps.structure.outcome == 'failure' || steps.code.outcome == 'failure' || steps.tests.outcome == 'failure' || steps.readme.outcome == 'failure' || steps.version.outcome == 'failure')
       shell: bash
       run: exit 1

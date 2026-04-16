@@ -17,11 +17,12 @@ Validation tools and CI/CD workflows for Autohive integrations.
 | `scripts/check_readme.py` | README update verification ([docs](scripts/docs/check_readme.md)) |
 | `scripts/check_version_bump.py` | Version bump verification with bump-level recommendations ([docs](scripts/docs/check_version_bump.md)) |
 | `scripts/check_config_sync.py` | Config-code sync checker ([docs](scripts/docs/check_config_sync.md)) |
+| `scripts/run_tests.py` | Unit test runner with coverage ([docs](#running-unit-tests)) |
 | `scripts/get_changed_dirs.py` | Changed directory detection ([docs](scripts/docs/get_changed_dirs.md)) |
 | `.github/workflows/validate-integration.yml` | PR validation pipeline |
 | `.github/workflows/self-test.yml` | Regression guard for tooling scripts |
 | `.github/workflows/conv-commits.yml` | Conventional commit enforcement |
-| `requirements-dev.txt` | Dev tool dependencies (ruff, bandit, pip-audit) |
+| `requirements-dev.txt` | Dev tool dependencies (ruff, bandit, pip-audit, pytest, pytest-asyncio, pytest-cov) |
 | `ruff.toml` | Ruff linter and formatter configuration |
 | `CONTRIBUTING.md` | Contributor guide |
 | `LOCAL_DEVELOPMENT.md` | Local development workflow and documentation map |
@@ -45,7 +46,8 @@ flowchart TB
         COND -->|Yes| SKIP[Skip all checks]
         COND -->|No| VI[validate_integration.py]
         VI --> CC[check_code.py]
-        CC --> CR[check_readme.py]
+        CC --> RT[run_tests.py]
+        RT --> CR[check_readme.py]
         CR --> VB[check_version_bump.py]
         VB --> CMT_POST[Post PR comment]
     end
@@ -78,6 +80,7 @@ flowchart TB
 | Detect changes | `get_changed_dirs.py` | `git diff` → extract top-level dirs, filter out `.github`, `scripts`, `tests` |
 | Structure check | `validate_integration.py` | Folder name, required files, config.json schema, `__init__.py`, requirements.txt, tests/, icon size, unused scopes |
 | Code check | `check_code.py` | pip install, py_compile, check_imports, JSON validity, ruff check, ruff format, bandit, pip-audit, check_config_sync |
+| Tests | `run_tests.py` | Discovers and runs `test_*_unit.py` files with pytest, reports coverage. Warns (does not fail) if no unit tests exist |
 | README check | `check_readme.py` | New integration files added → was README.md also updated? |
 | Version check | `check_version_bump.py` | Version in config.json incremented? Recommends major/minor/patch based on config and code changes |
 
@@ -128,10 +131,12 @@ jobs:
 | `directories` | Space-separated list of validated directories |
 | `structure_result` | `success` or `failure` |
 | `code_result` | `success` or `failure` |
+| `tests_result` | `success` or `failure` |
 | `readme_result` | `success` or `failure` |
 | `version_result` | `success` or `failure` |
 | `structure_output` | Full output of the structure check |
 | `code_output` | Full output of the code check |
+| `tests_output` | Full output of the test runner |
 | `readme_output` | Full output of the README check |
 | `version_output` | Full output of the version check |
 
@@ -177,6 +182,23 @@ python scripts/check_imports.py my-integration/main.py
 # Validate all integrations (auto-discovers at repo root)
 python scripts/validate_integration.py
 ```
+
+### Running unit tests
+
+The test runner discovers `test_*_unit.py` files and runs them with pytest and coverage:
+
+```bash
+# Run unit tests for specific integrations
+python scripts/run_tests.py my-integration
+
+# Run unit tests for multiple integrations
+python scripts/run_tests.py hackernews bitly notion
+
+# Run unit tests for all integrations (auto-discovers)
+python scripts/run_tests.py
+```
+
+Integrations without `test_*_unit.py` files are skipped with a warning. The test infrastructure (`pyproject.toml`, `conftest.py`, `requirements-test.txt`) lives in the integrations repo — see its `CONTRIBUTING.md` for how to write and run tests locally.
 
 ## Integration Requirements
 
