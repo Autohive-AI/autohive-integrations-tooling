@@ -1,0 +1,37 @@
+name: Move Floating Version Tag
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  move-tag:
+    runs-on: ubuntu-latest
+    name: Move v${{ github.event.release.major_version }} tag
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Move floating major tag
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+
+          # Extract major version number (handles both "2.0.3" and "v2.0.3")
+          MAJOR=$(echo "$VERSION" | sed 's/^v//' | cut -d. -f1)
+          FLOATING_TAG="v${MAJOR}"
+
+          echo "Release: $VERSION"
+          echo "Moving floating tag: $FLOATING_TAG → $VERSION"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Delete the old floating tag (if it exists) and re-create it at this commit
+          git tag -d "$FLOATING_TAG" 2>/dev/null || true
+          git push origin ":refs/tags/$FLOATING_TAG" 2>/dev/null || true
+          git tag "$FLOATING_TAG"
+          git push origin "$FLOATING_TAG"
+
+          echo "✅ $FLOATING_TAG now points to $VERSION"
