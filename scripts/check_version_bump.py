@@ -92,20 +92,14 @@ def get_diff_stats(base_ref: str, dir_name: str) -> dict | None:
     # --- file-level stats (added / deleted) ---
     for diff_filter, key_suffix in [("A", "added"), ("D", "deleted")]:
         result = subprocess.run(
-            [
-                "git", "diff", "--name-only", f"--diff-filter={diff_filter}",
-                base_ref, "HEAD", "--", f"{dir_name}/"
-            ],
+            ["git", "diff", "--name-only", f"--diff-filter={diff_filter}", base_ref, "HEAD", "--", f"{dir_name}/"],
             capture_output=True,
             text=True,
         )
         if result.returncode != 0:
             return None
         files = [f for f in result.stdout.splitlines() if f.strip()]
-        py_files = [
-            f for f in files
-            if f.endswith(".py") and "/tests/" not in f and not f.endswith("test_.py")
-        ]
+        py_files = [f for f in files if f.endswith(".py") and "/tests/" not in f and not f.endswith("test_.py")]
         if key_suffix == "added":
             py_files_added = len(py_files)
         else:
@@ -143,13 +137,9 @@ def get_diff_stats(base_ref: str, dir_name: str) -> dict | None:
     # --- check if only tests / docs changed ---
     all_changed = get_changed_files(base_ref, dir_name) or []
     non_test_doc = [
-        f for f in all_changed
-        if not (
-            "/tests/" in f
-            or f.endswith("README.md")
-            or f.endswith(".md")
-            or f.endswith("requirements.txt")
-        )
+        f
+        for f in all_changed
+        if not ("/tests/" in f or f.endswith("README.md") or f.endswith(".md") or f.endswith("requirements.txt"))
     ]
     # config.json is handled separately so exclude it here
     non_test_doc = [f for f in non_test_doc if not f.endswith("config.json")]
@@ -167,8 +157,12 @@ def get_diff_stats(base_ref: str, dir_name: str) -> dict | None:
 
 
 def recommend_bump(
-    base_config: dict, current_config: dict, changed_files: list[str], dir_name: str,
-    *, base_ref: str = "",
+    base_config: dict,
+    current_config: dict,
+    changed_files: list[str],
+    dir_name: str,
+    *,
+    base_ref: str = "",
 ) -> str:
     """Recommend major, minor, or patch based on what changed.
 
@@ -216,6 +210,10 @@ def recommend_bump(
     if base_ref:
         stats = get_diff_stats(base_ref, dir_name)
         if stats:
+            # Only tests, docs, or requirements changed — always patch
+            if stats["only_tests_docs"]:
+                return "patch"
+
             # Major: source files or public symbols removed
             if stats["py_files_deleted"] > 0:
                 return "major"
@@ -294,6 +292,15 @@ def check_version_bump(base_ref: str, dirs: list[str]) -> int:
             # No changes in this dir — nothing to check
             continue
 
+        # If only tests, docs, or requirements changed, version bump is optional
+        diff_stats = get_diff_stats(base_ref, d)
+        if diff_stats and diff_stats["only_tests_docs"] and current_version_str == base_version_str:
+            actions_same = base_config.get("actions") == current_config.get("actions")
+            auth_same = base_config.get("auth") == current_config.get("auth")
+            if actions_same and auth_same:
+                print(f"✅ {d}: No version bump needed (only tests/docs changed)")
+                continue
+
         # Only config.json changed with no version diff is still a problem,
         # but if nothing meaningful changed we skip
         if current_version_str == base_version_str:
@@ -348,9 +355,7 @@ def check_version_bump(base_ref: str, dirs: list[str]) -> int:
     return 0
 
 
-def _detect_bump_level(
-    base: tuple[int, ...], current: tuple[int, ...]
-) -> str:
+def _detect_bump_level(base: tuple[int, ...], current: tuple[int, ...]) -> str:
     """Detect whether the version change was major, minor, or patch."""
     if current[0] > base[0]:
         return "major"
