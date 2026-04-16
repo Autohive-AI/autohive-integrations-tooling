@@ -17,7 +17,7 @@ Validation tools and CI/CD workflows for Autohive integrations.
 | `scripts/check_readme.py` | README update verification ([docs](scripts/docs/check_readme.md)) |
 | `scripts/check_version_bump.py` | Version bump verification with bump-level recommendations ([docs](scripts/docs/check_version_bump.md)) |
 | `scripts/check_config_sync.py` | Config-code sync checker ([docs](scripts/docs/check_config_sync.md)) |
-| `scripts/run_tests.py` | Unit test runner with coverage ([docs](#running-unit-tests)) |
+| `scripts/run_tests.py` | Unit test runner with coverage ([docs](scripts/docs/run_tests.md)) |
 | `scripts/get_changed_dirs.py` | Changed directory detection ([docs](scripts/docs/get_changed_dirs.md)) |
 | `.github/workflows/validate-integration.yml` | PR validation pipeline |
 | `.github/workflows/self-test.yml` | Regression guard for tooling scripts |
@@ -80,7 +80,7 @@ flowchart TB
 | Detect changes | `get_changed_dirs.py` | `git diff` → extract top-level dirs, filter out `.github`, `scripts`, `tests` |
 | Structure check | `validate_integration.py` | Folder name, required files, config.json schema, `__init__.py`, requirements.txt, tests/, icon size, unused scopes |
 | Code check | `check_code.py` | pip install, py_compile, check_imports, JSON validity, ruff check, ruff format, bandit, pip-audit, check_config_sync |
-| Tests | `run_tests.py` | Discovers and runs `test_*_unit.py` files with pytest, reports coverage. Warns (does not fail) if no unit tests exist |
+| Tests | `run_tests.py` | Installs each integration's dependencies, then discovers and runs `test_*_unit.py` files with pytest per-integration. Warns (does not fail) if no unit tests exist |
 | README check | `check_readme.py` | New integration files added → was README.md also updated? |
 | Version check | `check_version_bump.py` | Version in config.json incremented? Recommends major/minor/patch based on config and code changes |
 
