@@ -1,0 +1,65 @@
+name: Move Floating Version Tag
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [master, main]
+
+jobs:
+  move-tag:
+    runs-on: ubuntu-latest
+    name: Move floating version tag
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Move floating major tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # Triggered by a release — move the tag for that release version
+            VERSION="${{ github.event.release.tag_name }}"
+            MAJOR=$(echo "$VERSION" | sed 's/^v//' | cut -d. -f1)
+            FLOATING_TAG="v${MAJOR}"
+            TARGET_SHA="${{ github.sha }}"
+
+            echo "Release: $VERSION"
+            echo "Moving $FLOATING_TAG → $VERSION ($TARGET_SHA)"
+
+            git tag -d "$FLOATING_TAG" 2>/dev/null || true
+            git push origin ":refs/tags/$FLOATING_TAG" 2>/dev/null || true
+            git tag "$FLOATING_TAG" "$TARGET_SHA"
+            git push origin "$FLOATING_TAG"
+
+            echo "✅ $FLOATING_TAG now points to $VERSION"
+
+          else
+            # Triggered by a push to master — bootstrap any missing floating tags
+            # Find the latest release tag and create vN if it doesn't exist yet
+            LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+
+            if [ -z "$LATEST_TAG" ]; then
+              echo "No release tags found, skipping"
+              exit 0
+            fi
+
+            MAJOR=$(echo "$LATEST_TAG" | cut -d. -f1)
+            FLOATING_TAG="v${MAJOR}"
+
+            if git ls-remote --tags origin "$FLOATING_TAG" | grep -q "$FLOATING_TAG"; then
+              echo "✅ $FLOATING_TAG already exists, nothing to do"
+            else
+              TAG_SHA=$(git rev-list -n 1 "$LATEST_TAG")
+              echo "Bootstrapping $FLOATING_TAG → $LATEST_TAG ($TAG_SHA)"
+              git tag "$FLOATING_TAG" "$TAG_SHA"
+              git push origin "$FLOATING_TAG"
+              echo "✅ $FLOATING_TAG created pointing at $LATEST_TAG"
+            fi
+          fi
