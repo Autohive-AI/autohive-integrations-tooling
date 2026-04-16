@@ -145,6 +145,16 @@ def get_diff_stats(base_ref: str, dir_name: str) -> dict | None:
     non_test_doc = [f for f in non_test_doc if not f.endswith("config.json")]
     only_tests_docs = len(non_test_doc) == 0
 
+    # Check if non-test/doc changes are formatting-only (whitespace changes)
+    only_formatting = False
+    if non_test_doc:
+        ws_diff = subprocess.run(
+            ["git", "diff", "-w", "--name-only", base_ref, "HEAD", "--", *non_test_doc],
+            capture_output=True,
+            text=True,
+        )
+        only_formatting = ws_diff.returncode == 0 and not ws_diff.stdout.strip()
+
     return {
         "py_files_added": py_files_added,
         "py_files_deleted": py_files_deleted,
@@ -153,6 +163,7 @@ def get_diff_stats(base_ref: str, dir_name: str) -> dict | None:
         "funcs_added": funcs_added,
         "funcs_removed": funcs_removed,
         "only_tests_docs": only_tests_docs,
+        "only_formatting": only_formatting,
     }
 
 
@@ -212,6 +223,10 @@ def recommend_bump(
         if stats:
             # Only tests, docs, or requirements changed — always patch
             if stats["only_tests_docs"]:
+                return "patch"
+
+            # Only formatting/whitespace changes in source files — always patch
+            if stats["only_formatting"]:
                 return "patch"
 
             # Major: source files or public symbols removed
@@ -294,11 +309,20 @@ def check_version_bump(base_ref: str, dirs: list[str]) -> int:
 
         # If only tests, docs, or requirements changed, version bump is optional
         diff_stats = get_diff_stats(base_ref, d)
-        if diff_stats and diff_stats["only_tests_docs"] and current_version_str == base_version_str:
+        no_bump_needed = (
+            diff_stats
+            and current_version_str == base_version_str
+            and (diff_stats["only_tests_docs"] or diff_stats["only_formatting"])
+        )
+        if no_bump_needed:
             actions_same = base_config.get("actions") == current_config.get("actions")
             auth_same = base_config.get("auth") == current_config.get("auth")
             if actions_same and auth_same:
-                print(f"✅ {d}: No version bump needed (only tests/docs changed)")
+                if diff_stats["only_tests_docs"]:
+                    reason = "only tests/docs changed"
+                else:
+                    reason = "only formatting/whitespace changed"
+                print(f"✅ {d}: No version bump needed ({reason})")
                 continue
 
         # Only config.json changed with no version diff is still a problem,

@@ -124,6 +124,10 @@ The script recommends a bump level by inspecting both config.json changes and co
 
 If every changed file is in `tests/`, a `.md` file, or `requirements.txt` (and the config is unchanged), the version check is **skipped entirely** — no bump is required. This allows adding or updating tests, docs, and dependencies without touching the version number.
 
+### Formatting-only changes
+
+If the only changes to source files are whitespace/formatting (detected via `git diff -w`), the version check is **skipped** — no bump is required. This allows running code formatters like `ruff format` without triggering a version bump.
+
 ### Fallback
 
 If none of the above signals match, the recommendation defaults to **patch** (bug fixes, docs, dependency updates, test changes).
@@ -211,6 +215,7 @@ The recommendation is advisory — bumping at a lower level than recommended pro
 | Version decreased | ❌ Fails |
 | Bump level lower than recommended | ✅ Passes with ⚠️ warning |
 | Only test/doc files changed, version unchanged | ✅ Passes (no bump needed) |
+| Only formatting/whitespace changes, version unchanged | ✅ Passes (no bump needed) |
 | No files changed in directory | ✅ Passes (nothing to check) |
 | Directory doesn't exist on disk | ⚠️ Skipped with warning |
 | No `config.json` in directory | ⚠️ Skipped with warning |
