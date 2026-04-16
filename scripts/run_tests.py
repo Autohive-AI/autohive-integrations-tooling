@@ -3,6 +3,8 @@
 Integration Test Runner
 
 Runs pytest unit tests for integration directories that have test_*_unit.py files.
+Each integration is tested separately with its own dependencies installed from its
+requirements.txt, so SDK version pins are respected per integration.
 
 Usage:
     python scripts/run_tests.py [dir ...]
@@ -68,10 +70,49 @@ def get_integration_dirs(args: list[str]) -> list[Path]:
 
     # Auto-detect: all subdirectories with a config.json
     return sorted(
-        p
-        for p in Path(".").iterdir()
-        if p.is_dir() and p.name not in SKIP_FOLDERS and (p / "config.json").exists()
+        p for p in Path(".").iterdir() if p.is_dir() and p.name not in SKIP_FOLDERS and (p / "config.json").exists()
     )
+
+
+def install_integration_deps(integration_dir: Path) -> bool:
+    """Install an integration's requirements.txt. Returns True on success."""
+    req_file = integration_dir / "requirements.txt"
+    if not req_file.is_file():
+        return True
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-r", str(req_file), "-q"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"   ❌ Failed to install dependencies for {integration_dir.name}")
+        if result.stderr.strip():
+            for line in result.stderr.strip().splitlines():
+                print(f"      {line}")
+        return False
+    return True
+
+
+def run_integration_tests(integration_dir: Path, test_files: list[Path]) -> int:
+    """Run pytest for a single integration. Returns the pytest exit code."""
+    cmd = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "--import-mode=importlib",
+        "-m",
+        "unit",
+        "-v",
+        "--tb=short",
+        "--no-header",
+        "--cov",
+        str(integration_dir),
+        "--cov-report=term-missing:skip-covered",
+        *[str(f) for f in test_files],
+    ]
+
+    return subprocess.run(cmd).returncode
 
 
 def main() -> int:
@@ -99,38 +140,37 @@ def main() -> int:
         print("⚠️  No unit tests to run")
         return 0
 
-    # Build pytest command
-    test_file_args = []
-    cov_args = []
-    for d, files in testable:
-        cov_args.extend(["--cov", str(d)])
-        for f in files:
-            test_file_args.append(str(f))
-
-    cmd = [
-        sys.executable, "-m", "pytest",
-        "--import-mode=importlib",
-        "-m", "unit",
-        "-v",
-        "--tb=short",
-        "--no-header",
-        *cov_args,
-        "--cov-report=term-missing:skip-covered",
-        *test_file_args,
-    ]
-
     print(f"🧪 Running unit tests for: {', '.join(d.name for d, _ in testable)}")
     print()
 
-    result = subprocess.run(cmd)
+    # Run each integration separately with its own dependencies
+    failed = []
+    passed = []
+    for d, test_files in testable:
+        print(f"{'=' * 60}")
+        print(f"  {d.name}")
+        print(f"{'=' * 60}")
 
-    print()
-    if result.returncode == 0:
-        print(f"✅ Tests passed for {len(testable)} integration(s)")
-    else:
-        print(f"❌ Tests failed (exit code {result.returncode})")
+        if not install_integration_deps(d):
+            failed.append(d.name)
+            continue
 
-    return result.returncode
+        exit_code = run_integration_tests(d, test_files)
+        if exit_code == 0:
+            passed.append(d.name)
+        else:
+            failed.append(d.name)
+        print()
+
+    # Summary
+    print("=" * 60)
+    if passed:
+        print(f"✅ Tests passed: {', '.join(passed)}")
+    if failed:
+        print(f"❌ Tests failed: {', '.join(failed)}")
+    print("=" * 60)
+
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
