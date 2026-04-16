@@ -62,7 +62,9 @@ flowchart TD
     E -->|Yes — existing integration| I[Compare versions]
     I --> J{Files changed?}
     J -->|No| G
-    J -->|Yes| K{Version incremented?}
+    J -->|Yes| TD{Only tests/docs?}
+    TD -->|Yes| G
+    TD -->|No| K{Version incremented?}
     K -->|Same| L[Fail + recommend bump level]
     K -->|Decreased| M[Fail]
     K -->|Incremented| N{Bump level sufficient?}
@@ -118,6 +120,10 @@ The script recommends a bump level by inspecting both config.json changes and co
 | New `.py` source files added (excluding tests) | **minor** |
 | New `class` or `def` definitions added | **minor** |
 
+### Test/doc-only changes
+
+If every changed file is in `tests/`, a `.md` file, or `requirements.txt` (and the config is unchanged), the version check is **skipped entirely** — no bump is required. This allows adding or updating tests, docs, and dependencies without touching the version number.
+
 ### Fallback
 
 If none of the above signals match, the recommendation defaults to **patch** (bug fixes, docs, dependency updates, test changes).
@@ -164,6 +170,16 @@ The recommendation is advisory — bumping at a lower level than recommended pro
 ========================================
 ```
 
+### When only tests/docs changed (no bump needed):
+
+```
+✅ my-integration: No version bump needed (only tests/docs changed)
+
+========================================
+✅ VERSION CHECK PASSED
+========================================
+```
+
 ### New integration with valid version:
 
 ```
@@ -194,7 +210,7 @@ The recommendation is advisory — bumping at a lower level than recommended pro
 | Files changed but version unchanged | ❌ Fails with recommendation |
 | Version decreased | ❌ Fails |
 | Bump level lower than recommended | ✅ Passes with ⚠️ warning |
-| Only test/doc files changed, version unchanged | ❌ Fails (patch bump recommended) |
+| Only test/doc files changed, version unchanged | ✅ Passes (no bump needed) |
 | No files changed in directory | ✅ Passes (nothing to check) |
 | Directory doesn't exist on disk | ⚠️ Skipped with warning |
 | No `config.json` in directory | ⚠️ Skipped with warning |
