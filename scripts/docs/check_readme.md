@@ -4,7 +4,7 @@ Verifies that the main `README.md` is updated when new integrations are added.
 
 ## Overview
 
-When a new integration is added to the repository, the main `README.md` must also be updated to include the new integration in the integrations table. This script detects whether new files have been added within an integration directory and checks whether `README.md` was also modified in the same changeset.
+When a new integration is added to the repository, the main `README.md` must also be updated to include the new integration in the integrations table. This script detects whether a new `config.json` has been added within an integration directory (indicating a brand-new integration) and checks whether `README.md` was also modified in the same changeset.
 
 This check only makes sense in the context of a pull request, where there is a clear base ref to compare against.
 
@@ -50,7 +50,7 @@ flowchart TD
     B --> C{Directory exists?}
     C -->|No| B
     C -->|Yes| D[git diff --diff-filter=A: find newly added files in dir]
-    D --> E{New files found?}
+    D --> E{config.json added?}
     E -->|No| B
     E -->|Yes| F{README.md changed?}
     F -->|Yes| B
@@ -67,7 +67,7 @@ flowchart TD
 2. For each given integration directory:
    a. Skip if the directory doesn't exist
    b. Check if any files were **newly added** (`--diff-filter=A`) within that directory
-   c. If new files exist **and** `README.md` was **not** changed → report an error
+   c. If `config.json` was newly added (i.e. it's a brand-new integration) **and** `README.md` was **not** changed → report an error
 3. Exit with code 1 if any errors were found, 0 otherwise
 
 ### Key Git Commands
@@ -77,7 +77,7 @@ flowchart TD
 | `git diff --name-only <base> HEAD \| grep "^README\.md$"` | Check if root README.md was modified |
 | `git diff --name-only --diff-filter=A <base> HEAD \| grep "^<dir>/"` | Find newly added files in a specific directory |
 
-The `--diff-filter=A` flag is important: it only shows **A**dded files, not modified ones. This means the check only triggers for _new_ integrations, not updates to existing ones.
+The `--diff-filter=A` flag is important: it only shows **A**dded files, not modified ones. Within those added files, the script specifically looks for `config.json` — its presence signals a brand-new integration. This means adding new files to an existing integration (e.g. unit test files) does not trigger the check.
 
 ## Output Format
 
@@ -110,8 +110,9 @@ The `--diff-filter=A` flag is important: it only shows **A**dded files, not modi
 | Scenario | Behavior |
 |----------|----------|
 | Only existing files modified in integration dir | ✅ Passes (no new files detected) |
-| New files added and README.md updated | ✅ Passes |
-| New files added but README.md NOT updated | ❌ Fails |
+| New files added to existing integration (e.g. test files) | ✅ Passes (no `config.json` added) |
+| New integration added and README.md updated | ✅ Passes |
+| New integration added but README.md NOT updated | ❌ Fails |
 | Directory argument doesn't exist on disk | Skipped silently |
 | No arguments provided | Exits with code 2 (usage error) |
 

@@ -65,7 +65,8 @@ def check_readme(base_ref: str, dirs: list[str]) -> int:
             return 2
         new_files = [f for f in added_diff.stdout.splitlines() if f.startswith(f"{d}/")]
 
-        if new_files and not readme_changed:
+        is_new_integration = any(f == f"{d}/config.json" for f in new_files)
+        if is_new_integration and not readme_changed:
             print(f"❌ NEW INTEGRATION DETECTED: '{d}'")
             print()
             print("   But main README.md was NOT updated!")
