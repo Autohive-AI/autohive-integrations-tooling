@@ -155,7 +155,7 @@ Allowed patterns:
 |-------|----------|-------------|
 | `tests/` directory exists | Error | Test directory required |
 | `tests/__init__.py` exists | Error | Test package init |
-| `tests/context.py` exists | Error | Test import setup |
+| `tests/context.py` or `tests/conftest.py` exists | Error | Test import/fixture setup (either one satisfies this check) |
 | `tests/test_*.py` exists | Error | At least one test file |
 
 ### 7. Main Python File (`_check_main_python_file`)

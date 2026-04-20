@@ -46,6 +46,7 @@ The repo's `ruff.toml` enforces rules `E` (pycodestyle errors), `F` (pyflakes), 
 |------|-----------|-----|
 | `__init__.py` | `F401` (unused import) | Import-and-re-export is the expected pattern |
 | `tests/context.py` | `F401`, `E402` | Import-after-path-setup is the expected pattern |
+| `tests/conftest.py` | `E402` | Import-after-path-setup is the expected pattern (pytest alternative to `context.py`) |
 
 Other files that need intentional "unused" imports must use `# noqa: F401` inline.
 
