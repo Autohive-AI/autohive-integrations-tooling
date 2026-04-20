@@ -367,14 +367,12 @@ class IntegrationValidator:
             return
 
         # Check required test files
-        required_test_files = [
-            ('__init__.py', 'Test package init (can be empty)'),
-            ('context.py', 'Test context/import setup'),
-        ]
+        if not (tests_path / '__init__.py').exists():
+            self.add_error("Missing tests/__init__.py (Test package init — can be empty)")
 
-        for filename, description in required_test_files:
-            if not (tests_path / filename).exists():
-                self.add_error(f"Missing tests/{filename} ({description})")
+        # Accept either context.py (legacy import setup) or conftest.py (pytest fixture setup)
+        if not (tests_path / 'context.py').exists() and not (tests_path / 'conftest.py').exists():
+            self.add_error("Missing tests/context.py or tests/conftest.py (test import/fixture setup)")
 
         # Check for at least one test file
         test_files = list(tests_path.glob('test_*.py'))

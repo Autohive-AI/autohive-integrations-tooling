@@ -198,7 +198,11 @@ python scripts/run_tests.py hackernews bitly notion
 python scripts/run_tests.py
 ```
 
-Integrations without `test_*_unit.py` files are skipped with a warning. The test infrastructure (`pyproject.toml`, `conftest.py`, `requirements-test.txt`) lives in the integrations repo — see its `CONTRIBUTING.md` for how to write and run tests locally.
+Integrations without `test_*_unit.py` files are skipped with a warning.
+
+> **Note:** This script only runs unit tests. Integration tests (`test_*_integration.py`) require real API credentials and are run locally by developers — never in CI. See the integrations repo's `CONTRIBUTING.md` for details.
+
+The test infrastructure (`pyproject.toml`, `conftest.py`, `requirements-test.txt`) lives in the integrations repo — see its `CONTRIBUTING.md` for how to write and run tests locally.
 
 ## Integration Requirements
 
@@ -211,7 +215,7 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 - `requirements.txt` - Dependencies (must include `autohive-integrations-sdk`)
 - `README.md` - Documentation
 - `icon.png` or `icon.svg` - Integration icon (512x512 pixels)
-- `tests/` - Test folder with `__init__.py`, `context.py`, and `test_*.py`
+- `tests/` - Test folder with `__init__.py`, `context.py` or `conftest.py`, and `test_*.py`
 
 ## Integrations
 

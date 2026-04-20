@@ -132,6 +132,16 @@ my-integration/
 ⚠️  No unit tests to run
 ```
 
+## Unit Tests Only
+
+This script only runs **unit tests** (`test_*_unit.py`). Integration tests (`test_*_integration.py`) are a separate concern:
+
+- They require real API credentials and must never run in CI.
+- They are not auto-discovered by pytest (`python_files` restricts discovery to `test_*_unit.py`).
+- Developers run them locally by passing the file path explicitly: `pytest <integration>/tests/test_*_integration.py -m integration`
+
+See the integrations repo's `CONTRIBUTING.md` for full details on running both test types.
+
 ## Integration with CI
 
 Called by the composite action in `action.yml`:

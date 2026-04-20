@@ -31,7 +31,7 @@ Run this **first** — it catches structural problems before you waste time on c
 - `config.json` has the required fields and valid schema
 - `__init__.py` is minimal (only import + `__all__`)
 - `requirements.txt` includes `autohive-integrations-sdk`
-- `tests/` folder has `__init__.py`, `context.py`, and at least one `test_*.py`
+- `tests/` folder has `__init__.py`, `context.py` or `conftest.py`, and at least one `test_*.py`
 - Icon is exactly 512x512 pixels
 - OAuth scopes are actually used (heuristic)
 
@@ -133,19 +133,46 @@ python scripts/check_version_bump.py origin/main $DIRS
 
 Once everything passes, run `validate_integration.py` for a final structure check before pushing.
 
+## Running Tests
+
+Unit tests and integration tests are run separately. See the integrations repo's [CONTRIBUTING.md](https://github.com/autohive-ai/autohive-integrations/blob/master/CONTRIBUTING.md#running-tests) for full details.
+
+### Unit tests (CI + local)
+
+```bash
+# Via the tooling runner (installs deps per-integration, runs with coverage)
+python scripts/run_tests.py my-integration
+
+# Or directly via pytest (from the integrations repo root)
+pytest my-integration/
+```
+
+### Integration tests (local only)
+
+Integration tests (`test_*_integration.py`) call real APIs and are **never** run in CI. They must be invoked by passing the file path explicitly:
+
+```bash
+pytest my-integration/tests/test_my_integration_integration.py -m integration
+```
+
+They are excluded from auto-discovery by two mechanisms:
+1. `python_files` in `pyproject.toml` only matches `test_*_unit.py`
+2. `addopts` includes `-m unit`, which deselects `@pytest.mark.integration` tests
+
 ## What CI Runs on Your PR
 
-The `validate-integration.yml` workflow uses the composite action defined in `action.yml` to run three checks on every PR:
+The `validate-integration.yml` workflow uses the composite action defined in `action.yml` to run these checks on every PR:
 
 | Step | Script | What It Does |
 |------|--------|-------------|
 | 1 | `get_changed_dirs.py` | Detects which integration folders changed |
 | 2 | `validate_integration.py` | Structure and config validation |
 | 3 | `check_code.py` | Syntax, imports, JSON, lint, format, security, deps, config sync |
-| 4 | `check_readme.py` | Checks that the main README.md was updated for new integrations |
-| 5 | `check_version_bump.py` | Checks that config.json version was incremented, recommends bump level |
+| 4 | `run_tests.py` | Installs each integration's deps, runs `test_*_unit.py` files (unit tests only) |
+| 5 | `check_readme.py` | Checks that the main README.md was updated for new integrations |
+| 6 | `check_version_bump.py` | Checks that config.json version was incremented, recommends bump level |
 
-If no integration directories changed (only `scripts/`, `tests/`, etc.), steps 2–5 are skipped.
+If no integration directories changed (only `scripts/`, `tests/`, etc.), steps 2–6 are skipped.
 
 Results are posted as a sticky PR comment showing ✅ Passed, ⚠️ Passed with warnings, or ❌ Failed for each check.
 
