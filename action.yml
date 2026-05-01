@@ -57,6 +57,15 @@ outputs:
   tests_output:
     description: Full output of the test runner
     value: ${{ steps.tests.outputs.output }}
+  comment_path:
+    description: >
+      Path to a file containing the rendered Markdown PR comment body.
+      Empty when no integration directories changed. Useful for callers
+      that want to upload the comment as an artifact and post it from a
+      separate workflow (e.g. workflow_run) — typically required for
+      pull requests opened from forks, where the pull_request event
+      runs with a read-only GITHUB_TOKEN.
+    value: ${{ steps.render.outputs.path }}
 
 runs:
   using: composite
@@ -176,6 +185,38 @@ runs:
         fi
         exit $EXIT_CODE
 
+    - name: Render comment markdown
+      id: render
+      if: always() && steps.detect.outputs.dirs != ''
+      shell: bash
+      env:
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        SERVER_URL: ${{ github.server_url }}
+        REPOSITORY: ${{ github.repository }}
+        COMMIT_MSG: ${{ steps.detect.outputs.commit_msg }}
+        UPDATED_AT: ${{ github.event.pull_request.updated_at }}
+        DIRS: ${{ steps.detect.outputs.dirs }}
+        STRUCTURE_OUTCOME: ${{ steps.structure.outcome }}
+        STRUCTURE_WARN: ${{ steps.structure.outputs.has_warnings }}
+        STRUCTURE_OUTPUT: ${{ steps.structure.outputs.output }}
+        CODE_OUTCOME: ${{ steps.code.outcome }}
+        CODE_WARN: ${{ steps.code.outputs.has_warnings }}
+        CODE_OUTPUT: ${{ steps.code.outputs.output }}
+        TESTS_OUTCOME: ${{ steps.tests.outcome }}
+        TESTS_WARN: ${{ steps.tests.outputs.has_warnings }}
+        TESTS_OUTPUT: ${{ steps.tests.outputs.output }}
+        README_OUTCOME: ${{ steps.readme.outcome }}
+        README_WARN: ${{ steps.readme.outputs.has_warnings }}
+        README_OUTPUT: ${{ steps.readme.outputs.output }}
+        VERSION_OUTCOME: ${{ steps.version.outcome }}
+        VERSION_WARN: ${{ steps.version.outputs.has_warnings }}
+        VERSION_OUTPUT: ${{ steps.version.outputs.output }}
+      run: |
+        set -euo pipefail
+        OUT="${{ runner.temp }}/validation-comment.md"
+        python "${{ github.action_path }}/scripts/render_comment.py" > "$OUT"
+        echo "path=$OUT" >> "$GITHUB_OUTPUT"
+
     - name: Delete stale PR comment
       if: always() && steps.detect.outputs.dirs == '' && inputs.post_comment == 'true'
       uses: marocchino/sticky-pull-request-comment@v2
@@ -188,61 +229,7 @@ runs:
       uses: marocchino/sticky-pull-request-comment@v2
       with:
         header: validation-results
-        message: |
-          ## 🔍 Integration Validation Results
-
-          **Commit:** [`${{ github.event.pull_request.head.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }}) · ${{ steps.detect.outputs.commit_msg }}
-          **Updated:** ${{ github.event.pull_request.updated_at }}
-
-          **Changed directories:** `${{ steps.detect.outputs.dirs }}`
-
-          | Check | Result |
-          |-------|--------|
-          | Structure | ${{ steps.structure.outcome == 'failure' && '❌ Failed' || (steps.structure.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
-          | Code | ${{ steps.code.outcome == 'failure' && '❌ Failed' || (steps.code.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
-          | Tests | ${{ steps.tests.outcome == 'failure' && '❌ Failed' || (steps.tests.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
-          | README | ${{ steps.readme.outcome == 'failure' && '❌ Failed' || (steps.readme.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
-          | Version | ${{ steps.version.outcome == 'failure' && '❌ Failed' || (steps.version.outputs.has_warnings == 'true' && '⚠️ Passed with warnings' || '✅ Passed') }} |
-
-          <details><summary>${{ steps.structure.outcome == 'failure' && '❌' || (steps.structure.outputs.has_warnings == 'true' && '⚠️' || '✅') }} Structure Check output</summary>
-
-          ```
-          ${{ steps.structure.outputs.output }}
-          ```
-
-          </details>
-
-          <details><summary>${{ steps.code.outcome == 'failure' && '❌' || (steps.code.outputs.has_warnings == 'true' && '⚠️' || '✅') }} Code Check output</summary>
-
-          ```
-          ${{ steps.code.outputs.output }}
-          ```
-
-          </details>
-
-          <details><summary>${{ steps.tests.outcome == 'failure' && '❌' || (steps.tests.outputs.has_warnings == 'true' && '⚠️' || '✅') }} Tests output</summary>
-
-          ```
-          ${{ steps.tests.outputs.output }}
-          ```
-
-          </details>
-
-          <details><summary>${{ steps.readme.outcome == 'failure' && '❌' || (steps.readme.outputs.has_warnings == 'true' && '⚠️' || '✅') }} README Check output</summary>
-
-          ```
-          ${{ steps.readme.outputs.output }}
-          ```
-
-          </details>
-
-          <details><summary>${{ steps.version.outcome == 'failure' && '❌' || (steps.version.outputs.has_warnings == 'true' && '⚠️' || '✅') }} Version Check output</summary>
-
-          ```
-          ${{ steps.version.outputs.output }}
-          ```
-
-          </details>
+        path: ${{ steps.render.outputs.path }}
 
     - name: Fail if any check failed
       if: always() && (steps.structure.outcome == 'failure' || steps.code.outcome == 'failure' || steps.tests.outcome == 'failure' || steps.readme.outcome == 'failure' || steps.version.outcome == 'failure')
