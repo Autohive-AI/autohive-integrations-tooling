@@ -18,9 +18,10 @@ Checks performed per directory:
     7. Security scan (bandit)
     8. Dependency vulnerability scan (pip-audit)
     9. Config-code sync check (check_config_sync)
+    10. Fetch pattern check (check_fetch_pattern)
 
 Usage:
-    python scripts/check_code.py <dir> [dir ...]
+    python scripts/check_code.py [--base-ref <ref>] <dir> [dir ...]
 
 Exit codes:
     0 - All checks passed
@@ -29,6 +30,7 @@ Exit codes:
 
 Examples:
     $ python scripts/check_code.py my-integration
+    $ python scripts/check_code.py --base-ref origin/main my-integration
     $ python scripts/check_code.py integration-a integration-b
 """
 
@@ -51,11 +53,12 @@ BANDIT_EXCLUDE_DIRS = [".venv", "venv", "__pycache__", "site-packages", "depende
 RUFF_CONFIG = str(Path(__file__).resolve().parent.parent / "ruff.toml")
 
 
-def check_code(dirs: list[str]) -> int:
+def check_code(dirs: list[str], *, base_ref: str | None = None) -> int:
     """Run code quality checks on the given integration directories.
 
     Args:
         dirs: List of directory paths to check.
+        base_ref: Optional git ref used to make config/input drift fatal for new integrations.
 
     Returns:
         0 if all checks passed, 1 if any check failed.
@@ -247,7 +250,7 @@ def check_code(dirs: list[str]) -> int:
         print("🔗 Checking config-code sync...")
         buf = io.StringIO()
         with redirect_stdout(buf):
-            sync_result = check_config_sync(str(dir_path))
+            sync_result = check_config_sync(str(dir_path), base_ref=base_ref)
         if sync_result != 0:
             for line in buf.getvalue().splitlines():
                 if line.strip():
@@ -309,6 +312,10 @@ Examples:
 """,
     )
     parser.add_argument(
+        "--base-ref",
+        help="Git ref to compare against; config/input drift fails only for integrations new at this ref",
+    )
+    parser.add_argument(
         "dirs",
         nargs="+",
         metavar="dir",
@@ -316,7 +323,7 @@ Examples:
     )
 
     args = parser.parse_args()
-    return check_code(args.dirs)
+    return check_code(args.dirs, base_ref=args.base_ref)
 
 
 if __name__ == "__main__":

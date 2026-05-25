@@ -119,6 +119,26 @@ jobs:
           fi
           echo "✅ Config-code mismatch correctly detected"
 
+      - name: Test check_config_sync.py — input drift warns for existing integrations
+        run: |
+          OUTPUT=$(python scripts/check_config_sync.py --base-ref HEAD tests/examples/input-drift 2>&1)
+          if ! echo "$OUTPUT" | grep -q "historic warning"; then
+            echo "❌ Expected input drift to be treated as historic warning for existing integration"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "✅ Existing integration input drift warned without failing"
+
+      - name: Test check_config_sync.py — input drift fails for new integrations
+        run: |
+          cp -R tests/examples/input-drift tmp-input-drift
+          trap 'rm -rf tmp-input-drift' EXIT
+          if python scripts/check_config_sync.py --base-ref HEAD tmp-input-drift 2>&1; then
+            echo "❌ Expected input drift to fail for new integration"
+            exit 1
+          fi
+          echo "✅ New integration input drift correctly failed"
+
       - name: Test validate_integration.py — deprecated SDK pin warns
         run: |
           OUTPUT=$(python scripts/validate_integration.py tests/examples/sdk-deprecated-pin 2>&1)

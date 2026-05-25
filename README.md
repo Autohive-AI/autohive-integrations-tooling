@@ -79,7 +79,7 @@ flowchart TB
 |------|--------|--------|
 | Detect changes | `get_changed_dirs.py` | `git diff` → extract top-level dirs, filter out `.github`, `scripts`, `tests` |
 | Structure check | `validate_integration.py` | Folder name, required files, config.json schema, `__init__.py`, requirements.txt, tests/, icon size, unused scopes |
-| Code check | `check_code.py` | pip install, py_compile, check_imports, JSON validity, ruff check, ruff format, bandit, pip-audit, check_config_sync |
+| Code check | `check_code.py` | pip install, py_compile, check_imports, JSON validity, ruff check, ruff format, bandit, pip-audit, check_config_sync, check_fetch_pattern |
 | Tests | `run_tests.py` | Installs each integration's dependencies, then discovers and runs `test_*_unit.py` files with pytest per-integration. Warns (does not fail) if no unit tests exist |
 | README check | `check_readme.py` | New integration files added → was README.md also updated? |
 | Version check | `check_version_bump.py` | Version in config.json incremented? Recommends major/minor/patch based on config and code changes |
@@ -175,6 +175,9 @@ python scripts/validate_integration.py my-integration
 
 # Run code quality checks (syntax, imports, JSON, lint, format, security, deps, config sync)
 python scripts/check_code.py my-integration
+
+# In PR/CI mode, pass a base ref so config/input drift fails for brand-new integrations
+python scripts/check_code.py --base-ref origin/main my-integration
 
 # Check all imports in a file
 python scripts/check_imports.py my-integration/main.py

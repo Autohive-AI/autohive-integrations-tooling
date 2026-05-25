@@ -8,24 +8,27 @@ Config-code sync checker for Autohive integrations.
 
 This script validates that the `config.json` file and the integration's Python code are in sync. It scans all `.py` files in the integration directory (not just the entry point), supporting modular integrations where action handlers are split across multiple files. It uses AST (Abstract Syntax Tree) parsing to extract `@action` decorators and `inputs` access patterns from the code, then cross-validates them against the actions and input schemas declared in `config.json`.
 
+Action mismatches always fail. Input-schema drift is treated as historic baggage for integrations that already existed at the provided base ref, so those cases warn only. For brand-new integrations, the same input drift fails validation when `--base-ref` is provided.
+
 ## Usage
 
 ```bash
-python scripts/check_config_sync.py <dir> [dir ...]
+python scripts/check_config_sync.py [--base-ref <ref>] <dir> [dir ...]
 ```
 
 ### Arguments
 
 | Argument | Required | Description |
 |----------|----------|-------------|
+| `--base-ref` | No | Git ref used to decide whether each integration is new. If provided, input drift fails for integrations whose `config.json` did not exist at that ref. |
 | `dir` | Yes (one or more) | Path to an integration directory to check |
 
 ### Exit Codes
 
 | Code | Meaning |
 |------|---------|
-| `0`  | Config and code are in sync |
-| `1`  | One or more sync errors found |
+| `0`  | Config and code are in sync, or only existing-integration input drift warnings were found |
+| `1`  | One or more sync errors found, including input drift for a new integration when `--base-ref` is provided |
 | `2`  | An error occurred during processing (missing files, parse error, usage error) |
 
 ## Checks Performed
@@ -44,16 +47,18 @@ Verifies that every action declared in `config.json` has a corresponding `@actio
 Checks that every input parameter defined in the `config.json` schema for an action is actually accessed in the corresponding function's code.
 
 - Detects dead schema fields that are declared but never used
+- Warns for existing integrations; fails for new integrations when `--base-ref` is provided
 
 ### 3. Code Parameter Coverage
 
 Checks that every `inputs` key accessed in the code has a corresponding entry in the `config.json` schema.
 
 - Detects undocumented parameters that are used in code but missing from the config
+- Warns for existing integrations; fails for new integrations when `--base-ref` is provided
 
 ### 4. Required/Optional Consistency
 
-Validates that the required/optional status of parameters in `config.json` matches how they are accessed in the code (e.g., parameters accessed with `.get()` or default values should be optional).
+Validates that the required/optional status of parameters in `config.json` matches how they are accessed in the code (e.g., parameters accessed with `.get()` or default values should be optional). These mismatches warn for existing integrations and fail for new integrations when `--base-ref` is provided.
 
 ### 5. Action Name Matching
 
@@ -88,7 +93,8 @@ flowchart TD
 4. **Extract** `@action` decorator names and `inputs` key access patterns from the AST
 5. **Compare** actions between config and code — report any mismatches
 6. **Compare** input parameters for each action — report undocumented, dead, or mismatched fields
-7. **Report** all errors and warnings
+7. **If `--base-ref` was provided**, check whether the integration's `config.json` existed at that ref. Input drift is fatal for new integrations and warning-only for existing integrations.
+8. **Report** all errors and warnings
 
 ## Output Format
 
@@ -108,7 +114,7 @@ On failure:
    ❌ Config-code sync errors found
 
    Fix: Ensure config.json actions and input schemas match the code
-   Run locally: python scripts/check_config_sync.py <dir>
+   Run locally: python scripts/check_config_sync.py [--base-ref <ref>] <dir>
 ```
 
 ## Dependencies
@@ -119,10 +125,10 @@ No external dependencies are required. The script uses only Python's standard li
 
 ## Integration with CI
 
-This script is called by [`check_code.py`](check_code.md) as the final check step (step 9). It runs after all other quality checks have passed. It is also exercised independently by the `self-test.yml` workflow against test examples in `tests/examples/`.
+This script is called by [`check_code.py`](check_code.md) as part of the code check. In CI, the composite action passes the PR base ref through `check_code.py` so new integrations fail on input drift while existing integrations continue to warn. It is also exercised independently by the `self-test.yml` workflow against test examples in `tests/examples/`.
 
 ```python
 # Called internally by check_code.py:
 from check_config_sync import check_config_sync
-check_config_sync(str(dir_path))
+check_config_sync(str(dir_path), base_ref=base_ref)
 ```

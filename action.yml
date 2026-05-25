@@ -120,7 +120,11 @@ runs:
       shell: bash
       run: |
         set +e
-        OUTPUT=$(python ${{ github.action_path }}/scripts/check_code.py ${{ steps.detect.outputs.dirs }} 2>&1)
+        BASE_REF_ARGS=()
+        if [ -n "${{ inputs.base_ref }}" ]; then
+          BASE_REF_ARGS=(--base-ref "${{ inputs.base_ref }}")
+        fi
+        OUTPUT=$(python ${{ github.action_path }}/scripts/check_code.py "${BASE_REF_ARGS[@]}" ${{ steps.detect.outputs.dirs }} 2>&1)
         EXIT_CODE=$?
         echo "$OUTPUT"
         echo 'output<<EOF' >> $GITHUB_OUTPUT
