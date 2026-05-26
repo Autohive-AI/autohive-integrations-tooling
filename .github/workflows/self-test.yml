@@ -139,6 +139,35 @@ jobs:
           fi
           echo "✅ New integration input drift correctly failed"
 
+      - name: Test check_config_sync.py — invalid base ref returns processing error
+        run: |
+          python scripts/check_config_sync.py --base-ref definitely-not-a-ref tests/examples/good-integration 2>&1 || EXIT_CODE=$?
+          if [ "${EXIT_CODE:-0}" -ne 2 ]; then
+            echo "❌ Expected exit code 2 for invalid base ref, got ${EXIT_CODE:-0}"
+            exit 1
+          fi
+          echo "✅ Invalid base ref correctly returns exit code 2"
+
+      - name: Test check_code.py — input drift warns for existing integrations
+        run: |
+          OUTPUT=$(python scripts/check_code.py --base-ref HEAD tests/examples/input-drift 2>&1)
+          if ! echo "$OUTPUT" | grep -q "historic warning"; then
+            echo "❌ Expected input drift warning to flow through check_code.py"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "✅ Existing integration input drift warned through check_code.py"
+
+      - name: Test check_code.py — input drift fails for new integrations
+        run: |
+          cp -R tests/examples/input-drift tmp-input-drift
+          trap 'rm -rf tmp-input-drift' EXIT
+          if python scripts/check_code.py --base-ref HEAD tmp-input-drift 2>&1; then
+            echo "❌ Expected input drift to fail through check_code.py for new integration"
+            exit 1
+          fi
+          echo "✅ New integration input drift correctly failed through check_code.py"
+
       - name: Test validate_integration.py — deprecated SDK pin warns
         run: |
           OUTPUT=$(python scripts/validate_integration.py tests/examples/sdk-deprecated-pin 2>&1)

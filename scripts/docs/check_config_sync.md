@@ -10,6 +10,8 @@ This script validates that the `config.json` file and the integration's Python c
 
 Action mismatches always fail. Input-schema drift is treated as historic baggage for integrations that already existed at the provided base ref, so those cases warn only. For brand-new integrations, the same input drift fails validation when `--base-ref` is provided.
 
+When `--base-ref` is provided, it must resolve to a local git commit. If the ref is missing because of a shallow checkout or an unfetched target branch, the script exits with code `2` instead of treating every integration as new. Renamed integration directories are detected with git rename detection for `config.json` and treated as existing integrations.
+
 ## Usage
 
 ```bash
@@ -20,7 +22,7 @@ python scripts/check_config_sync.py [--base-ref <ref>] <dir> [dir ...]
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `--base-ref` | No | Git ref used to decide whether each integration is new. If provided, input drift fails for integrations whose `config.json` did not exist at that ref. |
+| `--base-ref` | No | Git ref used to decide whether each integration is new. Must resolve locally. If provided, input drift fails for integrations whose `config.json` did not exist at that ref and was not renamed from an existing path. |
 | `dir` | Yes (one or more) | Path to an integration directory to check |
 
 ### Exit Codes
@@ -29,7 +31,7 @@ python scripts/check_config_sync.py [--base-ref <ref>] <dir> [dir ...]
 |------|---------|
 | `0`  | Config and code are in sync, or only existing-integration input drift warnings were found |
 | `1`  | One or more sync errors found, including input drift for a new integration when `--base-ref` is provided |
-| `2`  | An error occurred during processing (missing files, parse error, usage error) |
+| `2`  | An error occurred during processing (missing files, parse error, usage error, unresolvable `--base-ref`) |
 
 ## Checks Performed
 
@@ -93,7 +95,7 @@ flowchart TD
 4. **Extract** `@action` decorator names and `inputs` key access patterns from the AST
 5. **Compare** actions between config and code — report any mismatches
 6. **Compare** input parameters for each action — report undocumented, dead, or mismatched fields
-7. **If `--base-ref` was provided**, check whether the integration's `config.json` existed at that ref. Input drift is fatal for new integrations and warning-only for existing integrations.
+7. **If `--base-ref` was provided**, verify the ref resolves, then check whether the integration's `config.json` existed at that ref or was renamed from an existing path. Input drift is fatal for new integrations and warning-only for existing integrations.
 8. **Report** all errors and warnings
 
 ## Output Format

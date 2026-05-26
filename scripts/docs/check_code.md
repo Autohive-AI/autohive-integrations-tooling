@@ -17,7 +17,7 @@ This script performs ten sequential code quality checks on each given integratio
 9. **Config-code sync** — runs `check_config_sync.py` to verify config.json actions and input schemas match the code
 10. **Fetch pattern check** — runs `check_fetch_pattern.py` to flag SDK 2.x `context.fetch()` response handling issues
 
-When `--base-ref` is provided, the config-code sync step treats input-schema drift as fatal for brand-new integrations while preserving warning-only behaviour for integrations that already existed at the base ref.
+When `--base-ref` is provided, the config-code sync step treats input-schema drift as fatal for brand-new integrations while preserving warning-only behaviour for integrations that already existed at the base ref. The base ref must resolve locally; otherwise config-code sync exits with a processing error instead of classifying integrations as new.
 
 ## Usage
 
@@ -29,7 +29,7 @@ python scripts/check_code.py [--base-ref <ref>] <dir> [dir ...]
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `--base-ref` | No | Git ref used by config-code sync to fail input drift only for brand-new integrations |
+| `--base-ref` | No | Git ref used by config-code sync to fail input drift only for brand-new integrations. Must resolve locally. |
 | `dir` | Yes (one or more) | Path to an integration directory to check |
 
 ### Exit Codes

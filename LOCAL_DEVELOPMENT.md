@@ -54,7 +54,7 @@ This is the comprehensive check — it runs 10 steps in sequence:
 9. Cross-validates `config.json` against your code (`check_config_sync`)
 10. Checks SDK 2.x `context.fetch()` response handling (`check_fetch_pattern`)
 
-When run with `--base-ref`, config/code input drift is still only a warning for integrations that already existed at that ref, but it fails for brand-new integrations:
+When run with `--base-ref`, config/code input drift is still only a warning for integrations that already existed at that ref, but it fails for brand-new integrations. The base ref must be fetched locally:
 
 ```bash
 python scripts/check_code.py --base-ref origin/main my-integration
@@ -97,7 +97,7 @@ python scripts/check_config_sync.py my-integration
 python scripts/check_config_sync.py --base-ref origin/main my-integration
 ```
 
-Useful when you've added or renamed actions and want to verify `config.json` matches your `@action` decorators and `inputs` access patterns. Action mismatches always fail. Input drift warns for existing integrations, and fails for new integrations when `--base-ref` is provided.
+Useful when you've added or renamed actions and want to verify `config.json` matches your `@action` decorators and `inputs` access patterns. Action mismatches always fail. Input drift warns for existing integrations, and fails for new integrations when `--base-ref` is provided. Renamed integration directories are treated as existing when git rename detection can match their `config.json` to the previous path.
 
 ### Check multiple integrations
 

@@ -179,7 +179,38 @@ def _is_new_integration(dir_path: Path, base_ref: str | None) -> bool:
         capture_output=True,
         text=True,
     )
-    return result.returncode != 0
+    if result.returncode == 0:
+        return False
+
+    return not _is_renamed_integration_config(dir_path, base_ref)
+
+
+def _is_renamed_integration_config(dir_path: Path, base_ref: str) -> bool:
+    """Return True when config.json was renamed into this path since base_ref."""
+    config_path = _git_path(dir_path / "config.json")
+    result = subprocess.run(
+        ["git", "diff", "--name-status", "--find-renames", base_ref, "HEAD", "--", config_path],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3 and parts[0].startswith("R") and parts[2] == config_path:
+            return True
+    return False
+
+
+def _verify_base_ref(base_ref: str) -> bool:
+    """Return True when base_ref resolves to a commit."""
+    verify = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{base_ref}^{{commit}}"],
+        capture_output=True,
+        text=True,
+    )
+    return verify.returncode == 0
 
 
 def check_config_sync(dir_path: str, *, base_ref: str | None = None) -> int:
@@ -192,6 +223,10 @@ def check_config_sync(dir_path: str, *, base_ref: str | None = None) -> int:
     Returns:
         0 if in sync, 1 if mismatches found, 2 on errors.
     """
+    if base_ref and not _verify_base_ref(base_ref):
+        print(f"❌ base-ref '{base_ref}' not resolvable — check fetch-depth or ref name", file=sys.stderr)
+        return 2
+
     path = Path(dir_path)
     config_path = path / "config.json"
 
