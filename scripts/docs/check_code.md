@@ -4,29 +4,32 @@ Runs code quality checks on one or more integration directories.
 
 ## Overview
 
-This script performs nine sequential code quality checks on each given integration directory:
+This script performs ten sequential code quality checks on each given integration directory:
 
-1. **Python syntax check** — uses `py_compile.compile()` directly to catch syntax errors
-2. **Import availability check** — imports `check_imports()` as a function to verify modules exist
-3. **JSON validity check** — uses `json.load()` directly to ensure all `.json` files are parseable
-4. **Lint check** — runs `ruff check` to catch code quality issues (undefined names, unused imports, style errors)
-5. **Format check** — runs `ruff format --check` to enforce consistent code formatting
-6. **Security scan** — runs `bandit` to flag hardcoded secrets, unsafe eval/exec, insecure HTTP calls
-7. **Dependency vulnerability scan** — runs `pip-audit` to check requirements.txt for packages with known CVEs
-8. **Config-code sync** — runs `check_config_sync.py` to verify config.json actions and input schemas match the code
+1. **Dependency installation** — installs `requirements.txt` so import checks can find third-party packages
+2. **Python syntax check** — uses `py_compile.compile()` directly to catch syntax errors
+3. **Import availability check** — imports `check_imports()` as a function to verify modules exist
+4. **JSON validity check** — uses `json.load()` directly to ensure all `.json` files are parseable
+5. **Lint check** — runs `ruff check` to catch code quality issues (undefined names, unused imports, style errors)
+6. **Format check** — runs `ruff format --check` to enforce consistent code formatting
+7. **Security scan** — runs `bandit` to flag hardcoded secrets, unsafe eval/exec, insecure HTTP calls
+8. **Dependency vulnerability scan** — runs `pip-audit` to check requirements.txt for packages with known CVEs
+9. **Config-code sync** — runs `check_config_sync.py` to verify config.json actions and input schemas match the code
+10. **Fetch pattern check** — runs `check_fetch_pattern.py` to flag SDK 2.x `context.fetch()` response handling issues
 
-Before running checks, it installs the integration's dependencies from `requirements.txt` so that import checks can find third-party packages.
+When `--base-ref` is provided, the config-code sync step treats input-schema drift as fatal for brand-new integrations while preserving warning-only behaviour for integrations that already existed at the base ref. The base ref must resolve locally; otherwise config-code sync exits with a processing error instead of classifying integrations as new.
 
 ## Usage
 
 ```bash
-python scripts/check_code.py <dir> [dir ...]
+python scripts/check_code.py [--base-ref <ref>] <dir> [dir ...]
 ```
 
 ### Arguments
 
 | Argument | Required | Description |
 |----------|----------|-------------|
+| `--base-ref` | No | Git ref used by config-code sync to fail input drift only for brand-new integrations. Must resolve locally. |
 | `dir` | Yes (one or more) | Path to an integration directory to check |
 
 ### Exit Codes
@@ -34,8 +37,8 @@ python scripts/check_code.py <dir> [dir ...]
 | Code | Meaning |
 |------|---------|
 | `0`  | All checks passed for all directories |
-| `1`  | One or more checks failed (includes nonexistent directories) |
-| `2`  | No directories provided (usage error) |
+| `1`  | One or more checks failed |
+| `2`  | Usage or processing error, including an unresolvable `--base-ref` reported by config-code sync |
 
 ### Examples
 
@@ -45,6 +48,9 @@ python scripts/check_code.py my-integration
 
 # Check multiple integrations
 python scripts/check_code.py my-integration another-api
+
+# Fail config/code input drift only for brand-new integrations compared with the base ref
+python scripts/check_code.py --base-ref origin/main my-integration
 
 # Combine with get_changed_dirs.py
 python scripts/check_code.py $(python scripts/get_changed_dirs.py origin/main)
@@ -211,12 +217,14 @@ pip-audit -r <dir>/requirements.txt
 ### 9. Config-Code Sync Check
 
 ```bash
-check_config_sync.py <dir>
+check_config_sync.py [--base-ref <ref>] <dir>
 ```
 
 - Uses AST parsing to extract `@action` decorators and `inputs` access patterns from the entry point
 - Cross-validates action names and input parameters between `config.json` and code
 - Detects undocumented parameters, dead schema fields, and required/optional mismatches
+- With `--base-ref`, action mismatches always fail, while input drift fails only for integrations whose `config.json` did not exist at the base ref. Existing integrations, including integrations renamed from an existing path, keep input drift as warnings.
+- If `--base-ref` cannot be resolved from the integration's git repository, the processing error is reported and `check_code.py` exits with code `2`.
 
 **On failure:**
 ```
@@ -228,8 +236,17 @@ check_config_sync.py <dir>
    ❌ Config-code sync errors found
 
    Fix: Ensure config.json actions and input schemas match the code
-   Run locally: python scripts/check_config_sync.py <dir>
+   Run locally: python scripts/check_config_sync.py [--base-ref <ref>] <dir>
 ```
+
+### 10. Fetch Pattern Check
+
+```bash
+check_fetch_pattern.py <dir>
+```
+
+- Checks SDK 2.x integrations for old `context.fetch()` response-body access patterns
+- Ensures code uses `response.data` instead of treating the SDK 2.x fetch result as the raw body
 
 ## How It Works
 
@@ -269,7 +286,10 @@ flowchart TD
     Z -->|Yes| AA[Run config-code sync check]
     AA --> AB{Sync OK?}
     AB -->|No| H
-    AB -->|Yes| A
+    AB -->|Yes| AC[Run fetch pattern check]
+    AC --> AD{Fetch patterns OK?}
+    AD -->|No| H
+    AD -->|Yes| A
     A --> O{Any failures?}
     O -->|Yes| P[Exit 1]
     O -->|No| Q[Exit 0]
@@ -310,6 +330,9 @@ Checking: my-integration
 🔗 Checking config-code sync...
    ✅ Config-code sync OK
 
+🔄 Checking fetch patterns...
+   ✅ Fetch patterns OK
+
 ========================================
 ✅ CODE CHECK PASSED
 ========================================
@@ -332,7 +355,7 @@ Called by the `validate-integration.yml` workflow (on pull requests):
 ```yaml
 - name: Code Check
   if: steps.changed.outputs.dirs != ''
-  run: python scripts/check_code.py ${{ steps.changed.outputs.dirs }}
+  run: python scripts/check_code.py --base-ref origin/${{ github.base_ref }} ${{ steps.changed.outputs.dirs }}
 ```
 
 Also exercised by the `self-test.yml` workflow against test examples in `tests/examples/` as a regression guard.

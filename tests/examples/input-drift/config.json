@@ -1,0 +1,38 @@
+{
+  "name": "input-drift",
+  "version": "1.0.0",
+  "description": "Test fixture with config/code input drift but matching actions",
+  "entry_point": "input_drift.py",
+  "actions": {
+    "get_data": {
+      "display_name": "Get Data",
+      "description": "Action defined in both config and code with input drift",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Limit"
+          },
+          "unused_param": {
+            "type": "string",
+            "description": "Defined in schema but never used in code"
+          },
+          "optional_direct": {
+            "type": "string",
+            "description": "Optional in schema but accessed directly"
+          },
+          "required_get": {
+            "type": "string",
+            "description": "Required in schema but accessed with get"
+          }
+        },
+        "required": ["limit", "required_get"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}
