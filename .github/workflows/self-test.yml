@@ -129,6 +129,62 @@ jobs:
           fi
           echo "✅ Existing integration input drift warned without failing"
 
+      - name: Test check_config_sync.py — base ref works from outside repository
+        run: |
+          OUTPUT=$(cd /tmp && python "$GITHUB_WORKSPACE/scripts/check_config_sync.py" --base-ref HEAD "$GITHUB_WORKSPACE/tests/examples/input-drift" 2>&1)
+          if ! echo "$OUTPUT" | grep -q "historic warning"; then
+            echo "❌ Expected absolute-path input drift check to resolve base ref from integration repo"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "✅ Base ref resolved correctly when run outside the repository"
+
+      - name: Test check_config_sync.py — renamed integrations remain existing integrations
+        run: |
+          TMP_REPO=$(mktemp -d)
+          trap 'rm -rf "$TMP_REPO"' EXIT
+          cd "$TMP_REPO"
+          git init -q
+          git config user.email test@example.com
+          git config user.name Test
+          mkdir -p old-integration
+          cat > old-integration/config.json <<'JSON'
+          {
+            "entry_point": "main.py",
+            "actions": {
+              "get_data": {
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "unused_param": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+          JSON
+          cat > old-integration/main.py <<'PY'
+          app = None
+
+          @app.action("get_data")
+          class GetData:
+              def execute(self, inputs):
+                  return inputs.get("undocumented_param")
+          PY
+          git add old-integration
+          git commit -q -m base
+          BASE_REF=$(git rev-parse HEAD)
+          git mv old-integration renamed-integration
+          git commit -q -m rename
+
+          OUTPUT=$(python "$GITHUB_WORKSPACE/scripts/check_config_sync.py" --base-ref "$BASE_REF" renamed-integration 2>&1)
+          if ! echo "$OUTPUT" | grep -q "historic warning"; then
+            echo "❌ Expected renamed integration input drift to remain warning-only"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "✅ Renamed integration input drift warned without failing"
+
       - name: Test check_config_sync.py — input drift fails for new integrations
         run: |
           cp -R tests/examples/input-drift tmp-input-drift
@@ -162,11 +218,26 @@ jobs:
         run: |
           cp -R tests/examples/input-drift tmp-input-drift
           trap 'rm -rf tmp-input-drift' EXIT
-          if python scripts/check_code.py --base-ref HEAD tmp-input-drift 2>&1; then
+          OUTPUT=$(python scripts/check_code.py --base-ref HEAD tmp-input-drift 2>&1) && {
             echo "❌ Expected input drift to fail through check_code.py for new integration"
+            echo "$OUTPUT"
+            exit 1
+          }
+          if ! echo "$OUTPUT" | grep -q "New integrations must keep config.json input_schema in sync with code"; then
+            echo "❌ Expected new-integration config-sync failure to flow through check_code.py"
+            echo "$OUTPUT"
             exit 1
           fi
           echo "✅ New integration input drift correctly failed through check_code.py"
+
+      - name: Test check_code.py — invalid base ref returns processing error
+        run: |
+          python scripts/check_code.py --base-ref definitely-not-a-ref tests/examples/good-integration 2>&1 || EXIT_CODE=$?
+          if [ "${EXIT_CODE:-0}" -ne 2 ]; then
+            echo "❌ Expected exit code 2 for invalid base ref through check_code.py, got ${EXIT_CODE:-0}"
+            exit 1
+          fi
+          echo "✅ Invalid base ref correctly returns exit code 2 through check_code.py"
 
       - name: Test validate_integration.py — deprecated SDK pin warns
         run: |

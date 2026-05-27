@@ -206,7 +206,7 @@ Detailed documentation for each validation script — usage, arguments, exit cod
 | Document | Script | When to read it |
 |----------|--------|-----------------|
 | [validate_integration.md](scripts/docs/validate_integration.md) | `validate_integration.py` | Understanding what structure/config checks are performed and why |
-| [check_code.md](scripts/docs/check_code.md) | `check_code.py` | Understanding the 9 code quality checks and their failure output |
+| [check_code.md](scripts/docs/check_code.md) | `check_code.py` | Understanding the 10 code quality checks and their failure output |
 | [check_imports.md](scripts/docs/check_imports.md) | `check_imports.py` | Understanding how imports are resolved (AST parsing, relative imports, `--verify-names`) |
 | [check_config_sync.md](scripts/docs/check_config_sync.md) | `check_config_sync.py` | Understanding how config.json is cross-validated against code (AST-based action and input detection) |
 | [check_readme.md](scripts/docs/check_readme.md) | `check_readme.py` | Understanding the README update requirement for new integrations |

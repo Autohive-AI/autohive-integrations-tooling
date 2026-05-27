@@ -26,7 +26,7 @@ Usage:
 Exit codes:
     0 - All checks passed
     1 - One or more checks failed
-    2 - No directories provided (handled by argparse)
+    2 - Usage or processing error (including unresolvable --base-ref from config-code sync)
 
 Examples:
     $ python scripts/check_code.py my-integration
@@ -40,7 +40,7 @@ import json
 import py_compile
 import subprocess
 import sys
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 # Allow importing check_imports from the same directory regardless of cwd
@@ -61,9 +61,9 @@ def check_code(dirs: list[str], *, base_ref: str | None = None) -> int:
         base_ref: Optional git ref used to make config/input drift fatal for new integrations.
 
     Returns:
-        0 if all checks passed, 1 if any check failed.
+        0 if all checks passed, 1 if any check failed, 2 on processing errors.
     """
-    failed = False
+    exit_code = 0
 
     # Ensure tools are available
     subprocess.run(
@@ -102,7 +102,7 @@ def check_code(dirs: list[str], *, base_ref: str | None = None) -> int:
             except py_compile.PyCompileError:
                 print(f"   ❌ {pyfile}")
                 syntax_ok = False
-                failed = True
+                exit_code = max(exit_code, 1)
 
         if syntax_ok:
             print("   ✅ Syntax OK")
@@ -139,7 +139,7 @@ def check_code(dirs: list[str], *, base_ref: str | None = None) -> int:
                     print()
                     print("   Fix: Install missing packages in requirements.txt")
                     print("   Or check if package name is spelled correctly")
-                    failed = True
+                    exit_code = max(exit_code, 1)
                 else:
                     print("   ✅ Imports OK")
             else:
@@ -158,7 +158,7 @@ def check_code(dirs: list[str], *, base_ref: str | None = None) -> int:
             except (json.JSONDecodeError, OSError):
                 print(f"   ❌ {jsonfile}")
                 json_ok = False
-                failed = True
+                exit_code = max(exit_code, 1)
 
         if json_ok:
             print("   ✅ JSON files OK")
@@ -181,7 +181,7 @@ def check_code(dirs: list[str], *, base_ref: str | None = None) -> int:
             print("   ❌ Lint errors found")
             print()
             print("   Fix: Run 'ruff check --fix' to auto-fix some issues")
-            failed = True
+            exit_code = max(exit_code, 1)
         else:
             print("   ✅ Lint OK")
         print()
@@ -199,7 +199,7 @@ def check_code(dirs: list[str], *, base_ref: str | None = None) -> int:
             print("   ❌ Formatting issues found")
             print()
             print("   Fix: Run 'ruff format' to auto-format")
-            failed = True
+            exit_code = max(exit_code, 1)
         else:
             print("   ✅ Formatting OK")
         print()
@@ -220,7 +220,7 @@ def check_code(dirs: list[str], *, base_ref: str | None = None) -> int:
             print()
             print("   Fix: Review flagged code for security risks")
             print(f"   Run locally: bandit -r <dir> -x {','.join(BANDIT_EXCLUDE_DIRS)} -s B101")
-            failed = True
+            exit_code = max(exit_code, 1)
         else:
             print("   ✅ Security OK")
         print()
@@ -241,26 +241,33 @@ def check_code(dirs: list[str], *, base_ref: str | None = None) -> int:
                 print("   ❌ Vulnerable dependencies found")
                 print()
                 print("   Fix: Update affected packages in requirements.txt")
-                failed = True
+                exit_code = max(exit_code, 1)
             else:
                 print("   ✅ Dependencies OK")
             print()
 
         # Config-code sync check
         print("🔗 Checking config-code sync...")
-        buf = io.StringIO()
-        with redirect_stdout(buf):
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
             sync_result = check_config_sync(str(dir_path), base_ref=base_ref)
         if sync_result != 0:
-            for line in buf.getvalue().splitlines():
+            for line in (stdout_buf.getvalue() + stderr_buf.getvalue()).splitlines():
                 if line.strip():
                     print(f"   {line}")
-            print("   ❌ Config and code are out of sync")
+            if sync_result == 2:
+                print("   ❌ Config-code sync could not complete")
+            else:
+                print("   ❌ Config and code are out of sync")
             print()
-            print("   Fix: Ensure config.json actions and input_schema match the code")
-            failed = True
+            if sync_result == 2:
+                print("   Fix: Resolve the processing error above, then rerun the check")
+            else:
+                print("   Fix: Ensure config.json actions and input_schema match the code")
+            exit_code = max(exit_code, sync_result)
         else:
-            output = buf.getvalue()
+            output = stdout_buf.getvalue()
             # Show warnings even on success
             warning_lines = [line for line in output.splitlines() if line.startswith("⚠️")]
             if warning_lines:
@@ -281,16 +288,16 @@ def check_code(dirs: list[str], *, base_ref: str | None = None) -> int:
             print("   ❌ Fetch pattern issues found")
             print()
             print("   Fix: SDK 2.x returns FetchResponse — use response.data to access the body")
-            failed = True
+            exit_code = max(exit_code, 1)
         else:
             print("   ✅ Fetch patterns OK")
         print()
 
     print("========================================")
-    if failed:
+    if exit_code != 0:
         print("❌ CODE CHECK FAILED")
         print("========================================")
-        return 1
+        return exit_code
     print("✅ CODE CHECK PASSED")
     print("========================================")
     return 0
@@ -305,9 +312,11 @@ def main() -> int:
 Exit codes:
   0  All checks passed
   1  One or more checks failed
+  2  Usage or processing error
 
 Examples:
   %(prog)s my-integration
+  %(prog)s --base-ref origin/main my-integration
   %(prog)s integration-a integration-b
 """,
     )

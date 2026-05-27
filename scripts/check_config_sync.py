@@ -151,45 +151,56 @@ def extract_actions_from_config(config: dict) -> dict[str, dict]:
     return actions
 
 
-def _git_path(path: Path) -> str:
-    """Return a repository-relative path for git object lookups when possible."""
+def _git_repo_root(path: Path) -> Path | None:
+    """Return the git repository root for path, if path is in a repository."""
     result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
+        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        return path.as_posix()
+        return None
 
-    repo_root = Path(result.stdout.strip()).resolve()
-    try:
-        return path.resolve().relative_to(repo_root).as_posix()
-    except ValueError:
-        return path.as_posix()
+    return Path(result.stdout.strip()).resolve()
 
 
-def _is_new_integration(dir_path: Path, base_ref: str | None) -> bool:
+def _git_path(path: Path, repo_root: Path) -> str:
+    """Return a repository-relative path for git object lookups."""
+    return path.resolve().relative_to(repo_root).as_posix()
+
+
+def _is_new_integration(dir_path: Path, base_ref: str | None, repo_root: Path | None) -> bool:
     """Return True when config.json did not exist at base_ref."""
-    if not base_ref:
+    if not base_ref or repo_root is None:
         return False
 
-    config_ref = f"{base_ref}:{_git_path(dir_path / 'config.json')}"
+    config_ref = f"{base_ref}:{_git_path(dir_path / 'config.json', repo_root)}"
     result = subprocess.run(
-        ["git", "cat-file", "-e", config_ref],
+        ["git", "-C", str(repo_root), "cat-file", "-e", config_ref],
         capture_output=True,
         text=True,
     )
     if result.returncode == 0:
         return False
 
-    return not _is_renamed_integration_config(dir_path, base_ref)
+    return not _is_renamed_integration_config(dir_path, base_ref, repo_root)
 
 
-def _is_renamed_integration_config(dir_path: Path, base_ref: str) -> bool:
+def _is_renamed_integration_config(dir_path: Path, base_ref: str, repo_root: Path) -> bool:
     """Return True when config.json was renamed into this path since base_ref."""
-    config_path = _git_path(dir_path / "config.json")
+    config_path = _git_path(dir_path / "config.json", repo_root)
     result = subprocess.run(
-        ["git", "diff", "--name-status", "--find-renames", base_ref, "HEAD", "--", config_path],
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "diff",
+            "--name-status",
+            "--find-renames",
+            "--diff-filter=R",
+            base_ref,
+            "HEAD",
+        ],
         capture_output=True,
         text=True,
     )
@@ -203,10 +214,10 @@ def _is_renamed_integration_config(dir_path: Path, base_ref: str) -> bool:
     return False
 
 
-def _verify_base_ref(base_ref: str) -> bool:
+def _verify_base_ref(base_ref: str, repo_root: Path) -> bool:
     """Return True when base_ref resolves to a commit."""
     verify = subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", f"{base_ref}^{{commit}}"],
+        ["git", "-C", str(repo_root), "rev-parse", "--verify", "--quiet", f"{base_ref}^{{commit}}"],
         capture_output=True,
         text=True,
     )
@@ -223,10 +234,6 @@ def check_config_sync(dir_path: str, *, base_ref: str | None = None) -> int:
     Returns:
         0 if in sync, 1 if mismatches found, 2 on errors.
     """
-    if base_ref and not _verify_base_ref(base_ref):
-        print(f"❌ base-ref '{base_ref}' not resolvable — check fetch-depth or ref name", file=sys.stderr)
-        return 2
-
     path = Path(dir_path)
     config_path = path / "config.json"
 
@@ -251,6 +258,13 @@ def check_config_sync(dir_path: str, *, base_ref: str | None = None) -> int:
         print(f"Entry point not found: {entry_file}")
         return 2
 
+    repo_root = None
+    if base_ref:
+        repo_root = _git_repo_root(path)
+        if repo_root is None or not _verify_base_ref(base_ref, repo_root):
+            print(f"❌ base-ref '{base_ref}' not resolvable — check fetch-depth or ref name", file=sys.stderr)
+            return 2
+
     code_actions: dict[str, dict] = {}
     for pyfile in sorted(path.rglob("*.py")):
         file_actions = extract_actions_from_code(pyfile)
@@ -261,7 +275,7 @@ def check_config_sync(dir_path: str, *, base_ref: str | None = None) -> int:
 
     errors: list[str] = []
     warnings: list[str] = []
-    is_new_integration = _is_new_integration(path, base_ref)
+    is_new_integration = _is_new_integration(path, base_ref, repo_root)
 
     # Check 1: Actions in config but not in code
     for action_name in config_actions:

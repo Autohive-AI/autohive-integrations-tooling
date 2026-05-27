@@ -37,8 +37,8 @@ python scripts/check_code.py [--base-ref <ref>] <dir> [dir ...]
 | Code | Meaning |
 |------|---------|
 | `0`  | All checks passed for all directories |
-| `1`  | One or more checks failed (includes nonexistent directories) |
-| `2`  | No directories provided (usage error) |
+| `1`  | One or more checks failed |
+| `2`  | Usage or processing error, including an unresolvable `--base-ref` reported by config-code sync |
 
 ### Examples
 
@@ -48,6 +48,9 @@ python scripts/check_code.py my-integration
 
 # Check multiple integrations
 python scripts/check_code.py my-integration another-api
+
+# Fail config/code input drift only for brand-new integrations compared with the base ref
+python scripts/check_code.py --base-ref origin/main my-integration
 
 # Combine with get_changed_dirs.py
 python scripts/check_code.py $(python scripts/get_changed_dirs.py origin/main)
@@ -220,7 +223,8 @@ check_config_sync.py [--base-ref <ref>] <dir>
 - Uses AST parsing to extract `@action` decorators and `inputs` access patterns from the entry point
 - Cross-validates action names and input parameters between `config.json` and code
 - Detects undocumented parameters, dead schema fields, and required/optional mismatches
-- With `--base-ref`, action mismatches always fail, while input drift fails only for integrations whose `config.json` did not exist at the base ref. Existing integrations keep input drift as warnings.
+- With `--base-ref`, action mismatches always fail, while input drift fails only for integrations whose `config.json` did not exist at the base ref. Existing integrations, including integrations renamed from an existing path, keep input drift as warnings.
+- If `--base-ref` cannot be resolved from the integration's git repository, the processing error is reported and `check_code.py` exits with code `2`.
 
 **On failure:**
 ```
@@ -351,7 +355,7 @@ Called by the `validate-integration.yml` workflow (on pull requests):
 ```yaml
 - name: Code Check
   if: steps.changed.outputs.dirs != ''
-  run: python scripts/check_code.py ${{ steps.changed.outputs.dirs }}
+  run: python scripts/check_code.py --base-ref origin/${{ github.base_ref }} ${{ steps.changed.outputs.dirs }}
 ```
 
 Also exercised by the `self-test.yml` workflow against test examples in `tests/examples/` as a regression guard.

@@ -173,7 +173,7 @@ uv pip install -r requirements-dev.txt
 # Validate structure and config
 python scripts/validate_integration.py my-integration
 
-# Run code quality checks (syntax, imports, JSON, lint, format, security, deps, config sync)
+# Run code quality checks (syntax, imports, JSON, lint, format, security, deps, config sync, fetch pattern)
 python scripts/check_code.py my-integration
 
 # In PR/CI mode, pass a base ref so config/input drift fails for brand-new integrations
