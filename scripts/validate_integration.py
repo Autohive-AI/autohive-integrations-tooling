@@ -89,6 +89,7 @@ class IntegrationValidator:
         self._check_tests_folder()
         self._check_main_python_file()
         self._check_unused_scopes()
+        self._check_env_example()
 
         return len(self.errors) == 0
 
@@ -449,6 +450,55 @@ class IntegrationValidator:
 
         if potentially_unused:
             self.add_warning(f"Potentially unused scopes (please verify): {', '.join(potentially_unused)}")
+
+    def _check_env_example(self):
+        """Check that env vars used in tests are declared in .env.example."""
+        tests_path = self.path / 'tests'
+        if not tests_path.is_dir():
+            return
+
+        # Collect all env var names referenced in test files
+        static_pattern = re.compile(r'os\.environ(?:\.get)?\(\s*["\']([A-Z][A-Z0-9_]*)["\']')
+        dynamic_pattern = re.compile(r'os\.environ(?:\.get)?\(\s*(?!["\'])(\w+)')
+        used_vars: set[str] = set()
+        for pyfile in sorted(tests_path.glob('**/*.py')):
+            try:
+                content = pyfile.read_text(encoding='utf-8')
+                used_vars.update(static_pattern.findall(content))
+                for lineno, line in enumerate(content.splitlines(), 1):
+                    if dynamic_pattern.search(line):
+                        rel = pyfile.relative_to(self.path)
+                        self.add_warning(
+                            f"Dynamic env var lookup in {rel}:{lineno} — verify the variable is declared in .env.example"
+                        )
+            except Exception:
+                pass
+
+        if not used_vars:
+            return
+
+        # Find .env.example at the repo root (parent of this integration folder)
+        env_example_path = self.path.parent / '.env.example'
+        if not env_example_path.exists():
+            self.add_warning(
+                f"Tests reference env vars {sorted(used_vars)} but no .env.example found at repo root"
+            )
+            return
+
+        try:
+            env_example_content = env_example_path.read_text(encoding='utf-8')
+        except Exception as e:
+            self.add_warning(f"Could not read .env.example: {e}")
+            return
+
+        # Extract all var names declared in .env.example (commented or uncommented)
+        declared_vars = set(re.findall(r'^#?\s*([A-Z][A-Z0-9_]*)=', env_example_content, re.MULTILINE))
+
+        missing = sorted(used_vars - declared_vars)
+        if missing:
+            self.add_warning(
+                f"Env vars used in tests but missing from .env.example: {', '.join(missing)}"
+            )
 
     def print_results(self):
         """Print validation results."""
