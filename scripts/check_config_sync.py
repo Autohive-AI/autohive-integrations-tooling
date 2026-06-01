@@ -21,21 +21,23 @@ How it determines required vs optional from code:
     - inputs.get("key")   -> optional (returns None/default if missing)
 
 Usage:
-    python scripts/check_config_sync.py <dir> [dir ...]
+    python scripts/check_config_sync.py [--base-ref <ref>] <dir> [dir ...]
 
 Exit codes:
     0 - Config and code are in sync (possibly with warnings)
-    1 - Mismatches found
+    1 - Mismatches found, or input drift found in a new integration when --base-ref is provided
     2 - An error occurred (file not found, syntax error, etc.)
 
 Examples:
     python scripts/check_config_sync.py my-integration
+    python scripts/check_config_sync.py --base-ref origin/main my-integration
     python scripts/check_config_sync.py my-integration another-api
 """
 
 import argparse
 import ast
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -149,11 +151,85 @@ def extract_actions_from_config(config: dict) -> dict[str, dict]:
     return actions
 
 
-def check_config_sync(dir_path: str) -> int:
+def _git_repo_root(path: Path) -> Path | None:
+    """Return the git repository root for path, if path is in a repository."""
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+
+    return Path(result.stdout.strip()).resolve()
+
+
+def _git_path(path: Path, repo_root: Path) -> str:
+    """Return a repository-relative path for git object lookups."""
+    return path.resolve().relative_to(repo_root).as_posix()
+
+
+def _is_new_integration(dir_path: Path, base_ref: str | None, repo_root: Path | None) -> bool:
+    """Return True when config.json did not exist at base_ref."""
+    if not base_ref or repo_root is None:
+        return False
+
+    config_ref = f"{base_ref}:{_git_path(dir_path / 'config.json', repo_root)}"
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "cat-file", "-e", config_ref],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return False
+
+    return not _is_renamed_integration_config(dir_path, base_ref, repo_root)
+
+
+def _is_renamed_integration_config(dir_path: Path, base_ref: str, repo_root: Path) -> bool:
+    """Return True when config.json was renamed into this path since base_ref."""
+    config_path = _git_path(dir_path / "config.json", repo_root)
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "diff",
+            "--name-status",
+            "--find-renames",
+            "--diff-filter=R",
+            base_ref,
+            "HEAD",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3 and parts[0].startswith("R") and parts[2] == config_path:
+            return True
+    return False
+
+
+def _verify_base_ref(base_ref: str, repo_root: Path) -> bool:
+    """Return True when base_ref resolves to a commit."""
+    verify = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "--verify", "--quiet", f"{base_ref}^{{commit}}"],
+        capture_output=True,
+        text=True,
+    )
+    return verify.returncode == 0
+
+
+def check_config_sync(dir_path: str, *, base_ref: str | None = None) -> int:
     """Check that config.json and code are in sync for an integration directory.
 
     Args:
         dir_path: Path to the integration directory.
+        base_ref: Optional git ref used to decide whether this is a new integration.
 
     Returns:
         0 if in sync, 1 if mismatches found, 2 on errors.
@@ -182,6 +258,13 @@ def check_config_sync(dir_path: str) -> int:
         print(f"Entry point not found: {entry_file}")
         return 2
 
+    repo_root = None
+    if base_ref:
+        repo_root = _git_repo_root(path)
+        if repo_root is None or not _verify_base_ref(base_ref, repo_root):
+            print(f"❌ base-ref '{base_ref}' not resolvable — check fetch-depth or ref name", file=sys.stderr)
+            return 2
+
     code_actions: dict[str, dict] = {}
     for pyfile in sorted(path.rglob("*.py")):
         file_actions = extract_actions_from_code(pyfile)
@@ -192,6 +275,7 @@ def check_config_sync(dir_path: str) -> int:
 
     errors: list[str] = []
     warnings: list[str] = []
+    is_new_integration = _is_new_integration(path, base_ref, repo_root)
 
     # Check 1: Actions in config but not in code
     for action_name in config_actions:
@@ -251,11 +335,19 @@ def check_config_sync(dir_path: str) -> int:
     if errors:
         for error in errors:
             print(f"❌ {error}")
-    if warnings:
+    if is_new_integration and warnings:
+        print("❌ New integrations must keep config.json input_schema in sync with code")
+        for warning in warnings:
+            print(f"❌ {warning}")
+    elif warnings:
+        if base_ref:
+            print("⚠️  Existing integration has config-code input drift; treating as historic warning")
+        else:
+            print("⚠️  Config-code input drift detected; pass --base-ref to fail this for new integrations")
         for warning in warnings:
             print(f"⚠️  {warning}")
 
-    if errors:
+    if errors or (is_new_integration and warnings):
         return 1
     return 0
 
@@ -277,6 +369,10 @@ Examples:
 """,
     )
     parser.add_argument(
+        "--base-ref",
+        help="Git ref to compare against; input drift fails only when config.json is new at this ref",
+    )
+    parser.add_argument(
         "dirs",
         nargs="+",
         metavar="dir",
@@ -291,7 +387,7 @@ Examples:
         print(f"Config sync: {dir_path}")
         print(f"{'=' * 60}")
 
-        result = check_config_sync(dir_path)
+        result = check_config_sync(dir_path, base_ref=args.base_ref)
         if result == 0:
             print("✅ Config and code are in sync")
         if result > exit_code:

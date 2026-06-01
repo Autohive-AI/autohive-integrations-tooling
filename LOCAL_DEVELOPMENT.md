@@ -41,7 +41,7 @@ Run this **first** — it catches structural problems before you waste time on c
 python scripts/check_code.py my-integration
 ```
 
-This is the comprehensive check — it runs 9 steps in sequence:
+This is the comprehensive check — it runs 10 steps in sequence:
 
 1. Installs your `requirements.txt` dependencies
 2. Checks Python syntax (`py_compile`)
@@ -52,6 +52,13 @@ This is the comprehensive check — it runs 9 steps in sequence:
 7. Scans for security issues with `bandit`
 8. Audits dependencies for known CVEs with `pip-audit`
 9. Cross-validates `config.json` against your code (`check_config_sync`)
+10. Checks SDK 2.x `context.fetch()` response handling (`check_fetch_pattern`)
+
+When run with `--base-ref`, config/code input drift is still only a warning for integrations that already existed at that ref, but it fails for brand-new integrations. The base ref must be fetched locally:
+
+```bash
+python scripts/check_code.py --base-ref origin/main my-integration
+```
 
 ### 3. Fix common issues
 
@@ -85,9 +92,12 @@ python scripts/check_imports.py --verify-names my-integration/my_integration.py
 
 ```bash
 python scripts/check_config_sync.py my-integration
+
+# Fail input drift when this is a brand-new integration compared with the base ref
+python scripts/check_config_sync.py --base-ref origin/main my-integration
 ```
 
-Useful when you've added or renamed actions and want to verify `config.json` matches your `@action` decorators and `inputs` access patterns.
+Useful when you've added or renamed actions and want to verify `config.json` matches your `@action` decorators and `inputs` access patterns. Action mismatches always fail. Input drift warns for existing integrations, and fails for new integrations when `--base-ref` is provided. Renamed integration directories are treated as existing when git rename detection can match their `config.json` to the previous path.
 
 ### Check multiple integrations
 
@@ -115,7 +125,7 @@ python scripts/get_changed_dirs.py origin/main
 # Run the full CI pipeline locally against those dirs
 DIRS=$(python scripts/get_changed_dirs.py origin/main)
 python scripts/validate_integration.py $DIRS
-python scripts/check_code.py $DIRS
+python scripts/check_code.py --base-ref origin/main $DIRS
 python scripts/check_readme.py origin/main $DIRS
 python scripts/check_version_bump.py origin/main $DIRS
 ```
@@ -167,7 +177,7 @@ The `validate-integration.yml` workflow uses the composite action defined in `ac
 |------|--------|-------------|
 | 1 | `get_changed_dirs.py` | Detects which integration folders changed |
 | 2 | `validate_integration.py` | Structure and config validation |
-| 3 | `check_code.py` | Syntax, imports, JSON, lint, format, security, deps, config sync |
+| 3 | `check_code.py` | Syntax, imports, JSON, lint, format, security, deps, config sync, fetch pattern checks |
 | 4 | `run_tests.py` | Installs each integration's deps, runs `test_*_unit.py` files (unit tests only) |
 | 5 | `check_readme.py` | Checks that the main README.md was updated for new integrations |
 | 6 | `check_version_bump.py` | Checks that config.json version was incremented, recommends bump level |
@@ -196,7 +206,7 @@ Detailed documentation for each validation script — usage, arguments, exit cod
 | Document | Script | When to read it |
 |----------|--------|-----------------|
 | [validate_integration.md](scripts/docs/validate_integration.md) | `validate_integration.py` | Understanding what structure/config checks are performed and why |
-| [check_code.md](scripts/docs/check_code.md) | `check_code.py` | Understanding the 9 code quality checks and their failure output |
+| [check_code.md](scripts/docs/check_code.md) | `check_code.py` | Understanding the 10 code quality checks and their failure output |
 | [check_imports.md](scripts/docs/check_imports.md) | `check_imports.py` | Understanding how imports are resolved (AST parsing, relative imports, `--verify-names`) |
 | [check_config_sync.md](scripts/docs/check_config_sync.md) | `check_config_sync.py` | Understanding how config.json is cross-validated against code (AST-based action and input detection) |
 | [check_readme.md](scripts/docs/check_readme.md) | `check_readme.py` | Understanding the README update requirement for new integrations |
