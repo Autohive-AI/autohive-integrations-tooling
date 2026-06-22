@@ -8,6 +8,8 @@ Config-code sync checker for Autohive integrations.
 
 This script validates that the `config.json` file and the integration's Python code are in sync. It scans all `.py` files in the integration directory (not just the entry point), supporting modular integrations where action handlers are split across multiple files. It uses AST (Abstract Syntax Tree) parsing to extract `@action` decorators and `inputs` access patterns from the code, then cross-validates them against the actions and input schemas declared in `config.json`.
 
+Input access detection covers direct action method usage such as `inputs["key"]` and `inputs.get("key")`. It also follows simple module-local helper calls where an action passes its `inputs` object to a statically named helper, such as `_pagination_params(inputs)`, and attributes literal key accesses in that helper to the calling action. Imported functions, method calls, dynamic calls, nested closures, and broader control-flow analysis are intentionally out of scope.
+
 Action mismatches always fail. Input-schema drift is treated as historic baggage for integrations that already existed at the provided base ref, so those cases warn only. For brand-new integrations, the same input drift fails validation when `--base-ref` is provided.
 
 When `--base-ref` is provided, it must resolve to a local git commit from the integration directory's git repository. If the ref is missing because of a shallow checkout or an unfetched target branch, the script exits with code `2` instead of treating every integration as new. Renamed integration directories are detected with git rename detection for `config.json` and treated as existing integrations.
@@ -92,7 +94,7 @@ flowchart TD
 1. **Read** `config.json` and extract declared actions and their input schemas
 2. **Scan** all `.py` files in the integration directory (supporting modular layouts)
 3. **Parse** each file into an Abstract Syntax Tree (no code execution)
-4. **Extract** `@action` decorator names and `inputs` key access patterns from the AST
+4. **Extract** `@action` decorator names and direct or simple helper-based `inputs` key access patterns from the AST
 5. **Compare** actions between config and code — report any mismatches
 6. **Compare** input parameters for each action — report undocumented, dead, or mismatched fields
 7. **If `--base-ref` was provided**, resolve the integration's git repository root, verify the ref resolves there, then check whether the integration's `config.json` existed at that ref or was renamed from an existing path. Input drift is fatal for new integrations and warning-only for existing integrations.
