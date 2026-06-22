@@ -121,7 +121,10 @@ class IntegrationValidator:
         # use absolute imports like 'from <integration> import <instance>'.
         has_actions_dir = (self.path / 'actions').is_dir()
         if not (self.path / '__init__.py').exists() and not has_actions_dir:
-            self.add_warning("Missing __init__.py (required for package-style integrations, optional for modular integrations with actions/)")
+            self.add_warning(
+                "Missing __init__.py "
+                "(required for package-style integrations, optional for modular integrations with actions/)"
+            )
 
         # Check for forbidden files
         if (self.path / 'integration.py').exists():
@@ -244,6 +247,14 @@ class IntegrationValidator:
                 self.add_error("Custom auth requires 'fields' configuration")
             elif 'properties' not in auth.get('fields', {}):
                 self.add_error("Custom auth fields must have 'properties' defined")
+            else:
+                required_fields = auth['fields'].get('required')
+                if required_fields:
+                    self.add_error(
+                        "Custom auth fields must not define a non-empty auth.fields.required array. "
+                        "Credential collection and presence are handled by the platform connection flow; "
+                        "define auth.fields.properties only."
+                    )
 
         elif auth_type is not None:
             self.add_warning(f"Unknown auth type: '{auth_type}'. Expected 'platform' or 'custom'")
