@@ -107,7 +107,7 @@ Validates based on `auth.type`:
 | Auth Type | Required Fields | Description |
 |-----------|----------------|-------------|
 | `platform` | `provider`, `scopes` (array) | OAuth2-based authentication |
-| `custom` | `fields.properties` | API key or token-based authentication. `auth.fields.required` must be absent or empty; credential presence is handled by the platform connection flow. |
+| `custom` | `fields.properties` | API key or token-based authentication |
 | _(omitted)_ | — | No authentication (public APIs) |
 
 #### Action Configuration (`_validate_actions_config`)
