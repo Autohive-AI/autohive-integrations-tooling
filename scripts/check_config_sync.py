@@ -63,6 +63,7 @@ def extract_actions_from_code(filepath: Path) -> dict[str, dict] | None:
         return None
 
     actions: dict[str, dict] = {}
+    module_helpers = _extract_module_helper_input_accesses(tree)
 
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef):
@@ -98,35 +99,110 @@ def extract_actions_from_code(filepath: Path) -> dict[str, dict] | None:
                 continue
 
             # Walk the execute method for inputs access
-            for subnode in ast.walk(item):
-                # inputs["key"]
-                if (
-                    isinstance(subnode, ast.Subscript)
-                    and isinstance(subnode.value, ast.Name)
-                    and subnode.value.id == "inputs"
-                    and isinstance(subnode.slice, ast.Constant)
-                    and isinstance(subnode.slice.value, str)
-                ):
-                    direct_params.add(subnode.slice.value)
+            method_accesses = _extract_named_input_accesses(item, {"inputs"})
+            direct_params.update(method_accesses["direct"])
+            get_params.update(method_accesses["get"])
 
-                # inputs.get("key") or inputs.get("key", default)
-                if (
-                    isinstance(subnode, ast.Call)
-                    and isinstance(subnode.func, ast.Attribute)
-                    and subnode.func.attr == "get"
-                    and isinstance(subnode.func.value, ast.Name)
-                    and subnode.func.value.id == "inputs"
-                    and subnode.args
-                    and isinstance(subnode.args[0], ast.Constant)
-                    and isinstance(subnode.args[0].value, str)
-                ):
-                    get_params.add(subnode.args[0].value)
+            # Include simple module-local helper calls that receive the action inputs.
+            # This intentionally avoids imported functions, method calls, dynamic calls,
+            # nested closures, and broader control-flow analysis.
+            for helper_accesses in _called_helper_accesses(item, module_helpers):
+                direct_params.update(helper_accesses["direct"])
+                get_params.update(helper_accesses["get"])
 
             break  # Only check the first execute method
 
         actions[action_name] = {"direct": direct_params, "get": get_params}
 
     return actions
+
+
+def _extract_named_input_accesses(node: ast.AST, input_names: set[str]) -> dict[str, set[str]]:
+    """Extract literal dict-key accesses for any local input variable name."""
+    direct_params: set[str] = set()
+    get_params: set[str] = set()
+
+    for subnode in ast.walk(node):
+        # inputs["key"]
+        if (
+            isinstance(subnode, ast.Subscript)
+            and isinstance(subnode.value, ast.Name)
+            and subnode.value.id in input_names
+            and isinstance(subnode.slice, ast.Constant)
+            and isinstance(subnode.slice.value, str)
+        ):
+            direct_params.add(subnode.slice.value)
+
+        # inputs.get("key") or inputs.get("key", default)
+        if (
+            isinstance(subnode, ast.Call)
+            and isinstance(subnode.func, ast.Attribute)
+            and subnode.func.attr == "get"
+            and isinstance(subnode.func.value, ast.Name)
+            and subnode.func.value.id in input_names
+            and subnode.args
+            and isinstance(subnode.args[0], ast.Constant)
+            and isinstance(subnode.args[0].value, str)
+        ):
+            get_params.add(subnode.args[0].value)
+
+    return {"direct": direct_params, "get": get_params}
+
+
+def _extract_module_helper_input_accesses(tree: ast.Module) -> dict[str, dict]:
+    """Return per-parameter input accesses for module-level helper functions."""
+    helpers: dict[str, dict] = {}
+
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        params = [arg.arg for arg in node.args.args]
+        if not params:
+            continue
+
+        helpers[node.name] = {"params": params, "accesses": {}}
+        for param in params:
+            helpers[node.name]["accesses"][param] = _extract_named_input_accesses(node, {param})
+
+    return helpers
+
+
+def _called_helper_accesses(
+    node: ast.AST,
+    module_helpers: dict[str, dict],
+) -> list[dict[str, set[str]]]:
+    """Find module-local helper calls that pass the action's inputs object."""
+    accesses: list[dict[str, set[str]]] = []
+
+    for subnode in ast.walk(node):
+        if not isinstance(subnode, ast.Call):
+            continue
+        if not isinstance(subnode.func, ast.Name):
+            continue
+
+        helper = module_helpers.get(subnode.func.id)
+        if not helper:
+            continue
+
+        helper_accesses = helper["accesses"]
+        positional_params = helper["params"]
+        for index, arg in enumerate(subnode.args):
+            if not (isinstance(arg, ast.Name) and arg.id == "inputs"):
+                continue
+            if index >= len(positional_params):
+                continue
+            accesses.append(helper_accesses[positional_params[index]])
+
+        for keyword in subnode.keywords:
+            if keyword.arg is None:
+                continue
+            if not (isinstance(keyword.value, ast.Name) and keyword.value.id == "inputs"):
+                continue
+            if keyword.arg in helper_accesses:
+                accesses.append(helper_accesses[keyword.arg])
+
+    return accesses
 
 
 def extract_actions_from_config(config: dict) -> dict[str, dict]:
