@@ -15,7 +15,8 @@
           "label": "API Key",
           "help_text": "Enter your API key"
         }
-      }
+      },
+      "required": ["api_key"]
     }
   },
   "actions": {
