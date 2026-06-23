@@ -15,8 +15,7 @@
           "label": "API Key",
           "help_text": "Enter your API key from the dashboard"
         }
-      },
-      "required": ["api_key"]
+      }
     }
   },
   "actions": {
