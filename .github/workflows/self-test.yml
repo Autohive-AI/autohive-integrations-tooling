@@ -57,6 +57,9 @@ jobs:
       - name: Test validate_integration.py — focused pytest regressions
         run: pytest tests/test_validate_integration.py
 
+      - name: Test run_tests.py — focused pytest regressions
+        run: pytest tests/test_run_tests.py
+
       - name: Test check_imports.py — valid imports
         run: |
           python scripts/check_imports.py tests/examples/submodule-imports/valid_submodules.py

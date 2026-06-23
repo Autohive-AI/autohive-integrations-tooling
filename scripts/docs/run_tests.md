@@ -6,7 +6,7 @@ Discovers and runs unit tests for integration directories, installing each integ
 
 Each integration pins its own SDK version in `requirements.txt`. The test runner installs dependencies and runs pytest **per-integration** to ensure each integration is tested against its own pinned SDK version.
 
-Integrations without `test_*_unit.py` files are skipped with a warning — they do not cause a failure.
+Integrations without `test_*_unit.py` files are skipped with a warning — they do not cause a failure. Live integration tests (`test_*_integration.py` files marked with `pytest.mark.integration`) are detected and reported, but are not run in CI.
 
 ## Usage
 
@@ -65,14 +65,15 @@ flowchart TD
 ### Step-by-Step
 
 1. Resolve integration directories from CLI args or auto-detect (subdirectories with `config.json`)
-2. For each directory, check for `test_*_unit.py` files in `tests/`
-3. Skip directories without unit tests (warn but don't fail)
-4. For each testable integration:
+2. For each directory, report any `pytest.mark.integration`-marked `test_*_integration.py` files detected in `tests/` and clearly state they are not run in CI
+3. For each directory, check for `test_*_unit.py` files in `tests/`
+4. Skip directories without unit tests (warn but don't fail)
+5. For each testable integration:
    a. Install the integration's `requirements.txt` (includes its pinned SDK version)
    b. Run pytest with `--import-mode=importlib`, `-m unit`, coverage enabled
    c. Record pass or failure
-5. Print summary of passed/failed integrations
-6. Exit 0 if all passed, 1 if any failed
+6. Print summary of passed/failed integrations
+7. Exit 0 if all passed, 1 if any failed
 
 ### Per-Integration Isolation
 
@@ -137,6 +138,7 @@ my-integration/
 This script only runs **unit tests** (`test_*_unit.py`). Integration tests (`test_*_integration.py`) are a separate concern:
 
 - They require real API credentials and must never run in CI.
+- When marked with `pytest.mark.integration` and detected, they are listed in the output with `Live integration tests: not run in CI` to avoid mistaking green unit-test CI for live API coverage.
 - They are not auto-discovered by pytest (`python_files` restricts discovery to `test_*_unit.py`).
 - Developers run them locally by passing the file path explicitly: `pytest <integration>/tests/test_*_integration.py -m integration`
 

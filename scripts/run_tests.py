@@ -56,6 +56,36 @@ def find_unit_test_files(integration_dir: Path) -> list[Path]:
     return sorted(tests_dir.glob("test_*_unit.py"))
 
 
+def find_live_integration_test_files(integration_dir: Path) -> list[Path]:
+    """Find all test_*_integration.py files in an integration's tests/ directory."""
+    tests_dir = integration_dir / "tests"
+    if not tests_dir.is_dir():
+        return []
+
+    live_test_files = []
+    for file in sorted(tests_dir.glob("test_*_integration.py")):
+        try:
+            content = file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if "pytest.mark.integration" in content:
+            live_test_files.append(file)
+    return live_test_files
+
+
+def print_live_integration_test_notice(dirs: list[Path]) -> None:
+    """Report live integration tests that are intentionally not run by CI."""
+    live_test_files = [file for directory in dirs for file in find_live_integration_test_files(directory)]
+    if not live_test_files:
+        return
+
+    print("ℹ️  Live integration tests detected:")
+    for file in live_test_files:
+        print(f"   - {file}")
+    print("ℹ️  Live integration tests: not run in CI")
+    print()
+
+
 def get_integration_dirs(args: list[str]) -> list[Path]:
     """Resolve integration directories from CLI args or auto-detect."""
     if args:
@@ -138,7 +168,7 @@ def print_table(rows: list[tuple[str, str, str, str, str]], failed_outputs: dict
     """Print a formatted results table."""
     col_widths = [
         max(len(r[0]) for r in rows) + 2,
-        8,   # Tests
+        8,  # Tests
         10,  # Coverage
         14,  # Status
     ]
@@ -155,12 +185,7 @@ def print_table(rows: list[tuple[str, str, str, str, str]], failed_outputs: dict
     print(header)
     print(divider)
     for name, tests, coverage, status, _ in rows:
-        print(
-            f"{name:<{col_widths[0]}}"
-            f"{tests:>{col_widths[1]}}"
-            f"{coverage:>{col_widths[2]}}"
-            f"{status:>{col_widths[3]}}"
-        )
+        print(f"{name:<{col_widths[0]}}{tests:>{col_widths[1]}}{coverage:>{col_widths[2]}}{status:>{col_widths[3]}}")
     print(divider)
 
     # Total row
@@ -193,6 +218,8 @@ def main() -> int:
     if not dirs:
         print("⚠️  No integration directories found")
         return 0
+
+    print_live_integration_test_notice(dirs)
 
     # Collect which integrations have unit tests
     testable = []
