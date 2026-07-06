@@ -166,7 +166,7 @@ Inspects all `.py` files in the integration directory (not just the entry point)
 |-------|----------|-------------|
 | `Integration` imported | Warning | Should import from SDK |
 | `ActionHandler` imported | Warning | Should import from SDK |
-| `Integration.load()` called | Warning | Standard loading pattern |
+| `Integration.load(...)` called | Warning | Standard loading pattern, with or without an explicit config path |
 
 > **Note:** Action decorator matching (config ↔ code) is handled by `check_config_sync.py`, which uses AST parsing for more accurate bidirectional validation.
 
@@ -254,8 +254,8 @@ Called by the `validate-integration.yml` workflow (on pull requests) as the **St
 
 ```yaml
 - name: Structure Check
-  if: steps.changed.outputs.dirs != ''
-  run: python scripts/validate_integration.py ${{ steps.changed.outputs.dirs }}
+  if: steps.detect.outputs.dirs != ''
+  run: python scripts/validate_integration.py ${{ steps.detect.outputs.dirs }}
 ```
 
 The script is also exercised by the `self-test.yml` workflow, which runs it against the test examples in `tests/examples/` as a regression guard whenever `scripts/` or `tests/` change.

@@ -36,8 +36,11 @@ Run these before submitting a PR:
 # Validate structure and config
 python scripts/validate_integration.py my-integration
 
-# Run all code quality checks (syntax, imports, JSON, lint, format, security, deps)
+# Run all code quality checks (syntax, imports, JSON, lint, format, security, deps, config sync, fetch pattern)
 python scripts/check_code.py my-integration
+
+# Run unit tests when the integration has test_*_unit.py files
+python scripts/run_tests.py my-integration
 ```
 
 ### What Gets Checked
@@ -53,6 +56,8 @@ python scripts/check_code.py my-integration
 | Security | `bandit` | No hardcoded secrets, unsafe eval/exec |
 | Dependencies | `pip-audit` | No known CVEs in requirements.txt |
 | Config sync | `check_config_sync.py` | Config.json actions and input schemas match code |
+| Fetch pattern | `check_fetch_pattern.py` | SDK 2.x `context.fetch()` responses are accessed via `.data` |
+| Unit tests | `run_tests.py` | Runs `test_*_unit.py` files with each integration's own dependencies |
 
 ### Auto-Fixing Common Issues
 
@@ -85,7 +90,7 @@ docs: update Netlify README with auth setup
 
 ## Pull Request Process
 
-1. **Run validation locally** — both `validate_integration.py` and `check_code.py`
+1. **Run validation locally** — `validate_integration.py`, `check_code.py`, and `run_tests.py` when unit tests exist
 2. **Update the main README.md** — add your integration to the integrations table
 3. **Use a conventional commit PR title** — CI enforces this
 4. **One integration per PR** — keep PRs focused
@@ -95,7 +100,8 @@ docs: update Netlify README with auth setup
 Your PR will automatically run:
 
 - **Structure Check** — validates folder structure and config.json
-- **Code Check** — syntax, imports, JSON, lint, format, security, dependency audit
+- **Code Check** — syntax, imports, JSON, lint, format, security, dependency audit, config sync, fetch pattern
+- **Tests** — runs `test_*_unit.py` files with pytest and coverage
 - **README Check** — verifies the main README.md was updated
 - **Version Check** — verifies config.json version was incremented, recommends bump level
 - **Conventional Commits** — validates PR title format

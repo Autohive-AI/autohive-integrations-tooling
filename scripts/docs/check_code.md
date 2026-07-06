@@ -354,8 +354,8 @@ Called by the `validate-integration.yml` workflow (on pull requests):
 
 ```yaml
 - name: Code Check
-  if: steps.changed.outputs.dirs != ''
-  run: python scripts/check_code.py --base-ref origin/${{ github.base_ref }} ${{ steps.changed.outputs.dirs }}
+  if: steps.detect.outputs.dirs != ''
+  run: python scripts/check_code.py --base-ref origin/${{ github.base_ref }} ${{ steps.detect.outputs.dirs }}
 ```
 
 Also exercised by the `self-test.yml` workflow against test examples in `tests/examples/` as a regression guard.

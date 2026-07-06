@@ -56,7 +56,7 @@ The structure check produces warnings (not errors) for these cases:
 
 | Warning | Explanation |
 |---------|-------------|
-| `Integration.load()` not found | The check looks for the literal string `Integration.load()`. Using `Integration.load(config_path)` triggers this warning — that's expected for multi-file integrations. |
+| `Integration.load(...)` not found | The check looks for `Integration.load` in Python files. Use `Integration.load()` for vendored single-file integrations, or `Integration.load(config_path)` / `Integration.load(Path(__file__).with_name("config.json"))` when an explicit config path is needed. |
 | Missing `__init__.py` | Optional for modular integrations with an `actions/` subdirectory |
 | Missing top-level `display_name` | Recommended but not required |
 | Missing `display_name` on actions | Recommended but not required |
