@@ -404,9 +404,9 @@ class IntegrationValidator:
             if item not in all_content:
                 self.add_warning(f"Integration may be missing import: {item} ({source})")
 
-        # Check for Integration.load() across all Python files
-        if 'Integration.load()' not in all_content:
-            self.add_warning("Integration should use 'Integration.load()' to load the integration")
+        # Check for Integration.load(...) across all Python files.
+        if 'Integration.load' not in all_content:
+            self.add_warning("Integration should use 'Integration.load(...)' to load the integration")
 
     def _check_unused_scopes(self):
         """Check for potentially unused scopes."""
