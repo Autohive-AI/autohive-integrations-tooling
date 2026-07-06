@@ -1,7 +1,9 @@
-from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult
 from typing import Dict, Any
+from pathlib import Path
 
-long_lines_integration = Integration.load()
+from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult
+
+long_lines_integration = Integration.load(Path(__file__).with_name("config.json"))
 
 BASE_URL = "https://api.example.com/v1"
 

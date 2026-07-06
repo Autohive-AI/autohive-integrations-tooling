@@ -62,7 +62,7 @@ flowchart TB
     end
 
     subgraph external["External Repos"]
-        EXT["uses: autohive-ai/autohive-integrations-tooling@1.0.0"]
+        EXT["uses: autohive-ai/autohive-integrations-tooling@v2"]
     end
 
     PR --> wf1
@@ -108,7 +108,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: autohive-ai/autohive-integrations-tooling@1.0.0
+      - uses: autohive-ai/autohive-integrations-tooling@v2
         with:
           base_ref: origin/${{ github.base_ref }}
 ```
@@ -139,6 +139,7 @@ jobs:
 | `tests_output` | Full output of the test runner |
 | `readme_output` | Full output of the README check |
 | `version_output` | Full output of the version check |
+| `comment_path` | Path to the rendered Markdown PR comment body, useful for fork-safe comment posting from a separate workflow |
 
 ### PR Comment
 
@@ -215,7 +216,7 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 - `config.json` - Integration configuration
 - `{name}.py` - Main implementation
 - `__init__.py` - Package init (minimal, optional for modular integrations with `actions/`)
-- `requirements.txt` - Dependencies (must include `autohive-integrations-sdk`)
+- `requirements.txt` - Dependencies (must include `autohive-integrations-sdk~=2.0.1` or later in the SDK 2.x line)
 - `README.md` - Documentation
 - `icon.png` or `icon.svg` - Integration icon (512x512 pixels)
 - `tests/` - Test folder with `__init__.py`, `context.py` or `conftest.py`, and `test_*.py`

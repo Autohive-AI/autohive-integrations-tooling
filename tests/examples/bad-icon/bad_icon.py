@@ -1,7 +1,9 @@
-from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult
 from typing import Dict, Any
+from pathlib import Path
 
-bad_icon = Integration.load()
+from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult
+
+bad_icon = Integration.load(Path(__file__).with_name("config.json"))
 
 
 @bad_icon.action("get_data")

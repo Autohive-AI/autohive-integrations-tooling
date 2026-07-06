@@ -103,6 +103,9 @@ jobs:
       - name: Test check_code.py — long lines pass with ruff.toml config
         run: python scripts/check_code.py tests/examples/long-lines-integration
 
+      - name: Test run_tests.py — SDK 2.0.1 unit fixtures
+        run: python scripts/run_tests.py tests/examples/good-integration tests/examples/modular-integration tests/examples/long-lines-integration tests/sample-api
+
       - name: Test check_code.py — ruff.toml applied from different working directory
         run: |
           cd /tmp

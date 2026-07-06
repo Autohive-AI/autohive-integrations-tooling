@@ -309,7 +309,7 @@ class IntegrationValidator:
     # Integrations pinning older versions will receive a deprecation warning.
     _MIN_SDK_VERSIONS = {
         1: (1, 1, 1),   # 1.x line: minimum 1.1.1
-        2: (2, 0, 0),   # 2.x line: minimum 2.0.0
+        2: (2, 0, 1),   # 2.x line: minimum 2.0.1
     }
 
     def _check_requirements_txt(self):
@@ -330,7 +330,7 @@ class IntegrationValidator:
         if not match:
             self.add_warning(
                 "requirements.txt should pin SDK version "
-                "(e.g., autohive-integrations-sdk~=2.0.0)"
+                "(e.g., autohive-integrations-sdk~=2.0.1)"
             )
             return
 
@@ -404,9 +404,9 @@ class IntegrationValidator:
             if item not in all_content:
                 self.add_warning(f"Integration may be missing import: {item} ({source})")
 
-        # Check for Integration.load() across all Python files
-        if 'Integration.load()' not in all_content:
-            self.add_warning("Integration should use 'Integration.load()' to load the integration")
+        # Check for Integration.load(...) across all Python files.
+        if 'Integration.load' not in all_content:
+            self.add_warning("Integration should use 'Integration.load(...)' to load the integration")
 
     def _check_unused_scopes(self):
         """Check for potentially unused scopes."""

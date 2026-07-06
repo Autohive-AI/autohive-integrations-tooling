@@ -1,7 +1,9 @@
-from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult
 from typing import Dict, Any
+from pathlib import Path
 
-sample_api = Integration.load()
+from autohive_integrations_sdk import Integration, ExecutionContext, ActionHandler, ActionResult
+
+sample_api = Integration.load(Path(__file__).with_name("config.json"))
 
 BASE_URL = "https://api.sample.com/v1"
 
@@ -35,7 +37,7 @@ class GetItemAction(ActionHandler):
 
     async def execute(self, inputs: Dict[str, Any], context: ExecutionContext):
         try:
-            item_id = inputs.get("item_id")
+            item_id = inputs["item_id"]
             headers = get_headers(context)
 
             response = await context.fetch(f"{BASE_URL}/items/{item_id}", method="GET", headers=headers)

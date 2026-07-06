@@ -27,10 +27,10 @@ python scripts/validate_integration.py my-integration
 Run this **first** — it catches structural problems before you waste time on code quality checks. It validates:
 
 - Folder name is lowercase
-- All required files exist (`config.json`, `__init__.py`, `requirements.txt`, `README.md`, `icon.png`/`icon.svg`)
+- All required files exist (`config.json`, `requirements.txt`, `README.md`, `icon.png`/`icon.svg`; `__init__.py` is required for single-file/package-style integrations and optional for modular integrations with `actions/`)
 - `config.json` has the required fields and valid schema
 - `__init__.py` is minimal (only import + `__all__`)
-- `requirements.txt` includes `autohive-integrations-sdk`
+- `requirements.txt` includes `autohive-integrations-sdk~=2.0.1` or later in the SDK 2.x line
 - `tests/` folder has `__init__.py`, `context.py` or `conftest.py`, and at least one `test_*.py`
 - Icon is exactly 512x512 pixels
 - OAuth scopes are actually used (heuristic)

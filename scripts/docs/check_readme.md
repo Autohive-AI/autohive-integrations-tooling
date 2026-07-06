@@ -122,8 +122,8 @@ Called by the `validate-integration.yml` workflow, **only during pull requests**
 
 ```yaml
 - name: README Check
-  if: steps.changed.outputs.dirs != ''
-  run: python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.changed.outputs.dirs }}
+  if: steps.detect.outputs.dirs != ''
+  run: python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.detect.outputs.dirs }}
 ```
 
 This check is skipped on direct pushes since there is no meaningful base ref to compare against for README changes.
