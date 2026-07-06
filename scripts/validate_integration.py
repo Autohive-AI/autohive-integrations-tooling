@@ -309,7 +309,7 @@ class IntegrationValidator:
     # Integrations pinning older versions will receive a deprecation warning.
     _MIN_SDK_VERSIONS = {
         1: (1, 1, 1),   # 1.x line: minimum 1.1.1
-        2: (2, 0, 0),   # 2.x line: minimum 2.0.0
+        2: (2, 0, 1),   # 2.x line: minimum 2.0.1
     }
 
     def _check_requirements_txt(self):
@@ -330,7 +330,7 @@ class IntegrationValidator:
         if not match:
             self.add_warning(
                 "requirements.txt should pin SDK version "
-                "(e.g., autohive-integrations-sdk~=2.0.0)"
+                "(e.g., autohive-integrations-sdk~=2.0.1)"
             )
             return
 

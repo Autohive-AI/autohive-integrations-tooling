@@ -79,7 +79,7 @@ flowchart TD
 Different integrations may pin different SDK versions. For example:
 
 - `bitly/requirements.txt` → `autohive-integrations-sdk~=1.0.2`
-- `notion/requirements.txt` → `autohive-integrations-sdk~=2.0.0`
+- `notion/requirements.txt` → `autohive-integrations-sdk~=2.0.1`
 
 The test runner handles this by installing dependencies and running pytest separately for each integration. The last `pip install` overwrites the previous SDK version, which is why pytest must run immediately after each install.
 
