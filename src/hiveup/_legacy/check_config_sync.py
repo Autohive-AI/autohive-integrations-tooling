@@ -1,0 +1,476 @@
+#!/usr/bin/env python3
+"""
+Config-Code Sync Checker
+
+Requires: Python 3.13+
+
+This script validates that config.json and the integration's Python code
+are in sync. It uses AST parsing to extract action decorators and input
+parameter access patterns from the code, then cross-references them
+against the config.json action definitions and input schemas.
+
+Checks performed:
+    1. Actions in config.json have matching @integration.action() decorators
+    2. Decorators in code have matching config.json entries
+    3. Input parameters accessed in code exist in the input_schema
+    4. Input schema properties are actually used in code
+    5. Required/optional consistency between schema and code access patterns
+
+How it determines required vs optional from code:
+    - inputs["key"]       -> required (raises KeyError if missing)
+    - inputs.get("key")   -> optional (returns None/default if missing)
+
+Usage:
+    python scripts/check_config_sync.py [--base-ref <ref>] <dir> [dir ...]
+
+Exit codes:
+    0 - Config and code are in sync (possibly with warnings)
+    1 - Mismatches found, or input drift found in a new integration when --base-ref is provided
+    2 - An error occurred (file not found, syntax error, etc.)
+
+Examples:
+    python scripts/check_config_sync.py my-integration
+    python scripts/check_config_sync.py --base-ref origin/main my-integration
+    python scripts/check_config_sync.py my-integration another-api
+"""
+
+import argparse
+import ast
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+def extract_actions_from_code(filepath: Path) -> dict[str, dict] | None:
+    """Parse a Python file and extract action definitions with their input params.
+
+    Finds all @xxx.action("name") decorated classes, locates their execute()
+    method, and extracts inputs["key"] and inputs.get("key") calls.
+
+    Args:
+        filepath: Path to the Python entry point file.
+
+    Returns:
+        Dict mapping action names to their parameter info:
+            {"action_name": {"direct": {"key1"}, "get": {"key2"}}}
+        Returns None on parse errors.
+    """
+    try:
+        source = filepath.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except (SyntaxError, OSError):
+        return None
+
+    actions: dict[str, dict] = {}
+    module_helpers = _extract_module_helper_input_accesses(tree)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+
+        # Find @xxx.action("name") decorators
+        action_name = None
+        for decorator in node.decorator_list:
+            if not isinstance(decorator, ast.Call):
+                continue
+            func = decorator.func
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "action"
+                and decorator.args
+                and isinstance(decorator.args[0], ast.Constant)
+                and isinstance(decorator.args[0].value, str)
+            ):
+                action_name = decorator.args[0].value
+                break
+
+        if action_name is None:
+            continue
+
+        # Find the execute method
+        direct_params: set[str] = set()
+        get_params: set[str] = set()
+
+        for item in node.body:
+            if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if item.name != "execute":
+                continue
+
+            # Walk the execute method for inputs access
+            method_accesses = _extract_named_input_accesses(item, {"inputs"})
+            direct_params.update(method_accesses["direct"])
+            get_params.update(method_accesses["get"])
+
+            # Include simple module-local helper calls that receive the action inputs.
+            # This intentionally avoids imported functions, method calls, dynamic calls,
+            # nested closures, and broader control-flow analysis.
+            for helper_accesses in _called_helper_accesses(item, module_helpers):
+                direct_params.update(helper_accesses["direct"])
+                get_params.update(helper_accesses["get"])
+
+            break  # Only check the first execute method
+
+        actions[action_name] = {"direct": direct_params, "get": get_params}
+
+    return actions
+
+
+def _extract_named_input_accesses(node: ast.AST, input_names: set[str]) -> dict[str, set[str]]:
+    """Extract literal dict-key accesses for any local input variable name."""
+    direct_params: set[str] = set()
+    get_params: set[str] = set()
+
+    for subnode in ast.walk(node):
+        # inputs["key"]
+        if (
+            isinstance(subnode, ast.Subscript)
+            and isinstance(subnode.value, ast.Name)
+            and subnode.value.id in input_names
+            and isinstance(subnode.slice, ast.Constant)
+            and isinstance(subnode.slice.value, str)
+        ):
+            direct_params.add(subnode.slice.value)
+
+        # inputs.get("key") or inputs.get("key", default)
+        if (
+            isinstance(subnode, ast.Call)
+            and isinstance(subnode.func, ast.Attribute)
+            and subnode.func.attr == "get"
+            and isinstance(subnode.func.value, ast.Name)
+            and subnode.func.value.id in input_names
+            and subnode.args
+            and isinstance(subnode.args[0], ast.Constant)
+            and isinstance(subnode.args[0].value, str)
+        ):
+            get_params.add(subnode.args[0].value)
+
+    return {"direct": direct_params, "get": get_params}
+
+
+def _extract_module_helper_input_accesses(tree: ast.Module) -> dict[str, dict]:
+    """Return per-parameter input accesses for module-level helper functions."""
+    helpers: dict[str, dict] = {}
+
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        params = [arg.arg for arg in node.args.args]
+        if not params:
+            continue
+
+        helpers[node.name] = {"params": params, "accesses": {}}
+        for param in params:
+            helpers[node.name]["accesses"][param] = _extract_named_input_accesses(node, {param})
+
+    return helpers
+
+
+def _called_helper_accesses(
+    node: ast.AST,
+    module_helpers: dict[str, dict],
+) -> list[dict[str, set[str]]]:
+    """Find module-local helper calls that pass the action's inputs object."""
+    accesses: list[dict[str, set[str]]] = []
+
+    for subnode in ast.walk(node):
+        if not isinstance(subnode, ast.Call):
+            continue
+        if not isinstance(subnode.func, ast.Name):
+            continue
+
+        helper = module_helpers.get(subnode.func.id)
+        if not helper:
+            continue
+
+        helper_accesses = helper["accesses"]
+        positional_params = helper["params"]
+        for index, arg in enumerate(subnode.args):
+            if not (isinstance(arg, ast.Name) and arg.id == "inputs"):
+                continue
+            if index >= len(positional_params):
+                continue
+            accesses.append(helper_accesses[positional_params[index]])
+
+        for keyword in subnode.keywords:
+            if keyword.arg is None:
+                continue
+            if not (isinstance(keyword.value, ast.Name) and keyword.value.id == "inputs"):
+                continue
+            if keyword.arg in helper_accesses:
+                accesses.append(helper_accesses[keyword.arg])
+
+    return accesses
+
+
+def extract_actions_from_config(config: dict) -> dict[str, dict]:
+    """Extract action definitions and schema info from config.json.
+
+    Args:
+        config: Parsed config.json dict.
+
+    Returns:
+        Dict mapping action names to their schema info:
+            {"action_name": {"properties": {"key1", "key2"}, "required": {"key1"}}}
+    """
+    actions: dict[str, dict] = {}
+    config_actions = config.get("actions", {})
+
+    for action_name, action_config in config_actions.items():
+        schema = action_config.get("input_schema", {})
+        properties = set(schema.get("properties", {}).keys())
+        required = set(schema.get("required", []))
+        actions[action_name] = {"properties": properties, "required": required}
+
+    return actions
+
+
+def _git_repo_root(path: Path) -> Path | None:
+    """Return the git repository root for path, if path is in a repository."""
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+
+    return Path(result.stdout.strip()).resolve()
+
+
+def _git_path(path: Path, repo_root: Path) -> str:
+    """Return a repository-relative path for git object lookups."""
+    return path.resolve().relative_to(repo_root).as_posix()
+
+
+def _is_new_integration(dir_path: Path, base_ref: str | None, repo_root: Path | None) -> bool:
+    """Return True when config.json did not exist at base_ref."""
+    if not base_ref or repo_root is None:
+        return False
+
+    config_ref = f"{base_ref}:{_git_path(dir_path / 'config.json', repo_root)}"
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "cat-file", "-e", config_ref],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return False
+
+    return not _is_renamed_integration_config(dir_path, base_ref, repo_root)
+
+
+def _is_renamed_integration_config(dir_path: Path, base_ref: str, repo_root: Path) -> bool:
+    """Return True when config.json was renamed into this path since base_ref."""
+    config_path = _git_path(dir_path / "config.json", repo_root)
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "diff",
+            "--name-status",
+            "--find-renames",
+            "--diff-filter=R",
+            base_ref,
+            "HEAD",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3 and parts[0].startswith("R") and parts[2] == config_path:
+            return True
+    return False
+
+
+def _verify_base_ref(base_ref: str, repo_root: Path) -> bool:
+    """Return True when base_ref resolves to a commit."""
+    verify = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "--verify", "--quiet", f"{base_ref}^{{commit}}"],
+        capture_output=True,
+        text=True,
+    )
+    return verify.returncode == 0
+
+
+def check_config_sync(dir_path: str, *, base_ref: str | None = None) -> int:
+    """Check that config.json and code are in sync for an integration directory.
+
+    Args:
+        dir_path: Path to the integration directory.
+        base_ref: Optional git ref used to decide whether this is a new integration.
+
+    Returns:
+        0 if in sync, 1 if mismatches found, 2 on errors.
+    """
+    path = Path(dir_path)
+    config_path = path / "config.json"
+
+    if not config_path.is_file():
+        print(f"No config.json found in {dir_path}")
+        return 2
+
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            config = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Error reading config.json: {e}")
+        return 2
+
+    entry_point = config.get("entry_point")
+    if not entry_point:
+        print("No entry_point defined in config.json")
+        return 2
+
+    entry_file = path / entry_point
+    if not entry_file.is_file():
+        print(f"Entry point not found: {entry_file}")
+        return 2
+
+    repo_root = None
+    if base_ref:
+        repo_root = _git_repo_root(path)
+        if repo_root is None or not _verify_base_ref(base_ref, repo_root):
+            print(f"❌ base-ref '{base_ref}' not resolvable — check fetch-depth or ref name", file=sys.stderr)
+            return 2
+
+    code_actions: dict[str, dict] = {}
+    for pyfile in sorted(path.rglob("*.py")):
+        file_actions = extract_actions_from_code(pyfile)
+        if file_actions is not None:
+            code_actions.update(file_actions)
+
+    config_actions = extract_actions_from_config(config)
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    is_new_integration = _is_new_integration(path, base_ref, repo_root)
+
+    # Check 1: Actions in config but not in code
+    for action_name in config_actions:
+        if action_name not in code_actions:
+            errors.append(
+                f"Action '{action_name}' defined in config.json but no "
+                f'@action("{action_name}") decorator found in code'
+            )
+
+    # Check 2: Actions in code but not in config
+    for action_name in code_actions:
+        if action_name not in config_actions:
+            errors.append(f"Action '{action_name}' has @action decorator in code but is not defined in config.json")
+
+    # Check 3-5: Input parameter cross-validation (only for actions in both)
+    for action_name in code_actions:
+        if action_name not in config_actions:
+            continue
+
+        code = code_actions[action_name]
+        schema = config_actions[action_name]
+
+        code_params = code["direct"] | code["get"]
+        schema_props = schema["properties"]
+        schema_required = schema["required"]
+
+        # Params in code but not in schema
+        for param in code_params - schema_props:
+            warnings.append(
+                f"Action '{action_name}': parameter '{param}' accessed in code but not defined in input_schema"
+            )
+
+        # Params in schema but not used in code
+        for param in schema_props - code_params:
+            warnings.append(
+                f"Action '{action_name}': parameter '{param}' defined in input_schema but never accessed in code"
+            )
+
+        # Required in schema but accessed with .get() in code (inconsistent)
+        for param in schema_required & code["get"] - code["direct"]:
+            warnings.append(
+                f"Action '{action_name}': parameter '{param}' is required "
+                f"in schema but accessed with inputs.get() (safe for missing)"
+            )
+
+        # Not required in schema but accessed with inputs["key"] (will crash)
+        # Skip if also accessed via .get() (likely guarded)
+        for param in code["direct"] - schema_required - code["get"]:
+            if param in schema_props:
+                warnings.append(
+                    f"Action '{action_name}': parameter '{param}' is optional "
+                    f'in schema but accessed with inputs["{param}"] (will '
+                    f"raise KeyError if not provided)"
+                )
+
+    # Report results
+    if errors:
+        for error in errors:
+            print(f"❌ {error}")
+    if is_new_integration and warnings:
+        print("❌ New integrations must keep config.json input_schema in sync with code")
+        for warning in warnings:
+            print(f"❌ {warning}")
+    elif warnings:
+        if base_ref:
+            print("⚠️  Existing integration has config-code input drift; treating as historic warning")
+        else:
+            print("⚠️  Config-code input drift detected; pass --base-ref to fail this for new integrations")
+        for warning in warnings:
+            print(f"⚠️  {warning}")
+
+    if errors or (is_new_integration and warnings):
+        return 1
+    return 0
+
+
+def main() -> int:
+    """Parse arguments and run config-code sync check."""
+    parser = argparse.ArgumentParser(
+        description="Check that config.json and code are in sync.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+Exit codes:
+  0  Config and code are in sync (possibly with warnings)
+  1  Mismatches found
+  2  An error occurred
+
+Examples:
+  %(prog)s my-integration
+  %(prog)s my-integration another-api
+""",
+    )
+    parser.add_argument(
+        "--base-ref",
+        help="Git ref to compare against; input drift fails only when config.json is new at this ref",
+    )
+    parser.add_argument(
+        "dirs",
+        nargs="+",
+        metavar="dir",
+        help="Integration directories to check",
+    )
+
+    args = parser.parse_args()
+
+    exit_code = 0
+    for dir_path in args.dirs:
+        print(f"\n{'=' * 60}")
+        print(f"Config sync: {dir_path}")
+        print(f"{'=' * 60}")
+
+        result = check_config_sync(dir_path, base_ref=args.base_ref)
+        if result == 0:
+            print("✅ Config and code are in sync")
+        if result > exit_code:
+            exit_code = result
+
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

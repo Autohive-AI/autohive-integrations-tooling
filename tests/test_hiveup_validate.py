@@ -1,0 +1,194 @@
+import sys
+import json
+import subprocess
+from pathlib import Path
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from hiveup.cli import _write_github_outputs, run_validation  # noqa: E402
+from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
+
+
+EXAMPLES = Path(__file__).resolve().parent / "examples"
+
+
+def test_validate_static_checks_pass_good_integration() -> None:
+    report = run_validation(
+        [EXAMPLES / "good-integration"],
+        only={"syntax", "imports", "json", "sync", "fetch"},
+    )
+
+    assert report.exit_code() == 0
+    assert {(result.check, result.status) for result in report.results} == {
+        ("syntax", "passed"),
+        ("imports", "passed"),
+        ("json", "passed"),
+        ("sync", "passed"),
+        ("fetch", "passed"),
+    }
+
+
+def test_validate_reports_config_sync_failures() -> None:
+    report = run_validation([EXAMPLES / "config-mismatch"], only={"sync"})
+
+    assert report.exit_code() == 1
+    assert report.results[0].check == "sync"
+    assert report.results[0].status == "failed"
+    assert any("defined in config.json" in message.message for message in report.results[0].messages)
+
+
+def test_validate_rejects_unknown_check() -> None:
+    report = run_validation([EXAMPLES / "good-integration"], only={"not-a-check"})
+
+    assert report.exit_code() == 2
+    assert report.results[0].check == "selection"
+    assert "Unknown check" in report.results[0].messages[0].message
+
+
+def test_explicit_missing_directory_is_processing_error(tmp_path: Path) -> None:
+    report = run_validation([tmp_path / "missing-integration"], only={"structure"})
+
+    assert report.exit_code() == 2
+    assert report.results[0].check == "discovery"
+    assert "does not exist" in report.results[0].messages[0].message
+
+
+def test_discovery_includes_candidate_dir_missing_config(tmp_path: Path) -> None:
+    candidate = tmp_path / "new-integration"
+    candidate.mkdir()
+    (candidate / "main.py").write_text("print('hello')\n", encoding="utf-8")
+
+    assert discover_integrations(tmp_path) == [candidate.resolve()]
+
+
+def test_changed_discovery_includes_new_top_level_dir_without_config(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    (tmp_path / "README.md").write_text("base\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=tmp_path, check=True)
+    base_ref = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    candidate = tmp_path / "new-integration"
+    candidate.mkdir()
+    (candidate / "main.py").write_text("print('hello')\n", encoding="utf-8")
+    subprocess.run(["git", "add", "new-integration/main.py"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "add integration"], cwd=tmp_path, check=True)
+
+    assert changed_integrations(tmp_path, base_ref) == [candidate.resolve()]
+
+
+def test_import_check_does_not_execute_local_package_init(tmp_path: Path) -> None:
+    integration = tmp_path / "side-effect-integration"
+    package = integration / "provider"
+    package.mkdir(parents=True)
+    marker = tmp_path / "import-side-effect"
+    (package / "__init__.py").write_text(
+        f"from pathlib import Path\nPath({str(marker)!r}).write_text('executed')\n",
+        encoding="utf-8",
+    )
+    (package / "client.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (integration / "main.py").write_text("import provider.client\n", encoding="utf-8")
+
+    report = run_validation([integration], only={"imports"})
+
+    assert report.exit_code() == 0
+    assert not marker.exists()
+
+
+def test_import_processing_error_uses_exit_code_2(tmp_path: Path) -> None:
+    integration = tmp_path / "bad-python"
+    integration.mkdir()
+    (integration / "main.py").write_text("import os\nif True print('bad')\n", encoding="utf-8")
+
+    report = run_validation([integration], only={"imports"})
+
+    assert report.exit_code() == 2
+    assert report.results[0].status == "error"
+
+
+def test_ruff_config_is_bundled_package_data() -> None:
+    from hiveup.checks.static import RUFF_CONFIG
+
+    assert RUFF_CONFIG.is_file()
+    assert RUFF_CONFIG.parent.name == "data"
+
+
+def test_validate_json_output_is_valid_json() -> None:
+    report = run_validation([EXAMPLES / "good-integration"], only={"json"})
+
+    encoded = json.dumps(report.to_dict())
+
+    assert json.loads(encoded)["exit_code"] == 0
+
+
+def test_git_based_checks_work_outside_repo_cwd(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    (repo / "README.md").write_text("# Integrations\n", encoding="utf-8")
+    integration = repo / "demo"
+    integration.mkdir()
+    (integration / "config.json").write_text(
+        json.dumps(
+            {
+                "name": "demo",
+                "version": "1.0.0",
+                "description": "Demo",
+                "entry_point": "demo.py",
+                "actions": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (integration / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=repo, check=True)
+    base_ref = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    config = json.loads((integration / "config.json").read_text(encoding="utf-8"))
+    config["version"] = "1.0.1"
+    (integration / "config.json").write_text(json.dumps(config), encoding="utf-8")
+    subprocess.run(["git", "add", "demo/config.json"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "bump"], cwd=repo, check=True)
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+
+    report = run_validation([integration], base_ref=base_ref, only={"readme", "version"})
+
+    assert report.exit_code() == 0
+    assert {(result.check, result.status) for result in report.results} == {
+        ("readme", "warning"),
+        ("version", "warning"),
+    }
+
+
+def test_github_outputs_include_legacy_action_keys(tmp_path: Path) -> None:
+    report = run_validation([EXAMPLES / "good-integration"], only={"structure", "json"})
+    output_file = tmp_path / "github-output.txt"
+
+    _write_github_outputs(output_file, report, comment_file=tmp_path / "comment.md", dirs="good-integration")
+    output = output_file.read_text(encoding="utf-8")
+
+    assert "directories<<EOF_directories\ngood-integration" in output
+    assert "structure_result<<EOF_structure_result\nsuccess" in output
+    assert "code_result<<EOF_code_result\nsuccess" in output
+    assert "comment_path<<EOF_comment_path" in output

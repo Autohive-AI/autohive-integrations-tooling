@@ -1,7 +1,9 @@
 ruff
 bandit
 pip-audit
+typer
+rich
 pytest>=9.0
 pytest-asyncio>=0.23
 pytest-cov>=4.0
-autohive-integrations-sdk
+autohive-integrations-sdk~=2.0

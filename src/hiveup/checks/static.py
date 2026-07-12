@@ -1,0 +1,444 @@
+"""Static validation checks for integrations."""
+
+from __future__ import annotations
+
+import contextlib
+import ast
+import io
+import importlib.resources
+import importlib.util
+import json
+import py_compile
+import subprocess
+import sys
+import time
+from collections.abc import Callable
+from pathlib import Path
+
+from hiveup.core.results import CheckMessage, CheckResult
+from hiveup._legacy.check_config_sync import check_config_sync
+from hiveup._legacy.check_fetch_pattern import check_fetch_pattern
+from hiveup._legacy.check_readme import check_readme
+from hiveup._legacy.check_version_bump import check_version_bump
+from hiveup._legacy.run_tests import find_unit_test_files, install_integration_deps, run_integration_tests
+from hiveup._legacy.validate_integration import IntegrationValidator
+
+CheckFn = Callable[[Path], CheckResult]
+BANDIT_EXCLUDE_DIRS = [".venv", "venv", "__pycache__", "site-packages", "dependencies"]
+RUFF_CONFIG = Path(str(importlib.resources.files("hiveup").joinpath("data/ruff.toml")))
+
+
+def available_checks(*, base_ref: str | None = None, fix: bool = False) -> dict[str, CheckFn]:
+    return {
+        "structure": check_structure,
+        "syntax": check_syntax,
+        "imports": check_imports_all,
+        "json": check_json,
+        "lint": lambda path: check_lint(path, fix=fix),
+        "format": lambda path: check_format(path, fix=fix),
+        "security": check_security,
+        "audit": check_audit,
+        "sync": lambda path: check_sync(path, base_ref=base_ref),
+        "fetch": check_fetch,
+        "tests": check_tests,
+        "readme": lambda path: check_readme_update(path, base_ref=base_ref),
+        "version": lambda path: check_version(path, base_ref=base_ref),
+    }
+
+
+def check_structure(path: Path) -> CheckResult:
+    start = time.perf_counter()
+    validator = IntegrationValidator(path)
+    try:
+        validator.validate()
+    except Exception as exc:  # pragma: no cover - defensive boundary for legacy validator
+        return _result("structure", path, "error", [CheckMessage("error", str(exc))], start)
+
+    messages = [CheckMessage("error", error.message) for error in validator.errors]
+    messages.extend(CheckMessage("warning", warning.message) for warning in validator.warnings)
+    return _result("structure", path, _status_from_messages(messages), messages, start)
+
+
+def check_syntax(path: Path) -> CheckResult:
+    start = time.perf_counter()
+    messages: list[CheckMessage] = []
+    for pyfile in _python_files(path):
+        try:
+            py_compile.compile(str(pyfile), doraise=True)
+        except py_compile.PyCompileError as exc:
+            messages.append(
+                CheckMessage(
+                    "error",
+                    exc.msg,
+                    file=_relative(pyfile),
+                    fix_hint="Run: python -m py_compile <file.py>",
+                )
+            )
+    return _result("syntax", path, _status_from_messages(messages), messages, start)
+
+
+def check_imports_all(path: Path) -> CheckResult:
+    start = time.perf_counter()
+    messages: list[CheckMessage] = []
+    processing_error = False
+
+    install_result = _install_requirements(path)
+    if install_result:
+        return _result("imports", path, "error", [install_result], start)
+
+    for pyfile in _python_files(path):
+        try:
+            messages.extend(_check_file_imports(pyfile, path))
+        except (OSError, SyntaxError) as exc:
+            processing_error = True
+            messages.append(CheckMessage("error", str(exc), file=_relative(pyfile)))
+
+    status = "error" if processing_error else _status_from_messages(messages)
+    return _result("imports", path, status, messages, start)
+
+
+def check_json(path: Path) -> CheckResult:
+    start = time.perf_counter()
+    messages: list[CheckMessage] = []
+    for jsonfile in sorted(path.rglob("*.json")):
+        if _is_ignored(jsonfile):
+            continue
+        try:
+            with jsonfile.open(encoding="utf-8") as file:
+                json.load(file)
+        except (json.JSONDecodeError, OSError) as exc:
+            messages.append(
+                CheckMessage(
+                    "error",
+                    str(exc),
+                    file=_relative(jsonfile),
+                    fix_hint="Check for missing commas, quotes, or brackets.",
+                )
+            )
+    return _result("json", path, _status_from_messages(messages), messages, start)
+
+
+def check_sync(path: Path, *, base_ref: str | None = None) -> CheckResult:
+    repo_root = _git_repo_root(path) if base_ref else None
+    return _legacy_check("sync", path, lambda: check_config_sync(str(path), base_ref=base_ref), cwd=repo_root)
+
+
+def check_fetch(path: Path) -> CheckResult:
+    return _legacy_check("fetch", path, lambda: check_fetch_pattern(str(path)))
+
+
+def check_lint(path: Path, *, fix: bool = False) -> CheckResult:
+    command = [sys.executable, "-m", "ruff", "check", "--config", str(RUFF_CONFIG)]
+    if fix:
+        command.append("--fix")
+    command.append(str(path))
+    return _subprocess_check(
+        "lint",
+        path,
+        command,
+        fix_hint="Run: hiveup validate --fix" if not fix else None,
+    )
+
+
+def check_format(path: Path, *, fix: bool = False) -> CheckResult:
+    command = [sys.executable, "-m", "ruff", "format", "--config", str(RUFF_CONFIG)]
+    if not fix:
+        command.append("--check")
+    command.append(str(path))
+    return _subprocess_check(
+        "format",
+        path,
+        command,
+        fix_hint="Run: hiveup validate --fix" if not fix else None,
+    )
+
+
+def check_security(path: Path) -> CheckResult:
+    excludes = ",".join(str(path / directory) for directory in BANDIT_EXCLUDE_DIRS)
+    return _subprocess_check(
+        "security",
+        path,
+        [sys.executable, "-m", "bandit", "-r", str(path), "-x", excludes, "-s", "B101", "-q"],
+        fix_hint="Review flagged code for security risks.",
+    )
+
+
+def check_audit(path: Path) -> CheckResult:
+    requirements = path / "requirements.txt"
+    if not requirements.is_file():
+        return CheckResult(check="audit", integration=path.name, status="skipped")
+    return _subprocess_check(
+        "audit",
+        path,
+        [sys.executable, "-m", "pip_audit", "-r", str(requirements)],
+        fix_hint="Update affected packages in requirements.txt.",
+    )
+
+
+def check_tests(path: Path) -> CheckResult:
+    start = time.perf_counter()
+    test_files = find_unit_test_files(path)
+    if not test_files:
+        return _result(
+            "tests",
+            path,
+            "warning",
+            [CheckMessage("warning", "No unit tests found (expected tests/test_*_unit.py)")],
+            start,
+        )
+
+    ok, install_error = install_integration_deps(path)
+    if not ok:
+        return _result(
+            "tests",
+            path,
+            "error",
+            [CheckMessage("error", install_error or "Dependency installation failed", fix_hint="Fix requirements.txt")],
+            start,
+            raw_output=install_error,
+        )
+
+    exit_code, output = run_integration_tests(path, test_files)
+    if exit_code == 0:
+        return _result("tests", path, "passed", [], start, raw_output=output)
+
+    return _result(
+        "tests",
+        path,
+        "failed",
+        [CheckMessage("error", "Unit tests failed", fix_hint="Run: hiveup test <dir>")],
+        start,
+        raw_output=output,
+    )
+
+
+def check_readme_update(path: Path, *, base_ref: str | None = None) -> CheckResult:
+    if not base_ref:
+        return CheckResult(
+            check="readme",
+            integration=path.name,
+            status="skipped",
+            messages=[CheckMessage("info", "README check requires --base-ref")],
+        )
+    repo_root = _git_repo_root(path)
+    dir_name = _git_relative_or_name(path, repo_root=repo_root)
+    return _legacy_check("readme", path, lambda: check_readme(base_ref, [dir_name]), cwd=repo_root)
+
+
+def check_version(path: Path, *, base_ref: str | None = None) -> CheckResult:
+    if not base_ref:
+        return CheckResult(
+            check="version",
+            integration=path.name,
+            status="skipped",
+            messages=[CheckMessage("info", "Version check requires --base-ref")],
+        )
+    repo_root = _git_repo_root(path)
+    dir_name = _git_relative_or_name(path, repo_root=repo_root)
+    return _legacy_check("version", path, lambda: check_version_bump(base_ref, [dir_name]), cwd=repo_root)
+
+
+def _legacy_check(check: str, path: Path, run: Callable[[], int], *, cwd: Path | None = None) -> CheckResult:
+    start = time.perf_counter()
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    cwd_context = contextlib.chdir(cwd) if cwd else contextlib.nullcontext()
+    with cwd_context, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+        code = run()
+
+    output = (stdout.getvalue() + stderr.getvalue()).strip()
+    messages: list[CheckMessage] = []
+    if output:
+        severity = "error" if code else "warning"
+        for line in output.splitlines():
+            if line.strip():
+                messages.append(CheckMessage(severity, line.strip()))
+
+    if code == 0:
+        status = "warning" if messages else "passed"
+    elif code == 1:
+        status = "failed"
+    else:
+        status = "error"
+    return _result(check, path, status, messages, start, raw_output=output)
+
+
+def _subprocess_check(
+    check: str,
+    path: Path,
+    command: list[str],
+    *,
+    fix_hint: str | None = None,
+) -> CheckResult:
+    start = time.perf_counter()
+    result = subprocess.run(command, capture_output=True, text=True)
+    output = (result.stdout + result.stderr).strip()
+    if result.returncode == 0:
+        return _result(check, path, "passed", [], start, raw_output=output)
+
+    message = output or f"{check} check failed"
+    status = "failed" if result.returncode == 1 else "error"
+    return _result(
+        check,
+        path,
+        status,
+        [CheckMessage("error", message, fix_hint=fix_hint)],
+        start,
+        raw_output=output,
+    )
+
+
+def _install_requirements(path: Path) -> CheckMessage | None:
+    requirements = path / "requirements.txt"
+    if not requirements.is_file():
+        return None
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-r", str(requirements), "-q"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return None
+
+    output = (result.stderr or result.stdout).strip() or "pip install failed"
+    return CheckMessage(
+        "error",
+        f"Could not install requirements.txt: {output}",
+        file=_relative(requirements),
+        fix_hint="Fix requirements.txt or install dependencies before running import checks.",
+    )
+
+
+def _check_file_imports(pyfile: Path, integration_path: Path) -> list[CheckMessage]:
+    source = pyfile.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(pyfile))
+    messages: list[CheckMessage] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                module = alias.name
+                if not _is_import_available(module, integration_path):
+                    messages.append(_missing_import_message(module, pyfile, node.lineno))
+        elif isinstance(node, ast.ImportFrom):
+            if node.level > 0:
+                module = node.module or ""
+                names = [alias.name for alias in node.names]
+                if not _is_relative_import_available(pyfile, node.level, module, names):
+                    label = "." * node.level + module
+                    messages.append(_missing_import_message(label, pyfile, node.lineno))
+            elif node.module and not _is_import_available(node.module, integration_path):
+                messages.append(_missing_import_message(node.module, pyfile, node.lineno))
+
+    return messages
+
+
+def _missing_import_message(module: str, pyfile: Path, line: int) -> CheckMessage:
+    return CheckMessage(
+        "error",
+        f"Missing module: {module}",
+        file=_relative(pyfile),
+        line=line,
+        fix_hint="Install missing packages in requirements.txt or fix the import path.",
+    )
+
+
+def _is_import_available(module_name: str, integration_path: Path) -> bool:
+    if _local_module_exists(module_name, integration_path):
+        return True
+
+    # Avoid importlib.util.find_spec("pkg.sub") because it can import pkg.__init__.
+    top_level = module_name.split(".", 1)[0]
+    try:
+        return importlib.util.find_spec(top_level) is not None
+    except (ImportError, ModuleNotFoundError, ValueError, AttributeError):
+        return False
+
+
+def _local_module_exists(module_name: str, integration_path: Path) -> bool:
+    parts = module_name.split(".")
+    roots = [integration_path, integration_path.parent]
+    for root in roots:
+        candidate = root.joinpath(*parts)
+        if _module_path_exists(candidate):
+            return True
+    return False
+
+
+def _module_path_exists(path: Path) -> bool:
+    return path.with_suffix(".py").is_file() or (path.is_dir() and (path / "__init__.py").is_file())
+
+
+def _is_relative_import_available(pyfile: Path, level: int, module: str, names: list[str]) -> bool:
+    base = pyfile.parent
+    for _ in range(level - 1):
+        base = base.parent
+
+    if module:
+        target = base.joinpath(*module.split("."))
+        return _module_path_exists(target)
+
+    return all(_module_path_exists(base / name) for name in names if name != "*")
+
+
+def _python_files(path: Path) -> list[Path]:
+    return [pyfile for pyfile in sorted(path.rglob("*.py")) if not _is_ignored(pyfile)]
+
+
+def _is_ignored(path: Path) -> bool:
+    ignored_parts = {"__pycache__", ".venv", "venv", "dependencies", ".hiveup"}
+    return bool(ignored_parts.intersection(path.parts))
+
+
+def _status_from_messages(messages: list[CheckMessage]) -> str:
+    if any(message.severity == "error" for message in messages):
+        return "failed"
+    if any(message.severity == "warning" for message in messages):
+        return "warning"
+    return "passed"
+
+
+def _result(
+    check: str,
+    path: Path,
+    status: str,
+    messages: list[CheckMessage],
+    start: float,
+    *,
+    raw_output: str = "",
+) -> CheckResult:
+    return CheckResult(
+        check=check,
+        integration=path.name,
+        status=status,  # type: ignore[arg-type]
+        messages=messages,
+        duration_s=time.perf_counter() - start,
+        raw_output=raw_output,
+    )
+
+
+def _relative(path: Path) -> str:
+    with contextlib.suppress(ValueError):
+        return path.resolve().relative_to(Path.cwd()).as_posix()
+    return path.as_posix()
+
+
+def _git_repo_root(path: Path) -> Path | None:
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return Path(result.stdout.strip()).resolve()
+
+
+def _git_relative_or_name(path: Path, *, repo_root: Path | None = None) -> str:
+    if repo_root:
+        with contextlib.suppress(ValueError):
+            return path.resolve().relative_to(repo_root).as_posix()
+    with contextlib.suppress(ValueError):
+        return path.resolve().relative_to(Path.cwd()).as_posix()
+    return path.name
