@@ -369,7 +369,7 @@ jobs:
             integration: input-drift
             outcome: failure
             structure: failure
-            code: success
+            code: failure
             failure_text: requirements.txt
           - name: legacy Netlify fixture
             directory: tests/examples/netlify
