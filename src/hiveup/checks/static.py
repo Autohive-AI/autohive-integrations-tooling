@@ -6,7 +6,6 @@ import contextlib
 import ast
 import io
 import importlib.resources
-import importlib.util
 import json
 import py_compile
 import subprocess
@@ -21,6 +20,7 @@ from hiveup.checks.readme import check_readme
 from hiveup.checks.structure import IntegrationValidator
 from hiveup.checks.tests import find_unit_test_files, install_integration_deps, run_integration_tests
 from hiveup.checks.version import check_version_bump
+from hiveup.core.environment import EnvironmentBuildError, module_available, prepare_environment
 from hiveup.core.results import CheckMessage, CheckResult
 
 CheckFn = Callable[[Path], CheckResult]
@@ -82,14 +82,29 @@ def check_imports_all(path: Path) -> CheckResult:
     messages: list[CheckMessage] = []
     processing_error = False
 
-    install_result = _install_requirements(path)
-    if install_result:
-        return _result("imports", path, "error", [install_result], start)
+    try:
+        environment = prepare_environment(path, include_test_tools=True)
+    except EnvironmentBuildError as exc:
+        message = CheckMessage(
+            "error",
+            f"Could not prepare isolated environment: {exc}",
+            file=_relative(path / "requirements.txt"),
+            fix_hint="Fix requirements.txt or verify package index access.",
+        )
+        return _result("imports", path, "error", [message], start)
+
+    availability: dict[str, bool] = {}
+
+    def dependency_available(module_name: str) -> bool:
+        top_level = module_name.split(".", 1)[0]
+        if top_level not in availability:
+            availability[top_level] = module_available(environment, top_level)
+        return availability[top_level]
 
     for pyfile in _python_files(path):
         try:
-            messages.extend(_check_file_imports(pyfile, path))
-        except (OSError, SyntaxError) as exc:
+            messages.extend(_check_file_imports(pyfile, path, dependency_available=dependency_available))
+        except (EnvironmentBuildError, OSError, SyntaxError) as exc:
             processing_error = True
             messages.append(CheckMessage("error", str(exc), file=_relative(pyfile)))
 
@@ -288,29 +303,12 @@ def _subprocess_check(
     )
 
 
-def _install_requirements(path: Path) -> CheckMessage | None:
-    requirements = path / "requirements.txt"
-    if not requirements.is_file():
-        return None
-
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-r", str(requirements), "-q"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        return None
-
-    output = (result.stderr or result.stdout).strip() or "pip install failed"
-    return CheckMessage(
-        "error",
-        f"Could not install requirements.txt: {output}",
-        file=_relative(requirements),
-        fix_hint="Fix requirements.txt or install dependencies before running import checks.",
-    )
-
-
-def _check_file_imports(pyfile: Path, integration_path: Path) -> list[CheckMessage]:
+def _check_file_imports(
+    pyfile: Path,
+    integration_path: Path,
+    *,
+    dependency_available: Callable[[str], bool],
+) -> list[CheckMessage]:
     source = pyfile.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(pyfile))
     messages: list[CheckMessage] = []
@@ -319,7 +317,7 @@ def _check_file_imports(pyfile: Path, integration_path: Path) -> list[CheckMessa
         if isinstance(node, ast.Import):
             for alias in node.names:
                 module = alias.name
-                if not _is_import_available(module, integration_path):
+                if not _is_import_available(module, integration_path, dependency_available=dependency_available):
                     messages.append(_missing_import_message(module, pyfile, node.lineno))
         elif isinstance(node, ast.ImportFrom):
             if node.level > 0:
@@ -328,7 +326,11 @@ def _check_file_imports(pyfile: Path, integration_path: Path) -> list[CheckMessa
                 if not _is_relative_import_available(pyfile, node.level, module, names):
                     label = "." * node.level + module
                     messages.append(_missing_import_message(label, pyfile, node.lineno))
-            elif node.module and not _is_import_available(node.module, integration_path):
+            elif node.module and not _is_import_available(
+                node.module,
+                integration_path,
+                dependency_available=dependency_available,
+            ):
                 messages.append(_missing_import_message(node.module, pyfile, node.lineno))
 
     return messages
@@ -344,16 +346,15 @@ def _missing_import_message(module: str, pyfile: Path, line: int) -> CheckMessag
     )
 
 
-def _is_import_available(module_name: str, integration_path: Path) -> bool:
+def _is_import_available(
+    module_name: str,
+    integration_path: Path,
+    *,
+    dependency_available: Callable[[str], bool],
+) -> bool:
     if _local_module_exists(module_name, integration_path):
         return True
-
-    # Avoid importlib.util.find_spec("pkg.sub") because it can import pkg.__init__.
-    top_level = module_name.split(".", 1)[0]
-    try:
-        return importlib.util.find_spec(top_level) is not None
-    except (ImportError, ModuleNotFoundError, ValueError, AttributeError):
-        return False
+    return dependency_available(module_name)
 
 
 def _local_module_exists(module_name: str, integration_path: Path) -> bool:

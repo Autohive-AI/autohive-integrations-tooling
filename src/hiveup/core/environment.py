@@ -117,6 +117,25 @@ def environment_cache_root() -> Path:
     return base / "hiveup" / "envs"
 
 
+def module_available(environment: IntegrationEnvironment, module_name: str) -> bool:
+    """Check for a top-level module using the isolated interpreter."""
+
+    script = (
+        "import importlib.util, sys; "
+        "name = sys.argv[1]; "
+        "sys.exit(0 if importlib.util.find_spec(name) is not None else 1)"
+    )
+    result = subprocess.run(
+        [str(environment.python), "-c", script, module_name],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode in {0, 1}:
+        return result.returncode == 0
+    output = (result.stderr or result.stdout).strip() or f"Could not inspect module '{module_name}'"
+    raise EnvironmentBuildError(output)
+
+
 def _create_environment(path: Path) -> None:
     uv = shutil.which("uv")
     if uv:

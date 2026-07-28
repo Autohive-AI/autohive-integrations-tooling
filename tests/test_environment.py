@@ -1,8 +1,10 @@
 import os
+import sys
 import time
 from pathlib import Path
 
 import hiveup.core.environment as environment
+from hiveup.checks import static
 
 
 def test_environment_key_tracks_requirements_and_test_tools(tmp_path: Path) -> None:
@@ -66,3 +68,41 @@ def test_prepare_environment_removes_expired_cache_entries(tmp_path: Path, monke
     environment.prepare_environment(integration)
 
     assert not expired.exists()
+
+
+def test_import_check_resolves_dependencies_with_isolated_environment(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "main.py").write_text("import isolated_dependency\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    prepared = []
+
+    def prepare(path: Path, *, include_test_tools: bool):
+        prepared.append((path, include_test_tools))
+        return isolated
+
+    monkeypatch.setattr(static, "prepare_environment", prepare)
+    monkeypatch.setattr(
+        static,
+        "module_available",
+        lambda selected, name: selected == isolated and name == "isolated_dependency",
+    )
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "passed"
+    assert prepared == [(integration, True)]
+
+
+def test_import_check_does_not_use_cli_environment_for_dependencies(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "main.py").write_text("import pytest\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(static, "module_available", lambda selected, name: False)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "failed"
+    assert report.messages[0].message == "Missing module: pytest"
