@@ -3,16 +3,22 @@ name: Self Test
 on:
   push:
     paths:
+      - 'action.yml'
+      - 'pyproject.toml'
+      - 'requirements-dev.txt'
       - 'scripts/**'
-      - 'src/hiveup/checks/**'
+      - 'src/hiveup/**'
       - 'tests/**'
       - '.github/workflows/self-test.yml'
 
   pull_request:
     branches: [master, main]
     paths:
+      - 'action.yml'
+      - 'pyproject.toml'
+      - 'requirements-dev.txt'
       - 'scripts/**'
-      - 'src/hiveup/checks/**'
+      - 'src/hiveup/**'
       - 'tests/**'
       - '.github/workflows/self-test.yml'
 
@@ -304,3 +310,202 @@ jobs:
             exit 1
           fi
           echo "✅ Missing argument correctly rejected"
+
+  test-action-fixtures:
+    runs-on: ubuntu-latest
+    name: Test Action — ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: good integration
+            directory: tests/examples/good-integration
+            integration: good-integration
+            outcome: success
+            structure: success
+            code: success
+          - name: modular integration
+            directory: tests/examples/modular-integration
+            integration: modular-integration
+            outcome: success
+            structure: success
+            code: success
+          - name: long-lines integration
+            directory: tests/examples/long-lines-integration
+            integration: long-lines-integration
+            outcome: success
+            structure: success
+            code: success
+          - name: sample API
+            directory: tests/sample-api
+            integration: sample-api
+            outcome: success
+            structure: success
+            code: success
+          - name: bad icon
+            directory: tests/examples/bad-icon
+            integration: bad-icon
+            outcome: failure
+            structure: failure
+            code: success
+            failure_text: 512x512
+          - name: invalid integration
+            directory: tests/examples/Bad-Integration
+            integration: Bad-Integration
+            outcome: failure
+            structure: failure
+            code: failure
+            failure_text: invalid syntax
+          - name: config mismatch
+            directory: tests/examples/config-mismatch
+            integration: config-mismatch
+            outcome: failure
+            structure: failure
+            code: failure
+            failure_text: missing_in_code
+          - name: input drift fixture
+            directory: tests/examples/input-drift
+            integration: input-drift
+            outcome: failure
+            structure: failure
+            code: success
+            failure_text: requirements.txt
+          - name: legacy Netlify fixture
+            directory: tests/examples/netlify
+            integration: netlify
+            outcome: failure
+            structure: success
+            code: failure
+            failure_text: 'Missing module: context'
+          - name: deprecated SDK fixture
+            directory: tests/examples/sdk-deprecated-pin
+            integration: sdk-deprecated-pin
+            outcome: failure
+            structure: success
+            code: failure
+            failure_text: 'Missing module: context'
+          - name: old fetch pattern
+            directory: tests/examples/sdk-v2-old-fetch-pattern
+            integration: sdk-v2-old-fetch-pattern
+            outcome: failure
+            structure: success
+            code: failure
+            failure_text: response.data
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run local composite Action
+        id: validate
+        continue-on-error: true
+        uses: ./
+        with:
+          directories: ${{ matrix.directory }}
+          post_comment: 'false'
+
+      - name: Verify Action result and outputs
+        if: always()
+        shell: bash
+        env:
+          ACTUAL_OUTCOME: ${{ steps.validate.outcome }}
+          EXPECTED_OUTCOME: ${{ matrix.outcome }}
+          EXPECTED_INTEGRATION: ${{ matrix.integration }}
+          EXPECTED_STRUCTURE: ${{ matrix.structure }}
+          EXPECTED_CODE: ${{ matrix.code }}
+          EXPECTED_FAILURE_TEXT: ${{ matrix.failure_text }}
+          DIRECTORIES: ${{ steps.validate.outputs.directories }}
+          STRUCTURE_RESULT: ${{ steps.validate.outputs.structure_result }}
+          CODE_RESULT: ${{ steps.validate.outputs.code_result }}
+          TESTS_RESULT: ${{ steps.validate.outputs.tests_result }}
+          README_RESULT: ${{ steps.validate.outputs.readme_result }}
+          VERSION_RESULT: ${{ steps.validate.outputs.version_result }}
+          STRUCTURE_OUTPUT: ${{ steps.validate.outputs.structure_output }}
+          CODE_OUTPUT: ${{ steps.validate.outputs.code_output }}
+          TESTS_OUTPUT: ${{ steps.validate.outputs.tests_output }}
+          COMMENT_PATH: ${{ steps.validate.outputs.comment_path }}
+        run: |
+          set -euo pipefail
+
+          [ "$ACTUAL_OUTCOME" = "$EXPECTED_OUTCOME" ] || {
+            echo "Expected Action outcome '$EXPECTED_OUTCOME', got '$ACTUAL_OUTCOME'"
+            exit 1
+          }
+          [ "$DIRECTORIES" = "$EXPECTED_INTEGRATION" ] || {
+            echo "Expected directories output '$EXPECTED_INTEGRATION', got '$DIRECTORIES'"
+            exit 1
+          }
+          [ "$STRUCTURE_RESULT" = "$EXPECTED_STRUCTURE" ] || {
+            echo "Expected structure result '$EXPECTED_STRUCTURE', got '$STRUCTURE_RESULT'"
+            exit 1
+          }
+          [ "$CODE_RESULT" = "$EXPECTED_CODE" ] || {
+            echo "Expected code result '$EXPECTED_CODE', got '$CODE_RESULT'"
+            exit 1
+          }
+          [ "$TESTS_RESULT" = success ]
+          [ "$README_RESULT" = success ]
+          [ "$VERSION_RESULT" = success ]
+          [ -f "$COMMENT_PATH" ]
+          grep -Fq "[$EXPECTED_INTEGRATION]" "$COMMENT_PATH"
+
+          if [ -n "$EXPECTED_FAILURE_TEXT" ]; then
+            grep -Fq "$EXPECTED_FAILURE_TEXT" \
+              <<< "$STRUCTURE_OUTPUT"$'\n'"$CODE_OUTPUT"$'\n'"$TESTS_OUTPUT"
+          fi
+
+  test-action-changed-discovery:
+    runs-on: ubuntu-latest
+    name: Test Action — changed-directory discovery
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Commit a new valid integration fixture
+        id: fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.email test@example.com
+          git config user.name Test
+          echo "base_ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          cp -R tests/examples/good-integration action-fixture
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          config_path = Path("action-fixture/config.json")
+          config = json.loads(config_path.read_text(encoding="utf-8"))
+          config["name"] = "action-fixture"
+          config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+          PY
+          printf '\n- `action-fixture` — composite Action test fixture\n' >> README.md
+          git add action-fixture README.md
+          git commit -m "test: add action discovery fixture"
+
+      - name: Run local composite Action with a base ref
+        id: validate
+        uses: ./
+        with:
+          base_ref: ${{ steps.fixture.outputs.base_ref }}
+          post_comment: 'false'
+
+      - name: Verify discovered directory and outputs
+        shell: bash
+        env:
+          DIRECTORIES: ${{ steps.validate.outputs.directories }}
+          STRUCTURE_RESULT: ${{ steps.validate.outputs.structure_result }}
+          CODE_RESULT: ${{ steps.validate.outputs.code_result }}
+          TESTS_RESULT: ${{ steps.validate.outputs.tests_result }}
+          README_RESULT: ${{ steps.validate.outputs.readme_result }}
+          VERSION_RESULT: ${{ steps.validate.outputs.version_result }}
+          COMMENT_PATH: ${{ steps.validate.outputs.comment_path }}
+        run: |
+          set -euo pipefail
+          [ "$DIRECTORIES" = action-fixture ]
+          [ "$STRUCTURE_RESULT" = success ]
+          [ "$CODE_RESULT" = success ]
+          [ "$TESTS_RESULT" = success ]
+          [ "$README_RESULT" = success ]
+          [ "$VERSION_RESULT" = success ]
+          [ -f "$COMMENT_PATH" ]
+          grep -Fq '[action-fixture]' "$COMMENT_PATH"

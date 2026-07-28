@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from hiveup.cli import _write_github_outputs, run_validation  # noqa: E402
+from hiveup.cli import _emit_github_annotations, _write_github_outputs, run_validation  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
 
 
@@ -192,3 +192,12 @@ def test_github_outputs_include_legacy_action_keys(tmp_path: Path) -> None:
     assert "structure_result<<EOF_structure_result\nsuccess" in output
     assert "code_result<<EOF_code_result\nsuccess" in output
     assert "comment_path<<EOF_comment_path" in output
+
+
+def test_github_annotations_include_validation_failures(capsys) -> None:
+    report = run_validation([EXAMPLES / "bad-icon"], only={"structure"})
+
+    _emit_github_annotations(report)
+
+    output = capsys.readouterr().out
+    assert "::error ::icon.png must be 512x512 pixels" in output
