@@ -22,6 +22,10 @@ inputs:
     description: Post a sticky PR comment with results (requires pull-requests write permission)
     required: false
     default: 'true'
+  comment_header:
+    description: Header used to identify the sticky PR comment
+    required: false
+    default: validation-results
 
 outputs:
   directories:
@@ -110,14 +114,14 @@ runs:
       if: always() && steps.ci.outputs.directories == '' && inputs.post_comment == 'true'
       uses: marocchino/sticky-pull-request-comment@v2
       with:
-        header: validation-results
+        header: ${{ inputs.comment_header }}
         delete: true
 
     - name: Post PR comment
       if: always() && steps.ci.outputs.directories != '' && inputs.post_comment == 'true'
       uses: marocchino/sticky-pull-request-comment@v2
       with:
-        header: validation-results
+        header: ${{ inputs.comment_header }}
         path: ${{ steps.ci.outputs.comment_path }}
 
     - name: Fail if any check failed

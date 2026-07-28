@@ -510,3 +510,90 @@ jobs:
           [ "$VERSION_RESULT" = success ]
           [ -f "$COMMENT_PATH" ]
           grep -Fq '[action-fixture]' "$COMMENT_PATH"
+
+  test-action-comment-lifecycle:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    name: Test Action — sticky comment lifecycle
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      COMMENT_HEADER: hiveup-action-self-test-${{ github.run_id }}
+      COMMENT_MARKER: '<!-- Sticky Pull Request Commenthiveup-action-self-test-${{ github.run_id }} -->'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create sticky comment
+        uses: ./
+        with:
+          directories: tests/examples/good-integration
+          post_comment: 'true'
+          comment_header: ${{ env.COMMENT_HEADER }}
+
+      - name: Verify sticky comment creation
+        id: created
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          COMMENTS=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" | jq -s 'add')
+          COMMENT_COUNT=$(jq --arg marker "$COMMENT_MARKER" '[.[] | select(.body | contains($marker))] | length' <<< "$COMMENTS")
+          [ "$COMMENT_COUNT" -eq 1 ]
+          COMMENT_ID=$(jq -r --arg marker "$COMMENT_MARKER" '.[] | select(.body | contains($marker)) | .id' <<< "$COMMENTS")
+          echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
+          COMMENT_BODY=$(gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" --jq .body)
+          grep -Fq '[good-integration]' <<< "$COMMENT_BODY"
+
+      - name: Replace sticky comment
+        uses: ./
+        with:
+          directories: tests/examples/modular-integration
+          post_comment: 'true'
+          comment_header: ${{ env.COMMENT_HEADER }}
+
+      - name: Verify sticky comment replacement
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CREATED_COMMENT_ID: ${{ steps.created.outputs.comment_id }}
+        run: |
+          set -euo pipefail
+          COMMENTS=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" | jq -s 'add')
+          COMMENT_COUNT=$(jq --arg marker "$COMMENT_MARKER" '[.[] | select(.body | contains($marker))] | length' <<< "$COMMENTS")
+          [ "$COMMENT_COUNT" -eq 1 ]
+          COMMENT_ID=$(jq -r --arg marker "$COMMENT_MARKER" '.[] | select(.body | contains($marker)) | .id' <<< "$COMMENTS")
+          [ "$COMMENT_ID" = "$CREATED_COMMENT_ID" ]
+          COMMENT_BODY=$(gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" --jq .body)
+          grep -Fq '[modular-integration]' <<< "$COMMENT_BODY"
+          if grep -Fq '[good-integration]' <<< "$COMMENT_BODY"; then
+            echo 'Sticky comment retained stale validation output'
+            exit 1
+          fi
+
+      - name: Delete sticky comment through empty discovery
+        uses: ./
+        with:
+          base_ref: HEAD
+          post_comment: 'true'
+          comment_header: ${{ env.COMMENT_HEADER }}
+
+      - name: Verify sticky comment deletion
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          COMMENTS=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" | jq -s 'add')
+          COMMENT_COUNT=$(jq --arg marker "$COMMENT_MARKER" '[.[] | select(.body | contains($marker))] | length' <<< "$COMMENTS")
+          [ "$COMMENT_COUNT" -eq 0 ]
+
+      - name: Clean up lifecycle test comment
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: ${{ env.COMMENT_HEADER }}
+          delete: true

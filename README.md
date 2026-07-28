@@ -121,6 +121,7 @@ jobs:
 | `directories` | No* | — | Space-separated list of directories to validate (skips auto-detection) |
 | `python_version` | No | `3.13` | Python version to use |
 | `post_comment` | No | `true` | Post a sticky PR comment with results |
+| `comment_header` | No | `validation-results` | Header used to identify the sticky PR comment |
 
 \* Either `base_ref` or `directories` must be provided.
 
