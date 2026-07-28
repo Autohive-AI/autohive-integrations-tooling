@@ -26,6 +26,7 @@ def test_static_adapters_use_canonical_check_modules() -> None:
 @pytest.mark.parametrize(
     "script_name",
     [
+        "check_code.py",
         "validate_integration.py",
         "check_config_sync.py",
         "check_fetch_pattern.py",

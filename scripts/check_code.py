@@ -43,11 +43,14 @@ import sys
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-# Allow importing check_imports from the same directory regardless of cwd
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from check_config_sync import check_config_sync
-from check_fetch_pattern import check_fetch_pattern
-from check_imports import check_imports
+# Allow importing the canonical checks and the remaining local script regardless of cwd.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+from check_imports import check_imports  # noqa: E402
+from hiveup.checks.config_sync import check_config_sync  # noqa: E402
+from hiveup.checks.fetch_pattern import check_fetch_pattern  # noqa: E402
 
 BANDIT_EXCLUDE_DIRS = [".venv", "venv", "__pycache__", "site-packages", "dependencies"]
 RUFF_CONFIG = str(Path(__file__).resolve().parent.parent / "ruff.toml")
