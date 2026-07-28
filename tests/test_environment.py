@@ -5,6 +5,7 @@ from pathlib import Path
 
 import hiveup.core.environment as environment
 from hiveup.checks import static
+from hiveup.checks import tests as test_checks
 
 
 def test_environment_key_tracks_requirements_and_test_tools(tmp_path: Path) -> None:
@@ -106,3 +107,52 @@ def test_import_check_does_not_use_cli_environment_for_dependencies(tmp_path: Pa
 
     assert report.status == "failed"
     assert report.messages[0].message == "Missing module: pytest"
+
+
+def test_integration_tests_run_with_isolated_interpreter(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    test_file = integration / "tests" / "test_demo_unit.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.touch()
+    isolated_python = tmp_path / "cache" / "bin" / "python"
+    isolated = environment.IntegrationEnvironment(tmp_path / "cache", isolated_python, "key", created=False)
+    prepared = []
+    commands = []
+
+    def prepare(path: Path, *, include_test_tools: bool):
+        prepared.append((path, include_test_tools))
+        return isolated
+
+    def run(command, **kwargs):
+        commands.append((command, kwargs))
+        return type("Result", (), {"returncode": 0, "stdout": "1 passed\n", "stderr": ""})()
+
+    monkeypatch.setattr(test_checks, "prepare_environment", prepare)
+    monkeypatch.setattr(test_checks.subprocess, "run", run)
+
+    exit_code, output = test_checks.run_integration_tests(integration, [test_file])
+
+    assert exit_code == 0
+    assert output == "1 passed\n"
+    assert prepared == [(integration, True)]
+    assert commands[0][0][0:3] == [str(isolated_python), "-m", "pytest"]
+    assert str(integration) in commands[0][0]
+    assert str(test_file) in commands[0][0]
+
+
+def test_test_check_reports_isolated_environment_failure(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    tests_dir = integration / "tests"
+    tests_dir.mkdir(parents=True)
+    (tests_dir / "test_demo_unit.py").touch()
+
+    def fail(*args, **kwargs):
+        raise environment.EnvironmentBuildError("dependency resolution failed")
+
+    monkeypatch.setattr(static, "run_integration_tests", fail)
+
+    report = static.check_tests(integration)
+
+    assert report.status == "error"
+    assert report.raw_output == "dependency resolution failed"
+    assert report.messages[0].message == "dependency resolution failed"

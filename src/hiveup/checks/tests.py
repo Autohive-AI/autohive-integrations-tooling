@@ -27,6 +27,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from hiveup.core.environment import EnvironmentBuildError, IntegrationEnvironment, prepare_environment
+
 # Fix Windows console encoding for unicode characters
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -75,26 +77,19 @@ def get_integration_dirs(args: list[str]) -> list[Path]:
     )
 
 
-def install_integration_deps(integration_dir: Path) -> tuple[bool, str]:
-    """Install an integration's requirements.txt. Returns (success, error_output)."""
-    req_file = integration_dir / "requirements.txt"
-    if not req_file.is_file():
-        return True, ""
-
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-r", str(req_file), "-q"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        return False, result.stderr.strip()
-    return True, ""
-
-
 def run_integration_tests(integration_dir: Path, test_files: list[Path]) -> tuple[int, str]:
-    """Run pytest for a single integration. Returns (exit_code, output)."""
+    """Run pytest in an integration's isolated environment."""
+    environment = prepare_environment(integration_dir, include_test_tools=True)
+    return _run_integration_tests(environment, integration_dir, test_files)
+
+
+def _run_integration_tests(
+    environment: IntegrationEnvironment,
+    integration_dir: Path,
+    test_files: list[Path],
+) -> tuple[int, str]:
     cmd = [
-        sys.executable,
+        str(environment.python),
         "-m",
         "pytest",
         "--import-mode=importlib",
@@ -216,13 +211,12 @@ def main() -> int:
     failed_outputs = {}
 
     for d, test_files in testable:
-        ok, err = install_integration_deps(d)
-        if not ok:
-            rows.append((d.name, "n/a", "n/a", "❌ Dep install failed", "fail"))
-            failed_outputs[d.name] = err
+        try:
+            exit_code, output = run_integration_tests(d, test_files)
+        except EnvironmentBuildError as exc:
+            rows.append((d.name, "n/a", "n/a", "❌ Environment failed", "fail"))
+            failed_outputs[d.name] = str(exc)
             continue
-
-        exit_code, output = run_integration_tests(d, test_files)
         passed, failed, coverage = parse_results(output)
         total = passed + failed
         tests_str = f"{passed}/{total}"

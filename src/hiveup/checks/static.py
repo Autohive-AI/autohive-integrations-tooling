@@ -18,7 +18,7 @@ from hiveup.checks.config_sync import check_config_sync
 from hiveup.checks.fetch_pattern import check_fetch_pattern
 from hiveup.checks.readme import check_readme
 from hiveup.checks.structure import IntegrationValidator
-from hiveup.checks.tests import find_unit_test_files, install_integration_deps, run_integration_tests
+from hiveup.checks.tests import find_unit_test_files, run_integration_tests
 from hiveup.checks.version import check_version_bump
 from hiveup.core.environment import EnvironmentBuildError, module_available, prepare_environment
 from hiveup.core.results import CheckMessage, CheckResult
@@ -202,18 +202,25 @@ def check_tests(path: Path) -> CheckResult:
             start,
         )
 
-    ok, install_error = install_integration_deps(path)
-    if not ok:
+    try:
+        exit_code, output = run_integration_tests(path, test_files)
+    except EnvironmentBuildError as exc:
+        environment_error = str(exc)
         return _result(
             "tests",
             path,
             "error",
-            [CheckMessage("error", install_error or "Dependency installation failed", fix_hint="Fix requirements.txt")],
+            [
+                CheckMessage(
+                    "error",
+                    environment_error or "Could not prepare isolated environment",
+                    fix_hint="Fix requirements.txt or verify package index access.",
+                )
+            ],
             start,
-            raw_output=install_error,
+            raw_output=environment_error,
         )
 
-    exit_code, output = run_integration_tests(path, test_files)
     if exit_code == 0:
         return _result("tests", path, "passed", [], start, raw_output=output)
 
