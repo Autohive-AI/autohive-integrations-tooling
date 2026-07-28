@@ -1,12 +1,15 @@
 import sys
 import json
+import shutil
+import struct
 import subprocess
+import zipfile
 from pathlib import Path
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from hiveup.cli import _emit_github_annotations, _write_github_outputs, run_validation  # noqa: E402
+from hiveup.cli import _emit_github_annotations, _write_github_outputs, _write_package_zip, run_validation  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
 
 
@@ -201,3 +204,77 @@ def test_github_annotations_include_validation_failures(capsys) -> None:
 
     output = capsys.readouterr().out
     assert "::error ::icon.png must be 512x512 pixels" in output
+
+
+def test_structure_accepts_512_pixel_jpg_and_jpeg_icons(tmp_path: Path) -> None:
+    for extension in ("jpg", "jpeg"):
+        integration = tmp_path / f"good-{extension}-integration"
+        shutil.copytree(EXAMPLES / "good-integration", integration)
+        (integration / "icon.png").unlink()
+        (integration / f"icon.{extension}").write_bytes(_jpeg_with_dimensions(512, 512))
+
+        report = run_validation([integration], only={"structure"})
+
+        assert report.exit_code() == 0
+        assert not any("icon" in message.message.lower() for message in report.results[0].messages)
+
+
+def test_structure_rejects_unsupported_icon_format(tmp_path: Path) -> None:
+    integration = tmp_path / "svg-icon-integration"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    (integration / "icon.png").rename(integration / "icon.svg")
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.results[0].status == "failed"
+    assert report.results[0].messages[0].message == (
+        "Missing required file: icon.png, icon.jpg, or icon.jpeg (Integration icon)"
+    )
+
+
+def test_structure_rejects_wrong_sized_jpeg_icon(tmp_path: Path) -> None:
+    integration = tmp_path / "wrong-sized-icon-integration"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    (integration / "icon.png").unlink()
+    (integration / "icon.jpg").write_bytes(_jpeg_with_dimensions(256, 512))
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.results[0].status == "failed"
+    assert any(
+        "icon.jpg must be 512x512 pixels (found 256x512)" in message.message
+        for message in report.results[0].messages
+    )
+
+
+def test_structure_rejects_invalid_jpeg_icon(tmp_path: Path) -> None:
+    integration = tmp_path / "invalid-jpeg-integration"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    (integration / "icon.png").unlink()
+    (integration / "icon.jpeg").write_bytes(b"not a jpeg")
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.results[0].status == "failed"
+    assert any(
+        "Could not read icon.jpeg: not a valid JPEG file" in message.message
+        for message in report.results[0].messages
+    )
+
+
+def test_package_includes_only_supported_icon_formats(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    for name in ("icon.png", "icon.jpg", "icon.jpeg", "icon.svg", "icon.webp"):
+        (integration / name).touch()
+    package = tmp_path / "demo.zip"
+
+    _write_package_zip(integration, package, None)
+
+    with zipfile.ZipFile(package) as archive:
+        assert set(archive.namelist()) == {"icon.png", "icon.jpg", "icon.jpeg"}
+
+
+def _jpeg_with_dimensions(width: int, height: int) -> bytes:
+    frame = b"\x08" + struct.pack(">HH", height, width) + b"\x03\x01\x11\x00\x02\x11\x00\x03\x11\x00"
+    return b"\xff\xd8\xff\xc0" + struct.pack(">H", len(frame) + 2) + frame + b"\xff\xd9"

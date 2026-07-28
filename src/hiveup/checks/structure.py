@@ -28,7 +28,6 @@ import json
 import re
 import struct
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, List
 
@@ -48,6 +47,55 @@ SKIP_FOLDERS = {
     '.idea',
     'node_modules',
 }
+
+JPEG_START_OF_FRAME_MARKERS = {
+    0xC0,
+    0xC1,
+    0xC2,
+    0xC3,
+    0xC5,
+    0xC6,
+    0xC7,
+    0xC9,
+    0xCA,
+    0xCB,
+    0xCD,
+    0xCE,
+    0xCF,
+}
+
+
+def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
+    if not data.startswith(b'\xff\xd8'):
+        raise ValueError("not a valid JPEG file")
+
+    offset = 2
+    while offset + 4 <= len(data):
+        if data[offset] != 0xFF:
+            raise ValueError("not a valid JPEG file")
+        while offset < len(data) and data[offset] == 0xFF:
+            offset += 1
+        if offset >= len(data):
+            break
+
+        marker = data[offset]
+        offset += 1
+        if marker in {0x01, *range(0xD0, 0xDA)}:
+            continue
+        if offset + 2 > len(data):
+            break
+
+        segment_length = struct.unpack('>H', data[offset : offset + 2])[0]
+        if segment_length < 2 or offset + segment_length > len(data):
+            raise ValueError("not a valid JPEG file")
+        if marker in JPEG_START_OF_FRAME_MARKERS:
+            if segment_length < 7:
+                raise ValueError("not a valid JPEG file")
+            height, width = struct.unpack('>HH', data[offset + 3 : offset + 7])
+            return width, height
+        offset += segment_length
+
+    raise ValueError("could not determine JPEG dimensions")
 
 
 class ValidationError:
@@ -127,17 +175,17 @@ class IntegrationValidator:
         if (self.path / 'integration.py').exists():
             self.add_error("Found 'integration.py' — integrations must not include a local integration.py file")
 
-        # Check for icon (png or svg)
-        png_path = self.path / 'icon.png'
-        svg_path = self.path / 'icon.svg'
-        has_icon = png_path.exists() or svg_path.exists()
-        if not has_icon:
-            self.add_error("Missing required file: icon.png or icon.svg (Integration icon)")
+        supported_icon_names = {'icon.png', 'icon.jpg', 'icon.jpeg'}
+        icon_path = next(
+            (path for path in self.path.iterdir() if path.is_file() and path.name.lower() in supported_icon_names),
+            None,
+        )
+        if icon_path is None:
+            self.add_error("Missing required file: icon.png, icon.jpg, or icon.jpeg (Integration icon)")
+        elif icon_path.suffix.lower() == '.png':
+            self._check_icon_png_size(icon_path)
         else:
-            if png_path.exists():
-                self._check_icon_png_size(png_path)
-            elif svg_path.exists():
-                self._check_icon_svg_size(svg_path)
+            self._check_icon_jpeg_size(icon_path)
 
     def _check_icon_png_size(self, path: Path):
         """Validate PNG icon is exactly 512x512."""
@@ -152,37 +200,14 @@ class IntegrationValidator:
         except Exception as e:
             self.add_error(f"Could not read icon.png: {e}")
 
-    def _check_icon_svg_size(self, path: Path):
-        """Validate SVG icon declares a 512x512 viewBox or width/height."""
+    def _check_icon_jpeg_size(self, path: Path):
+        """Validate JPEG icon is exactly 512x512."""
         try:
-            tree = ET.parse(path)
-            root = tree.getroot()
-            tag = root.tag.split('}')[-1] if '}' in root.tag else root.tag
-            if tag != 'svg':
-                self.add_error("icon.svg root element is not <svg>")
-                return
-
-            width = root.get('width', '').replace('px', '').strip()
-            height = root.get('height', '').replace('px', '').strip()
-            viewbox = root.get('viewBox', '')
-
-            if viewbox:
-                parts = viewbox.split()
-                if len(parts) == 4:
-                    vb_w, vb_h = parts[2], parts[3]
-                    if vb_w != '512' or vb_h != '512':
-                        self.add_error(f"icon.svg viewBox must be '0 0 512 512' (found '{viewbox}')")
-                    return
-
-            if width and height:
-                if width != '512' or height != '512':
-                    self.add_error(f"icon.svg must be 512x512 (found width='{width}' height='{height}')")
-            else:
-                self.add_warning("icon.svg has no width/height or viewBox — cannot verify it is 512x512")
-        except ET.ParseError as e:
-            self.add_error(f"icon.svg is not valid XML: {e}")
+            width, height = _jpeg_dimensions(path.read_bytes())
+            if width != 512 or height != 512:
+                self.add_error(f"{path.name} must be 512x512 pixels (found {width}x{height})")
         except Exception as e:
-            self.add_error(f"Could not read icon.svg: {e}")
+            self.add_error(f"Could not read {path.name}: {e}")
 
     def _check_config_json(self):
         """Validate config.json structure."""

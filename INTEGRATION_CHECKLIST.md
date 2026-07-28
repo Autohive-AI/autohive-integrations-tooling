@@ -141,7 +141,7 @@ but only list_sites and create_site are implemented:
 | Uppercase folder name (`Netlify/`) | Use lowercase (`netlify/`) |
 | Non-empty `__init__.py` with logic | Keep minimal — only import and `__all__` |
 | Unused OAuth scopes | Remove scopes not used by any action |
-| Missing icon | Add `icon.png` or `icon.svg` (512×512 pixels) |
+| Missing icon | Add `icon.png`, `icon.jpg`, or `icon.jpeg` (512×512 pixels) |
 | Missing or incomplete README | Document all actions, auth setup, inputs/outputs |
 | Not updating main repo README | Add integration entry in alphabetical order |
 | Unpinned SDK version | Use `autohive-integrations-sdk~=2.0.1` (or `~=1.1.1` for 1.x) |

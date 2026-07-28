@@ -582,7 +582,11 @@ def _write_package_zip(directory: Path, package_path: Path, deps_dir: Path | Non
         for path in sorted(directory.rglob("*")):
             if path.is_dir() or excluded.intersection(path.relative_to(directory).parts):
                 continue
-            if path.suffix == ".py" or path.name == "config.json" or path.name.startswith("icon."):
+            if (
+                path.suffix == ".py"
+                or path.name == "config.json"
+                or (path.stem.lower() == "icon" and path.suffix.lower() in {".png", ".jpg", ".jpeg"})
+            ):
                 archive.write(path, path.relative_to(directory).as_posix())
         if deps_dir:
             for path in sorted(deps_dir.rglob("*")):
