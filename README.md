@@ -79,8 +79,8 @@ flowchart TB
 |------|--------|--------|
 | Detect changes | `get_changed_dirs.py` | `git diff` → extract top-level dirs, filter out `.github`, `scripts`, `tests` |
 | Structure check | `validate_integration.py` | Folder name, required files, config.json schema, `__init__.py`, requirements.txt, tests/, icon size, unused scopes |
-| Code check | `check_code.py` | pip install, py_compile, check_imports, JSON validity, ruff check, ruff format, bandit, pip-audit, check_config_sync, check_fetch_pattern |
-| Tests | `run_tests.py` | Installs each integration's dependencies, then discovers and runs `test_*_unit.py` files with pytest per-integration. Warns (does not fail) if no unit tests exist |
+| Code check | `check_code.py` | Isolated dependency and import validation, py_compile, JSON validity, ruff check, ruff format, bandit, pip-audit, check_config_sync, check_fetch_pattern |
+| Tests | `run_tests.py` | Runs each integration's `test_*_unit.py` files with pytest and its own isolated dependencies. Warns (does not fail) if no unit tests exist |
 | README check | `check_readme.py` | New integration files added → was README.md also updated? |
 | Version check | `check_version_bump.py` | Version in config.json incremented? Recommends major/minor/patch based on config and code changes |
 
@@ -208,6 +208,18 @@ Integrations without `test_*_unit.py` files are skipped with a warning.
 > **Note:** This script only runs unit tests. Integration tests (`test_*_integration.py`) require real API credentials and are run locally by developers — never in CI. See the integrations repo's `CONTRIBUTING.md` for details.
 
 The test infrastructure (`pyproject.toml`, `conftest.py`, `requirements-test.txt`) lives in the integrations repo — see its `CONTRIBUTING.md` for how to write and run tests locally.
+
+### Dependency isolation and caching
+
+HiveUp resolves imports and runs unit tests in a separate virtual environment for each integration and dependency profile. An integration pinned to an older SDK or dependency version therefore cannot change the packages used by HiveUp or another integration.
+
+Prepared environments are reused until the integration path, `requirements.txt` contents, Python interpreter/version, or required test tooling changes. HiveUp prefers `uv` for environment creation and package installation when it is available, and otherwise falls back to the standard-library `venv` module and pip. Cache entries unused for 30 days are removed automatically.
+
+The cache is stored outside integration directories:
+
+- Linux/macOS: `${XDG_CACHE_HOME:-~/.cache}/hiveup/envs`
+- Windows: `%LOCALAPPDATA%\hiveup\envs`
+- Override for local development and CI: set `HIVEUP_CACHE_DIR` (environments are stored in its `envs` subdirectory)
 
 ## Integration Requirements
 

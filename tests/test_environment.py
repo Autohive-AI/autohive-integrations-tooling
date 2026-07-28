@@ -1,4 +1,6 @@
 import os
+import importlib.util
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -25,6 +27,8 @@ def test_environment_key_tracks_requirements_and_test_tools(tmp_path: Path) -> N
 def test_prepare_environment_reuses_valid_cached_environment(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()
+    requirements = integration / "requirements.txt"
+    requirements.write_text("example-package==1.0\n", encoding="utf-8")
     cache = tmp_path / "cache"
     monkeypatch.setenv("HIVEUP_CACHE_DIR", str(cache))
     builds = []
@@ -40,11 +44,15 @@ def test_prepare_environment_reuses_valid_cached_environment(tmp_path: Path, mon
 
     first = environment.prepare_environment(integration)
     second = environment.prepare_environment(integration)
+    requirements.write_text("example-package==2.0\n", encoding="utf-8")
+    changed = environment.prepare_environment(integration)
 
     assert first.path == second.path
+    assert changed.path != first.path
     assert first.created is True
     assert second.created is False
-    assert len(builds) == 1
+    assert changed.created is True
+    assert len(builds) == 2
     assert first.path.parent == cache / "envs"
 
 
@@ -156,3 +164,43 @@ def test_test_check_reports_isolated_environment_failure(tmp_path: Path, monkeyp
     assert report.status == "error"
     assert report.raw_output == "dependency resolution failed"
     assert report.messages[0].message == "dependency resolution failed"
+
+
+def test_sdk_pins_and_modules_are_isolated_between_integrations(tmp_path: Path, monkeypatch) -> None:
+    sdk_v1 = tmp_path / "sdk-v1"
+    sdk_v2 = tmp_path / "sdk-v2"
+    sdk_v1.mkdir()
+    sdk_v2.mkdir()
+    (sdk_v1 / "requirements.txt").write_text("autohive-integrations-sdk~=1.0.2\n", encoding="utf-8")
+    (sdk_v2 / "requirements.txt").write_text("autohive-integrations-sdk~=2.0.1\n", encoding="utf-8")
+    monkeypatch.setenv("HIVEUP_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(environment.shutil, "which", lambda name: None)
+
+    def install(path: Path, *, integration_dir: Path, requirements: Path | None, include_test_tools: bool) -> None:
+        assert requirements is not None
+        assert include_test_tools is False
+        module = "sdk_v1_only" if "~=1.0.2" in requirements.read_text(encoding="utf-8") else "sdk_v2_only"
+        purelib = subprocess.run(
+            [
+                str(environment._environment_python(path)),
+                "-c",
+                "import sysconfig; print(sysconfig.get_path('purelib'))",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        (Path(purelib) / f"{module}.py").write_text(f"INTEGRATION = {integration_dir.name!r}\n", encoding="utf-8")
+
+    monkeypatch.setattr(environment, "_install_dependencies", install)
+
+    v1_environment = environment.prepare_environment(sdk_v1)
+    v2_environment = environment.prepare_environment(sdk_v2)
+
+    assert v1_environment.key != v2_environment.key
+    assert environment.module_available(v1_environment, "sdk_v1_only")
+    assert not environment.module_available(v1_environment, "sdk_v2_only")
+    assert environment.module_available(v2_environment, "sdk_v2_only")
+    assert not environment.module_available(v2_environment, "sdk_v1_only")
+    assert importlib.util.find_spec("sdk_v1_only") is None
+    assert importlib.util.find_spec("sdk_v2_only") is None
