@@ -15,13 +15,13 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from hiveup.checks.config_sync import check_config_sync
+from hiveup.checks.fetch_pattern import check_fetch_pattern
+from hiveup.checks.readme import check_readme
+from hiveup.checks.structure import IntegrationValidator
+from hiveup.checks.tests import find_unit_test_files, install_integration_deps, run_integration_tests
+from hiveup.checks.version import check_version_bump
 from hiveup.core.results import CheckMessage, CheckResult
-from hiveup._legacy.check_config_sync import check_config_sync
-from hiveup._legacy.check_fetch_pattern import check_fetch_pattern
-from hiveup._legacy.check_readme import check_readme
-from hiveup._legacy.check_version_bump import check_version_bump
-from hiveup._legacy.run_tests import find_unit_test_files, install_integration_deps, run_integration_tests
-from hiveup._legacy.validate_integration import IntegrationValidator
 
 CheckFn = Callable[[Path], CheckResult]
 BANDIT_EXCLUDE_DIRS = [".venv", "venv", "__pycache__", "site-packages", "dependencies"]
