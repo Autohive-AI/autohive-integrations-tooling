@@ -98,6 +98,8 @@ def _run_integration_tests(
         "--tb=short",
         "--no-header",
         "-q",
+        "--override-ini",
+        "markers=unit: isolated integration unit test",
         "--cov",
         str(integration_dir),
         "--cov-report=term-missing:skip-covered",

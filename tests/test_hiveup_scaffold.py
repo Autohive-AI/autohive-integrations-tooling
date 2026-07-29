@@ -1,11 +1,16 @@
 import json
 import struct
+import sys
+import zipfile
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
 from hiveup.cli import app
+from hiveup.checks import static
+from hiveup.checks import tests as test_checks
+from hiveup.core.environment import IntegrationEnvironment
 
 
 @pytest.mark.parametrize(
@@ -107,3 +112,52 @@ def test_scaffold_rejects_invalid_auth_before_writing(tmp_path: Path, monkeypatc
     assert result.exit_code == 2
     assert "Unsupported auth type: invalid" in result.output
     assert not (tmp_path / "sample").exists()
+
+
+@pytest.mark.parametrize("command", [["create", "sample"], ["init", "--name", "Sample"]])
+def test_fresh_scaffold_validates_tests_and_packages(tmp_path: Path, monkeypatch, command: list[str]) -> None:
+    integration = tmp_path / "sample"
+    if command[0] == "init":
+        integration.mkdir()
+        monkeypatch.chdir(integration)
+    else:
+        monkeypatch.chdir(tmp_path)
+
+    isolated = IntegrationEnvironment(tmp_path / "environment", Path(sys.executable), "test", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(test_checks, "prepare_environment", lambda *args, **kwargs: isolated)
+
+    def stage_dependencies(requirements: Path, target: Path) -> None:
+        assert requirements == integration / "requirements.txt"
+        target.mkdir(parents=True)
+        (target / "sdk_dependency.py").write_text("VERSION = '2.0.1'\n", encoding="utf-8")
+
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", stage_dependencies)
+
+    scaffold_result = CliRunner().invoke(app, command)
+    validate_result = CliRunner().invoke(
+        app,
+        ["validate", str(integration), "--skip", "audit,readme,version"],
+    )
+    test_result = CliRunner().invoke(app, ["test", str(integration)])
+    package_path = tmp_path / "sample.zip"
+    package_result = CliRunner().invoke(
+        app,
+        ["package", str(integration), "--output", str(package_path)],
+    )
+
+    assert scaffold_result.exit_code == 0, scaffold_result.output
+    assert validate_result.exit_code == 0, validate_result.output
+    assert test_result.exit_code == 0, test_result.output
+    assert package_result.exit_code == 0, package_result.output
+    with zipfile.ZipFile(package_path) as archive:
+        assert {
+            "README.md",
+            "__init__.py",
+            "config.json",
+            "dependencies/sdk_dependency.py",
+            "icon.png",
+            "requirements.txt",
+            "sample.py",
+        } <= set(archive.namelist())
+        assert not any(name.startswith("tests/") for name in archive.namelist())

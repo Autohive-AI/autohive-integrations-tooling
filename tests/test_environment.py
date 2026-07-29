@@ -144,6 +144,7 @@ def test_integration_tests_run_with_isolated_interpreter(tmp_path: Path, monkeyp
     assert output == "1 passed\n"
     assert prepared == [(integration, True)]
     assert commands[0][0][0:3] == [str(isolated_python), "-m", "pytest"]
+    assert ["--override-ini", "markers=unit: isolated integration unit test"] == commands[0][0][9:11]
     assert str(integration) in commands[0][0]
     assert str(test_file) in commands[0][0]
 
