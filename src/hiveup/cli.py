@@ -460,15 +460,19 @@ def _scaffold(target: Path, *, display_name: str, auth_type: str, force: bool) -
     config = _default_config(name, module, display_name, auth_type)
     _write_text(target / "config.json", json.dumps(config, indent=2) + "\n", force=force)
     _write_text(target / "requirements.txt", "autohive-integrations-sdk~=2.0.1\n", force=force)
-    _write_text(target / "README.md", f"# {display_name}\n\nAutohive integration scaffold.\n", force=force)
-    _write_text(target / ".gitignore", "dependencies/\n.hiveup/\n.env\n", force=force)
+    _write_text(target / "README.md", _readme_source(display_name, auth_type), force=force)
+    _write_text(
+        target / ".gitignore",
+        ".coverage\n.env\n.hiveup/\n.pytest_cache/\n.ruff_cache/\n.venv/\n__pycache__/\ndependencies/\n*.zip\n",
+        force=force,
+    )
     _write_text(target / "__init__.py", f"from .{module} import {module}\n\n__all__ = [\"{module}\"]\n", force=force)
     _write_text(target / f"{module}.py", _module_source(module), force=force)
     _write_png(target / "icon.png", force=force)
     tests = target / "tests"
     tests.mkdir(exist_ok=True)
     _write_text(tests / "__init__.py", "", force=force)
-    _write_text(tests / "context.py", _context_source(module), force=force)
+    _write_text(tests / "conftest.py", _conftest_source(), force=force)
     _write_text(tests / f"test_{module}_unit.py", _test_source(module), force=force)
 
 
@@ -484,7 +488,10 @@ def _default_config(name: str, module: str, display_name: str, auth_type: str) -
                 "display_name": "Get Data",
                 "description": "Retrieve sample data.",
                 "input_schema": {"type": "object", "properties": {}, "required": []},
-                "output_schema": {"type": "object", "properties": {"message": {"type": "string"}}},
+                "output_schema": {
+                    "type": "object",
+                    "properties": {"message": {"type": "string"}},
+                },
             }
         },
     }
@@ -520,8 +527,8 @@ def _write_text(path: Path, content: str, *, force: bool) -> None:
 
 
 def _module_source(module: str) -> str:
-    return f'''from typing import Any
-from pathlib import Path
+    return f'''from pathlib import Path
+from typing import Any
 
 from autohive_integrations_sdk import ActionHandler, ActionResult, ExecutionContext, Integration
 
@@ -530,38 +537,89 @@ from autohive_integrations_sdk import ActionHandler, ActionResult, ExecutionCont
 
 @{module}.action("get_data")
 class GetDataAction(ActionHandler):
-    async def execute(self, inputs: dict[str, Any], context: ExecutionContext):
+    async def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> ActionResult:
         return ActionResult(data={{"message": "hello from {module}"}}, cost_usd=0.0)
 '''
 
 
-def _context_source(module: str) -> str:
-    return f"""import sys
+def _conftest_source() -> str:
+    return """import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from {module} import {module}  # noqa: E402,F401
+
+@pytest.fixture
+def mock_context():
+    \"\"\"Return an isolated SDK execution context for unit tests.\"\"\"
+    context = MagicMock(name="ExecutionContext")
+    context.fetch = AsyncMock(name="fetch")
+    context.auth = {}
+    return context
 """
 
 
 def _test_source(module: str) -> str:
     return f'''import pytest
-from autohive_integrations_sdk import ExecutionContext
 
-from .context import {module}
+from {module} import {module}
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
 
-async def test_get_data():
-    async with ExecutionContext(auth={{}}) as context:
-        result = await {module}.execute_action("get_data", {{}}, context)
+async def test_get_data(mock_context):
+    result = await {module}.execute_action("get_data", {{}}, mock_context)
 
     assert result.result.data["message"] == "hello from {module}"
 '''
+
+
+def _readme_source(display_name: str, auth_type: str) -> str:
+    auth = {
+        "none": "This integration uses a public API and does not require authentication.",
+        "platform": (
+            "This integration uses platform-managed OAuth. "
+            "Configure the provider and required scopes in `config.json`."
+        ),
+        "custom": (
+            "This integration uses custom API-key authentication. "
+            "Configure the required fields in `config.json`."
+        ),
+    }[auth_type]
+    return f"""# {display_name}
+
+## Description
+
+{display_name} integration for Autohive.
+
+## Authentication
+
+{auth}
+
+## Actions
+
+### Get Data
+
+Returns sample data from the integration.
+
+## Requirements
+
+- Python 3.13
+- `autohive-integrations-sdk~=2.0.1`
+
+## Development
+
+```bash
+hiveup validate
+hiveup test
+hiveup package
+```
+"""
 
 
 def _write_png(path: Path, *, force: bool) -> None:
