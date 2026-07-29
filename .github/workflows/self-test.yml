@@ -312,6 +312,79 @@ jobs:
           fi
           echo "✅ Missing argument correctly rejected"
 
+  test-package:
+    runs-on: ubuntu-latest
+    name: Test HiveUp distribution
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install build tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Build wheel and source distribution
+        run: python -m build
+
+      - name: Check distribution metadata
+        run: |
+          set -euo pipefail
+          python -m twine check dist/*
+
+          mapfile -t WHEELS < <(compgen -G 'dist/hiveup-*.whl')
+          mapfile -t SDISTS < <(compgen -G 'dist/hiveup-*.tar.gz')
+          [ "${#WHEELS[@]}" -eq 1 ]
+          [ "${#SDISTS[@]}" -eq 1 ]
+          [ "${WHEELS[0]}" = 'dist/hiveup-2.4.0a1-py3-none-any.whl' ]
+          [ "${SDISTS[0]}" = 'dist/hiveup-2.4.0a1.tar.gz' ]
+
+      - name: Test installed wheel outside source checkout
+        run: |
+          set -euo pipefail
+          WHEEL=$(realpath dist/hiveup-*.whl)
+          ENV_DIR=$(mktemp -d)
+          WORK_DIR=$(mktemp -d)
+          python -m venv "$ENV_DIR"
+          "$ENV_DIR/bin/python" -m pip install "$WHEEL"
+
+          cd "$WORK_DIR"
+          [ "$("$ENV_DIR/bin/hiveup" --version)" = 'hiveup 2.4.0a1' ]
+          "$ENV_DIR/bin/hiveup" --help
+          if "$ENV_DIR/bin/hiveup" run >run-output.txt 2>&1; then
+            echo 'The deferred hiveup run command was unexpectedly installed'
+            exit 1
+          fi
+          grep -Fq "No such command 'run'" run-output.txt
+
+          "$ENV_DIR/bin/python" - <<'PY'
+          from importlib.resources import files
+          from importlib.metadata import metadata, version
+
+          assert metadata("hiveup")["Name"] == "hiveup"
+          assert version("hiveup") == "2.4.0a1"
+          assert files("hiveup").joinpath("data/ruff.toml").is_file()
+          PY
+
+          "$ENV_DIR/bin/hiveup" create wheel-smoke --auth-type none
+          "$ENV_DIR/bin/hiveup" validate wheel-smoke
+          "$ENV_DIR/bin/hiveup" test wheel-smoke
+          "$ENV_DIR/bin/hiveup" auth wheel-smoke --auth-type custom
+          "$ENV_DIR/bin/hiveup" auth wheel-smoke --auth-type none
+          "$ENV_DIR/bin/hiveup" package wheel-smoke
+          "$ENV_DIR/bin/hiveup" doctor wheel-smoke
+          [ -f wheel-smoke-1.0.0.zip ]
+
+      - name: Upload local-install artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hiveup-2.4.0a1
+          path: dist/*
+          if-no-files-found: error
+
   test-deployment-packaging:
     runs-on: ubuntu-latest
     name: Test HiveUp deployment packaging

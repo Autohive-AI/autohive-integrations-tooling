@@ -1,6 +1,8 @@
 ruff
 bandit
+build
 pip-audit
+twine
 typer
 rich
 pytest>=9.0
