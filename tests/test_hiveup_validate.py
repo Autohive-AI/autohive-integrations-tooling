@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from hiveup.cli import _emit_github_annotations, _write_github_outputs, _write_package_zip, app, run_validation  # noqa: E402
+from hiveup.cli import _emit_github_annotations, _write_github_outputs, app, run_validation  # noqa: E402
 from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
 from hiveup.packaging import (  # noqa: E402
@@ -19,6 +19,7 @@ from hiveup.packaging import (  # noqa: E402
     TARGET_PYTHON_VERSION,
     PackageBuildError,
     install_dependencies,
+    write_package_zip,
 )
 
 
@@ -278,10 +279,55 @@ def test_package_includes_only_supported_icon_formats(tmp_path: Path) -> None:
         (integration / name).touch()
     package = tmp_path / "demo.zip"
 
-    _write_package_zip(integration, package, None)
+    write_package_zip(integration, package, None)
 
     with zipfile.ZipFile(package) as archive:
         assert set(archive.namelist()) == {"icon.png", "icon.jpg", "icon.jpeg"}
+
+
+def test_package_writes_root_layout_and_excludes_development_files(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    included = {
+        "config.json": "{}",
+        "requirements.txt": "example==1.0",
+        "README.md": "# Demo",
+        "demo.py": "VALUE = 1",
+        "actions/get_data.py": "VALUE = 2",
+        "assets/schema.json": "{}",
+        "icon.png": "png",
+    }
+    for name, content in included.items():
+        path = integration / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    for name in (
+        "tests/test_demo.py",
+        ".git/config",
+        ".venv/lib/module.py",
+        "__pycache__/demo.pyc",
+        "dependencies/local.py",
+        "dist/generated.py",
+        "icon.svg",
+        "icon.webp",
+        ".coverage",
+        "old-package.zip",
+    ):
+        path = integration / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("excluded", encoding="utf-8")
+    dependencies = tmp_path / "staged-dependencies"
+    (dependencies / "example").mkdir(parents=True)
+    (dependencies / "example" / "__init__.py").write_text("", encoding="utf-8")
+    package = integration / "demo.zip"
+
+    write_package_zip(integration, package, dependencies)
+
+    with zipfile.ZipFile(package) as archive:
+        assert set(archive.namelist()) == {
+            *included,
+            "dependencies/example/__init__.py",
+        }
 
 
 def test_structure_rejects_reserved_entry_point_basenames(tmp_path: Path) -> None:

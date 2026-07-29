@@ -13,7 +13,6 @@ import struct
 import subprocess
 import sys
 import tempfile
-import zipfile
 import zlib
 from pathlib import Path
 from typing import Annotated
@@ -26,7 +25,7 @@ from hiveup.checks.static import available_checks
 from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE, is_reserved_entry_point
 from hiveup.core.discovery import changed_integrations, discover_integrations, explicit_integrations
 from hiveup.core.results import CheckMessage, CheckResult, ValidationReport
-from hiveup.packaging import PackageBuildError, install_dependencies
+from hiveup.packaging import PackageBuildError, install_dependencies, write_package_zip
 from hiveup.render.console import render_report
 from hiveup.render.markdown import GROUPS, render_markdown
 
@@ -240,7 +239,7 @@ def package(
                 typer.echo(str(exc), err=True)
                 raise typer.Exit(2)
 
-        _write_package_zip(directory, package_path, deps_dir if deps_dir.exists() else None)
+        write_package_zip(directory, package_path, deps_dir if deps_dir.exists() else None)
 
     typer.echo(f"✅ Wrote {package_path}")
 
@@ -576,24 +575,6 @@ def _write_png(path: Path, *, force: bool) -> None:
 
 def _png_chunk(kind: bytes, data: bytes) -> bytes:
     return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
-
-
-def _write_package_zip(directory: Path, package_path: Path, deps_dir: Path | None) -> None:
-    excluded = {"tests", "__pycache__", ".pytest_cache", ".ruff_cache", ".venv", "venv", "dependencies"}
-    with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(directory.rglob("*")):
-            if path.is_dir() or excluded.intersection(path.relative_to(directory).parts):
-                continue
-            if (
-                path.suffix == ".py"
-                or path.name == "config.json"
-                or (path.stem.lower() == "icon" and path.suffix.lower() in {".png", ".jpg", ".jpeg"})
-            ):
-                archive.write(path, path.relative_to(directory).as_posix())
-        if deps_dir:
-            for path in sorted(deps_dir.rglob("*")):
-                if path.is_file():
-                    archive.write(path, f"dependencies/{path.relative_to(deps_dir).as_posix()}")
 
 
 def _slugify(value: str) -> str:
