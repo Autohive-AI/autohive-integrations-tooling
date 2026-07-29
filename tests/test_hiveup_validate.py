@@ -13,7 +13,7 @@ from typer.testing import CliRunner
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from hiveup.cli import _emit_github_annotations, _write_github_outputs, app, run_validation  # noqa: E402
-from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE  # noqa: E402
+from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE, ROOT_ENTRY_POINT_MESSAGE  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
 from hiveup.packaging import (  # noqa: E402
     TARGET_PLATFORM,
@@ -381,6 +381,49 @@ def test_structure_accepts_non_reserved_entry_point_name(tmp_path: Path) -> None
     assert not any(message.message == RESERVED_ENTRY_POINT_MESSAGE for message in report.results[0].messages)
 
 
+def test_structure_rejects_nested_entry_point(tmp_path: Path) -> None:
+    integration = _integration_with_entry_point(tmp_path / "nested-entry-point", "source/domain_main.py")
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.results[0].status == "failed"
+    assert any(message.message == ROOT_ENTRY_POINT_MESSAGE for message in report.results[0].messages)
+
+
+def test_structure_requires_named_integration_load_export(tmp_path: Path) -> None:
+    integration = _integration_with_entry_point(tmp_path / "wrong-export", "demo.py")
+    entry_point = integration / "demo.py"
+    entry_point.write_text(
+        entry_point.read_text(encoding="utf-8").replace("demo =", "app ="),
+        encoding="utf-8",
+    )
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.results[0].status == "failed"
+    assert any(
+        message.message == "entry point demo.py must define 'demo = Integration.load(...)' at module scope"
+        for message in report.results[0].messages
+    )
+
+
+def test_structure_entry_point_export_check_does_not_execute_code(tmp_path: Path) -> None:
+    integration = _integration_with_entry_point(tmp_path / "safe-static-check", "demo.py")
+    entry_point = integration / "demo.py"
+    marker = tmp_path / "executed"
+    entry_point.write_text(
+        f"from pathlib import Path\nPath({str(marker)!r}).write_text('executed')\n"
+        "from autohive_integrations_sdk import Integration as RuntimeIntegration\n"
+        "demo = RuntimeIntegration.load(Path(__file__).with_name('config.json'))\n",
+        encoding="utf-8",
+    )
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 0
+    assert not marker.exists()
+
+
 def test_package_rejects_reserved_entry_point_when_validation_is_skipped(tmp_path: Path) -> None:
     integration = _integration_with_entry_point(tmp_path / "reserved-package", "main.py")
 
@@ -388,6 +431,15 @@ def test_package_rejects_reserved_entry_point_when_validation_is_skipped(tmp_pat
 
     assert result.exit_code == 2
     assert RESERVED_ENTRY_POINT_MESSAGE in result.output
+
+
+def test_package_rejects_nested_entry_point_when_validation_is_skipped(tmp_path: Path) -> None:
+    integration = _integration_with_entry_point(tmp_path / "nested-package", "source/demo.py")
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 2
+    assert ROOT_ENTRY_POINT_MESSAGE in result.output
 
 
 def test_package_dependencies_target_deployment_runtime(tmp_path: Path, monkeypatch) -> None:
@@ -495,6 +547,10 @@ def _integration_with_entry_point(path: Path, entry_point: str) -> Path:
     replacement = path / entry_point
     replacement.parent.mkdir(parents=True, exist_ok=True)
     original.rename(replacement)
+    replacement.write_text(
+        replacement.read_text(encoding="utf-8").replace("good_integration", replacement.stem),
+        encoding="utf-8",
+    )
     config_path = path / "config.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config["entry_point"] = entry_point

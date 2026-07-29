@@ -21,7 +21,12 @@ from autohive_integrations_sdk import ExecutionContext, Integration
 
 from hiveup import __version__
 from hiveup.checks.static import available_checks
-from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE, is_reserved_entry_point
+from hiveup.checks.structure import (
+    RESERVED_ENTRY_POINT_MESSAGE,
+    ROOT_ENTRY_POINT_MESSAGE,
+    is_reserved_entry_point,
+    is_root_python_entry_point,
+)
 from hiveup.core.discovery import changed_integrations, discover_integrations, explicit_integrations
 from hiveup.core.results import CheckMessage, CheckResult, ValidationReport
 from hiveup.packaging import PackageBuildError, build_package
@@ -225,6 +230,9 @@ def package(
     config = json.loads(config_path.read_text(encoding="utf-8"))
     if is_reserved_entry_point(config.get("entry_point")):
         typer.echo(RESERVED_ENTRY_POINT_MESSAGE, err=True)
+        raise typer.Exit(2)
+    if not is_root_python_entry_point(config.get("entry_point")):
+        typer.echo(ROOT_ENTRY_POINT_MESSAGE, err=True)
         raise typer.Exit(2)
     package_path = output or Path.cwd() / f"{config.get('name', directory.name)}-{config.get('version', '0.0.0')}.zip"
 

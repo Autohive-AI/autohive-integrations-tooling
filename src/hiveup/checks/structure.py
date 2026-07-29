@@ -24,6 +24,7 @@ Examples:
 """
 
 import argparse
+import ast
 import json
 import re
 import struct
@@ -66,6 +67,7 @@ JPEG_START_OF_FRAME_MARKERS = {
 RESERVED_ENTRY_POINT_MESSAGE = (
     "entry_point cannot be named main.py because that filename is reserved for the Autohive runtime wrapper"
 )
+ROOT_ENTRY_POINT_MESSAGE = "entry_point must be a Python file at the integration root"
 
 
 def is_reserved_entry_point(entry_point: object) -> bool:
@@ -74,6 +76,15 @@ def is_reserved_entry_point(entry_point: object) -> bool:
     if not isinstance(entry_point, str):
         return False
     return entry_point.replace('\\', '/').rsplit('/', 1)[-1].casefold() == 'main.py'
+
+
+def is_root_python_entry_point(entry_point: object) -> bool:
+    """Return whether an entry point is a root-level relative Python filename."""
+
+    if not isinstance(entry_point, str) or not entry_point:
+        return False
+    normalized = entry_point.replace('\\', '/')
+    return '/' not in normalized and normalized.casefold().endswith('.py')
 
 
 def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
@@ -107,6 +118,24 @@ def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
         offset += segment_length
 
     raise ValueError("could not determine JPEG dimensions")
+
+
+def _is_integration_load(
+    value: ast.expr | None,
+    integration_names: set[str],
+    sdk_module_names: set[str],
+) -> bool:
+    if not isinstance(value, ast.Call) or not isinstance(value.func, ast.Attribute) or value.func.attr != 'load':
+        return False
+    owner = value.func.value
+    if isinstance(owner, ast.Name):
+        return owner.id in integration_names
+    return (
+        isinstance(owner, ast.Attribute)
+        and owner.attr == 'Integration'
+        and isinstance(owner.value, ast.Name)
+        and owner.value.id in sdk_module_names
+    )
 
 
 class ValidationError:
@@ -248,7 +277,9 @@ class IntegrationValidator:
             entry_point = self.config['entry_point']
             if is_reserved_entry_point(entry_point):
                 self.add_error(RESERVED_ENTRY_POINT_MESSAGE)
-            if not (self.path / entry_point).exists():
+            if not is_root_python_entry_point(entry_point):
+                self.add_error(ROOT_ENTRY_POINT_MESSAGE)
+            elif not (self.path / entry_point).exists():
                 self.add_error(f"entry_point file does not exist: {entry_point}")
 
         # Check version format
@@ -422,9 +453,14 @@ class IntegrationValidator:
         if 'entry_point' not in self.config:
             return
 
-        main_file = self.path / self.config['entry_point']
+        entry_point = self.config['entry_point']
+        if not is_root_python_entry_point(entry_point):
+            return  # Already reported by the config check.
+        main_file = self.path / entry_point
         if not main_file.exists():
             return  # Already reported
+
+        self._check_entry_point_export(main_file)
 
         # Collect content from all .py files in the integration directory
         all_content = ""
@@ -445,6 +481,50 @@ class IntegrationValidator:
         # Check for Integration.load(...) across all Python files.
         if 'Integration.load' not in all_content:
             self.add_warning("Integration should use 'Integration.load(...)' to load the integration")
+
+    def _check_entry_point_export(self, main_file: Path):
+        """Check the runtime wrapper's expected integration export without importing code."""
+        try:
+            tree = ast.parse(main_file.read_text(encoding='utf-8'), filename=str(main_file))
+        except (OSError, SyntaxError):
+            return  # Reported by the syntax or file checks.
+
+        integration_names = {'Integration'}
+        sdk_module_names = {'autohive_integrations_sdk'}
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom) and node.module == 'autohive_integrations_sdk':
+                integration_names.update(
+                    alias.asname or alias.name
+                    for alias in node.names
+                    if alias.name == 'Integration'
+                )
+            elif isinstance(node, ast.Import):
+                sdk_module_names.update(
+                    alias.asname or alias.name
+                    for alias in node.names
+                    if alias.name == 'autohive_integrations_sdk'
+                )
+
+        expected_name = main_file.stem
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                defines_expected_name = any(
+                    isinstance(target, ast.Name) and target.id == expected_name
+                    for target in node.targets
+                )
+                value = node.value
+            elif isinstance(node, ast.AnnAssign):
+                defines_expected_name = isinstance(node.target, ast.Name) and node.target.id == expected_name
+                value = node.value
+            else:
+                continue
+            if defines_expected_name and _is_integration_load(value, integration_names, sdk_module_names):
+                return
+
+        self.add_error(
+            f"entry point {main_file.name} must define "
+            f"'{expected_name} = Integration.load(...)' at module scope"
+        )
 
     def _check_unused_scopes(self):
         """Check for potentially unused scopes."""
