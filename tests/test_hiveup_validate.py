@@ -4,6 +4,7 @@ import os
 import shutil
 import struct
 import subprocess
+import tomllib
 import zipfile
 from pathlib import Path
 from unittest.mock import Mock
@@ -13,6 +14,7 @@ from typer.testing import CliRunner
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from hiveup.cli import _emit_github_annotations, _write_github_outputs, app, run_validation  # noqa: E402
+from hiveup import __version__  # noqa: E402
 from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE, ROOT_ENTRY_POINT_MESSAGE  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
 from hiveup.packaging import (  # noqa: E402
@@ -26,6 +28,17 @@ from hiveup.packaging import (  # noqa: E402
 
 
 EXAMPLES = Path(__file__).resolve().parent / "examples"
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_package_identity_and_version_have_one_source_of_truth() -> None:
+    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert metadata["project"]["name"] == "hiveup"
+    assert metadata["project"]["dynamic"] == ["version"]
+    assert "version" not in metadata["project"]
+    assert metadata["tool"]["setuptools"]["dynamic"]["version"] == {"attr": "hiveup.__version__"}
+    assert __version__ == "2.4.0a1"
 
 
 def test_validate_static_checks_pass_good_integration() -> None:
