@@ -204,7 +204,7 @@ To test the integration:
 1. Navigate to the integration directory: `cd Netlify`
 2. Install dependencies: `pip install -r requirements.txt`
 3. Update test files with your access token and site IDs
-4. Run tests: `python tests/test_netlify.py`
+4. Run tests: `python tests/test_netlify_unit.py`
 
 ## Common Use Cases
 

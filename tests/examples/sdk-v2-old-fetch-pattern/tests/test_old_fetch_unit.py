@@ -1,3 +1,5 @@
+"""Unit test for the outdated fetch response fixture."""
+
 import asyncio
 from context import old_fetch
 from autohive_integrations_sdk import ExecutionContext

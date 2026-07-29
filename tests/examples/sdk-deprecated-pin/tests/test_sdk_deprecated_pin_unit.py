@@ -1,3 +1,5 @@
+"""Unit test for the deprecated SDK pin fixture."""
+
 import asyncio
 from context import sdk_deprecated_pin
 from autohive_integrations_sdk import ExecutionContext

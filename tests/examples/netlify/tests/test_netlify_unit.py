@@ -1,4 +1,5 @@
-# Test suite for Netlify integration
+"""Unit tests for the Netlify integration fixture."""
+
 import asyncio
 from context import netlify
 from autohive_integrations_sdk import ExecutionContext
