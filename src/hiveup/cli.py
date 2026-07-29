@@ -166,12 +166,21 @@ def ci(
 def create(
     name: Annotated[str, typer.Argument(help="Integration name to create.")],
     auth_type: Annotated[str, typer.Option("--auth-type", help="platform, custom, or none.")] = "none",
+    auth_provider: Annotated[str | None, typer.Option("--auth-provider", help="Platform auth provider.")] = None,
+    auth_scopes: Annotated[str | None, typer.Option("--auth-scopes", help="Comma-separated platform scopes.")] = None,
     force: Annotated[bool, typer.Option("--force", help="Overwrite existing files.")] = False,
 ) -> None:
     """Scaffold a new integration in a child directory."""
 
     target = Path(_slugify(name))
-    created, replaced = _scaffold(target, display_name=_display_name(name), auth_type=auth_type, force=force)
+    created, replaced = _scaffold(
+        target,
+        display_name=_display_name(name),
+        auth_type=auth_type,
+        auth_provider=auth_provider,
+        auth_scopes=auth_scopes,
+        force=force,
+    )
     typer.echo(f"✅ Created {target}")
     typer.echo(f"Files: {created} created, {replaced} replaced")
     typer.echo(f"Next: cd {target} && hiveup validate && hiveup test")
@@ -181,6 +190,8 @@ def create(
 def init(
     name: Annotated[str | None, typer.Option("--name", help="Integration name. Defaults to cwd name.")] = None,
     auth_type: Annotated[str, typer.Option("--auth-type", help="platform, custom, or none.")] = "none",
+    auth_provider: Annotated[str | None, typer.Option("--auth-provider", help="Platform auth provider.")] = None,
+    auth_scopes: Annotated[str | None, typer.Option("--auth-scopes", help="Comma-separated platform scopes.")] = None,
     force: Annotated[bool, typer.Option("--force", help="Overwrite existing files.")] = False,
 ) -> None:
     """Scaffold an integration in the current directory."""
@@ -190,6 +201,8 @@ def init(
         target,
         display_name=_display_name(name or target.name),
         auth_type=auth_type,
+        auth_provider=auth_provider,
+        auth_scopes=auth_scopes,
         force=force,
     )
     typer.echo(f"✅ Initialized {target.name}")
@@ -469,7 +482,15 @@ def _csv(value: str | None) -> set[str] | None:
     return {item.strip() for item in value.split(",") if item.strip()}
 
 
-def _scaffold(target: Path, *, display_name: str, auth_type: str, force: bool) -> tuple[int, int]:
+def _scaffold(
+    target: Path,
+    *,
+    display_name: str,
+    auth_type: str,
+    auth_provider: str | None,
+    auth_scopes: str | None,
+    force: bool,
+) -> tuple[int, int]:
     auth_type = auth_type.lower()
     if auth_type not in AUTH_TYPES:
         typer.echo(f"Unsupported auth type: {auth_type}", err=True)
@@ -483,7 +504,14 @@ def _scaffold(target: Path, *, display_name: str, auth_type: str, force: bool) -
 
     name = _slugify(target.name)
     module = name.replace("-", "_")
-    config = _default_config(name, module, display_name, auth_type)
+    config = _default_config(
+        name,
+        module,
+        display_name,
+        auth_type,
+        auth_provider=auth_provider,
+        auth_scopes=auth_scopes,
+    )
     files = {
         Path("config.json"): (json.dumps(config, indent=2) + "\n").encode(),
         Path("requirements.txt"): b"autohive-integrations-sdk~=2.0.1\n",
@@ -502,7 +530,15 @@ def _scaffold(target: Path, *, display_name: str, auth_type: str, force: bool) -
     return _write_scaffold(target, files)
 
 
-def _default_config(name: str, module: str, display_name: str, auth_type: str) -> dict:
+def _default_config(
+    name: str,
+    module: str,
+    display_name: str,
+    auth_type: str,
+    *,
+    auth_provider: str | None,
+    auth_scopes: str | None,
+) -> dict:
     config = {
         "name": name,
         "display_name": display_name,
@@ -521,7 +557,7 @@ def _default_config(name: str, module: str, display_name: str, auth_type: str) -
             }
         },
     }
-    _apply_auth_config(config, auth_type)
+    _apply_auth_config(config, auth_type, provider=auth_provider, scopes=auth_scopes)
     return config
 
 
@@ -535,12 +571,18 @@ def _apply_auth_config(config: dict, auth_type: str, *, provider: str | None = N
     if auth_type == "none":
         config.pop("auth", None)
     elif auth_type == "platform":
-        config["auth"] = {
+        selected_provider = provider or compatible.get("provider")
+        if not selected_provider:
+            typer.echo("--auth-provider is required for platform authentication", err=True)
+            raise typer.Exit(2)
+        platform_auth = {
             **compatible,
             "type": "platform",
-            "provider": provider or compatible.get("provider") or "github",
-            "scopes": _csv_list(scopes) if scopes is not None else compatible.get("scopes", []),
+            "provider": selected_provider,
         }
+        if scopes is not None:
+            platform_auth["scopes"] = _csv_list(scopes)
+        config["auth"] = platform_auth
     else:
         config["auth"] = {
             "type": "custom",

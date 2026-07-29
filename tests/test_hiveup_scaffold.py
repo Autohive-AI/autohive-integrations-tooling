@@ -25,8 +25,11 @@ def test_create_generates_sdk_v2_scaffold(
     expected_auth_type: str | None,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    command = ["create", "Sample Integration", "--auth-type", auth_type]
+    if auth_type == "platform":
+        command.extend(["--auth-provider", "github"])
 
-    result = CliRunner().invoke(app, ["create", "Sample Integration", "--auth-type", auth_type])
+    result = CliRunner().invoke(app, command)
 
     assert result.exit_code == 0
     integration = tmp_path / "sample-integration"
@@ -52,6 +55,8 @@ def test_create_generates_sdk_v2_scaffold(
         assert "auth" not in config
     else:
         assert config["auth"]["type"] == expected_auth_type
+    if auth_type == "platform":
+        assert config["auth"] == {"type": "platform", "provider": "github"}
 
     module = (integration / "sample_integration.py").read_text(encoding="utf-8")
     assert "sample_integration = Integration.load(" in module
@@ -176,6 +181,42 @@ def test_scaffold_rejects_invalid_auth_before_writing(tmp_path: Path, monkeypatc
     assert not (tmp_path / "sample").exists()
 
 
+def test_platform_scaffold_requires_explicit_provider_before_writing(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["create", "sample", "--auth-type", "platform"])
+
+    assert result.exit_code == 2
+    assert "--auth-provider is required" in result.output
+    assert not (tmp_path / "sample").exists()
+
+
+def test_platform_scaffold_accepts_optional_scopes(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "create",
+            "sample",
+            "--auth-type",
+            "platform",
+            "--auth-provider",
+            "Google Docs",
+            "--auth-scopes",
+            "documents.read,documents.write",
+        ],
+    )
+
+    assert result.exit_code == 0
+    config = json.loads((tmp_path / "sample" / "config.json").read_text(encoding="utf-8"))
+    assert config["auth"] == {
+        "type": "platform",
+        "provider": "Google Docs",
+        "scopes": ["documents.read", "documents.write"],
+    }
+
+
 def test_auth_requires_explicit_operation_without_changing_config(tmp_path: Path) -> None:
     integration = tmp_path / "sample"
     integration.mkdir()
@@ -257,6 +298,20 @@ def test_auth_updates_only_requested_platform_fields(tmp_path: Path) -> None:
         "scopes": ["read:user", "user:email"],
         "authorization_options": {"prompt": "consent"},
     }
+
+
+def test_auth_requires_provider_when_switching_to_platform(tmp_path: Path) -> None:
+    integration = tmp_path / "sample"
+    integration.mkdir()
+    config_path = integration / "config.json"
+    original = b'{"name":"sample","auth":{"type":"custom","fields":{"type":"object"}}}\n'
+    config_path.write_bytes(original)
+
+    result = CliRunner().invoke(app, ["auth", str(integration), "--auth-type", "platform"])
+
+    assert result.exit_code == 2
+    assert "--auth-provider is required" in result.output
+    assert config_path.read_bytes() == original
 
 
 def test_auth_invalid_json_leaves_file_unchanged(tmp_path: Path) -> None:

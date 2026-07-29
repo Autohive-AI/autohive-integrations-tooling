@@ -169,6 +169,36 @@ source .venv/bin/activate   # Linux/macOS
 uv pip install -r requirements-dev.txt
 ```
 
+## HiveUp scaffolding (draft)
+
+Create a public integration, or initialize the current directory:
+
+```bash
+hiveup create my-integration
+mkdir my-integration && cd my-integration
+hiveup init --name "My Integration"
+```
+
+Custom auth generates an editable API-key starter schema. Platform auth requires an explicit provider; scopes are optional:
+
+```bash
+hiveup create my-integration --auth-type custom
+hiveup create my-integration \
+  --auth-type platform \
+  --auth-provider github \
+  --auth-scopes repo,read:user
+```
+
+Authentication edits are always explicit. Existing compatible custom schemas and platform metadata are preserved:
+
+```bash
+hiveup auth my-integration --auth-type custom
+hiveup auth my-integration --auth-type platform --auth-provider github --auth-scopes repo
+hiveup auth my-integration --auth-type none
+```
+
+`create` and `init` refuse non-empty directories by default. `--force` atomically replaces only scaffold-owned files and preserves other developer files.
+
 ## Local Testing
 
 ```bash
