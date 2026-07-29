@@ -443,10 +443,10 @@ class IntegrationValidator:
         if not (tests_path / 'context.py').exists() and not (tests_path / 'conftest.py').exists():
             self.add_error("Missing tests/context.py or tests/conftest.py (test import/fixture setup)")
 
-        # Check for at least one test file
-        test_files = list(tests_path.glob('test_*.py'))
+        # Unit-test execution discovers only files with the _unit.py suffix.
+        test_files = list(tests_path.glob('test_*_unit.py'))
         if not test_files:
-            self.add_error("Missing test file: tests/test_*.py")
+            self.add_error("Missing unit test file: tests/test_*_unit.py")
 
     def _check_main_python_file(self):
         """Check main Python file and integration modules for required patterns."""

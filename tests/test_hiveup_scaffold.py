@@ -114,6 +114,18 @@ def test_scaffold_rejects_invalid_auth_before_writing(tmp_path: Path, monkeypatc
     assert not (tmp_path / "sample").exists()
 
 
+def test_structure_requires_discoverable_unit_test_name(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert CliRunner().invoke(app, ["create", "sample"]).exit_code == 0
+    unit_test = tmp_path / "sample" / "tests" / "test_sample_unit.py"
+    unit_test.rename(unit_test.with_name("test_sample.py"))
+
+    result = CliRunner().invoke(app, ["validate", str(tmp_path / "sample"), "--only", "structure"])
+
+    assert result.exit_code == 1
+    assert "Missing unit test file: tests/test_*_unit.py" in result.output
+
+
 @pytest.mark.parametrize("command", [["create", "sample"], ["init", "--name", "Sample"]])
 def test_fresh_scaffold_validates_tests_and_packages(tmp_path: Path, monkeypatch, command: list[str]) -> None:
     integration = tmp_path / "sample"

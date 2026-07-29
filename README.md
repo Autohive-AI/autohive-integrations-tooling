@@ -232,7 +232,7 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 - `requirements.txt` - Dependencies (must include `autohive-integrations-sdk~=2.0.1` or later in the SDK 2.x line)
 - `README.md` - Documentation
 - `icon.png`, `icon.jpg`, or `icon.jpeg` - Integration icon (512x512 pixels)
-- `tests/` - Test folder with `__init__.py`, `context.py` or `conftest.py`, and `test_*.py`
+- `tests/` - Test folder with `__init__.py`, `context.py` or `conftest.py`, and `test_*_unit.py`
 
 ## Integrations
 

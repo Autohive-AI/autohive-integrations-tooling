@@ -79,7 +79,7 @@ Checks that all mandatory files exist in the integration directory:
 | `config.json` | Error | Integration configuration |
 | `requirements.txt` | Error | Python dependencies |
 | `README.md` | Error | Integration documentation |
-| `icon.png` or `icon.svg` | Error | Integration icon — must be exactly 512x512 pixels |
+| `icon.png`, `icon.jpg`, or `icon.jpeg` | Error | Integration icon — must be exactly 512x512 pixels |
 | `__init__.py` | Warning | Python package init — optional for modular integrations with an `actions/` subdirectory (adding it causes circular imports) |
 
 ### 3. config.json Validation (`_check_config_json`)
@@ -156,7 +156,7 @@ Allowed patterns:
 | `tests/` directory exists | Error | Test directory required |
 | `tests/__init__.py` exists | Error | Test package init |
 | `tests/context.py` or `tests/conftest.py` exists | Error | Test import/fixture setup (either one satisfies this check) |
-| `tests/test_*.py` exists | Error | At least one test file |
+| `tests/test_*_unit.py` exists | Error | At least one discoverable unit test file |
 
 ### 7. Main Python File (`_check_main_python_file`)
 
