@@ -6,10 +6,12 @@ import subprocess
 import zipfile
 from pathlib import Path
 
+from typer.testing import CliRunner
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from hiveup.cli import _emit_github_annotations, _write_github_outputs, _write_package_zip, run_validation  # noqa: E402
+from hiveup.cli import _emit_github_annotations, _write_github_outputs, _write_package_zip, app, run_validation  # noqa: E402
+from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
 
 
@@ -275,6 +277,47 @@ def test_package_includes_only_supported_icon_formats(tmp_path: Path) -> None:
         assert set(archive.namelist()) == {"icon.png", "icon.jpg", "icon.jpeg"}
 
 
+def test_structure_rejects_reserved_entry_point_basenames(tmp_path: Path) -> None:
+    for index, entry_point in enumerate(("main.py", "MAIN.PY", "source/main.py")):
+        integration = _integration_with_entry_point(tmp_path / f"reserved-{index}", entry_point)
+
+        report = run_validation([integration], only={"structure"})
+
+        assert report.results[0].status == "failed"
+        assert any(message.message == RESERVED_ENTRY_POINT_MESSAGE for message in report.results[0].messages)
+
+
+def test_structure_accepts_non_reserved_entry_point_name(tmp_path: Path) -> None:
+    integration = _integration_with_entry_point(tmp_path / "domain-main", "domain_main.py")
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 0
+    assert not any(message.message == RESERVED_ENTRY_POINT_MESSAGE for message in report.results[0].messages)
+
+
+def test_package_rejects_reserved_entry_point_when_validation_is_skipped(tmp_path: Path) -> None:
+    integration = _integration_with_entry_point(tmp_path / "reserved-package", "main.py")
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 2
+    assert RESERVED_ENTRY_POINT_MESSAGE in result.output
+
+
 def _jpeg_with_dimensions(width: int, height: int) -> bytes:
     frame = b"\x08" + struct.pack(">HH", height, width) + b"\x03\x01\x11\x00\x02\x11\x00\x03\x11\x00"
     return b"\xff\xd8\xff\xc0" + struct.pack(">H", len(frame) + 2) + frame + b"\xff\xd9"
+
+
+def _integration_with_entry_point(path: Path, entry_point: str) -> Path:
+    shutil.copytree(EXAMPLES / "good-integration", path)
+    original = path / "good_integration.py"
+    replacement = path / entry_point
+    replacement.parent.mkdir(parents=True, exist_ok=True)
+    original.rename(replacement)
+    config_path = path / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["entry_point"] = entry_point
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    return path

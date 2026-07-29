@@ -63,6 +63,17 @@ JPEG_START_OF_FRAME_MARKERS = {
     0xCE,
     0xCF,
 }
+RESERVED_ENTRY_POINT_MESSAGE = (
+    "entry_point cannot be named main.py because that filename is reserved for the Autohive runtime wrapper"
+)
+
+
+def is_reserved_entry_point(entry_point: object) -> bool:
+    """Return whether an entry-point path uses a runtime-reserved filename."""
+
+    if not isinstance(entry_point, str):
+        return False
+    return entry_point.replace('\\', '/').rsplit('/', 1)[-1].casefold() == 'main.py'
 
 
 def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
@@ -235,6 +246,8 @@ class IntegrationValidator:
         # Check entry_point exists
         if 'entry_point' in self.config:
             entry_point = self.config['entry_point']
+            if is_reserved_entry_point(entry_point):
+                self.add_error(RESERVED_ENTRY_POINT_MESSAGE)
             if not (self.path / entry_point).exists():
                 self.add_error(f"entry_point file does not exist: {entry_point}")
 
