@@ -27,6 +27,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from hiveup.core.environment import EnvironmentBuildError, IntegrationEnvironment, prepare_environment
@@ -91,6 +92,23 @@ def _run_integration_tests(
     test_files: list[Path],
 ) -> tuple[int, str]:
     _stage_sdk_config(environment, integration_dir)
+
+    if not integration_dir.name.isidentifier() and (integration_dir / "__init__.py").is_file():
+        with tempfile.TemporaryDirectory(prefix="hiveup-tests-") as temporary:
+            test_root = Path(temporary) / integration_dir.name
+            shutil.copytree(integration_dir, test_root)
+            (test_root / "__init__.py").unlink()
+            staged_tests = [test_root / test_file.relative_to(integration_dir) for test_file in test_files]
+            return _execute_tests(environment, test_root, staged_tests)
+
+    return _execute_tests(environment, integration_dir, test_files)
+
+
+def _execute_tests(
+    environment: IntegrationEnvironment,
+    integration_dir: Path,
+    test_files: list[Path],
+) -> tuple[int, str]:
     cmd = [
         str(environment.python),
         "-m",

@@ -186,6 +186,27 @@ def test_integration_tests_stage_config_where_installed_sdk_expects_it(tmp_path:
     assert (sdk_root / "config.json").read_bytes() == config.read_bytes()
 
 
+def test_integration_tests_do_not_collect_hyphenated_root_as_package(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "hyphenated-integration"
+    tests_dir = integration / "tests"
+    tests_dir.mkdir(parents=True)
+    (integration / "__init__.py").write_text("from .demo import VALUE\n", encoding="utf-8")
+    (integration / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
+    test_file = tests_dir / "test_demo_unit.py"
+    test_file.write_text(
+        "import pytest\n\npytestmark = pytest.mark.unit\n\ndef test_demo():\n    assert 1 == 1\n",
+        encoding="utf-8",
+    )
+    isolated = environment.IntegrationEnvironment(tmp_path / "cache", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(test_checks, "_stage_sdk_config", lambda *args: None)
+
+    exit_code, output = test_checks._run_integration_tests(isolated, integration, [test_file])
+
+    assert exit_code == 0, output
+    assert "1 passed" in output
+    assert (integration / "__init__.py").is_file()
+
+
 def test_test_check_reports_isolated_environment_failure(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     tests_dir = integration / "tests"
