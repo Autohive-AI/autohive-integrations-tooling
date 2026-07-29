@@ -12,7 +12,7 @@ a permanent CI job. Generated environments, logs, and archives were kept under
 | Input | Commit |
 | --- | --- |
 | Initial Python HiveUp comparison | `b91b79774a37aab4247d941714e8f99adaf91f85` |
-| Final Python HiveUp verification | `a57da2872fb9452e67b0b0b35027f6bf9500a0eb` |
+| Final Python HiveUp code | `a8c90d12314ab3134b8b0b992f65f5925291486f` |
 | Legacy .NET HiveUp `origin/master` | `b8d999b3b1492f6c7284f3ed31a7ec6b7882f01b` |
 | Integrations `origin/master` | `d1ac5b7fdeb3ec1ad091f183453e358bc70e8c46` |
 
@@ -81,7 +81,7 @@ package context does not exist in the deployment ZIP. HiveUp now tests a
 temporary source copy with that root package marker removed. The original source
 is never modified.
 
-Regression tests cover all three cases. The final tooling suite contains 74
+Regression tests cover all three cases. The final tooling suite contains 75
 passing tests.
 
 ## Package comparison
