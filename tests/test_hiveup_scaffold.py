@@ -176,6 +176,32 @@ def test_scaffold_rejects_invalid_auth_before_writing(tmp_path: Path, monkeypatc
     assert not (tmp_path / "sample").exists()
 
 
+def test_auth_requires_explicit_operation_without_changing_config(tmp_path: Path) -> None:
+    integration = tmp_path / "sample"
+    integration.mkdir()
+    config_path = integration / "config.json"
+    original = b'{"name":"sample","auth":{"type":"custom"}}\n'
+    config_path.write_bytes(original)
+
+    result = CliRunner().invoke(app, ["auth", str(integration)])
+
+    assert result.exit_code == 2
+    assert "--auth-type is required" in result.output
+    assert config_path.read_bytes() == original
+
+
+def test_auth_none_explicitly_removes_auth(tmp_path: Path) -> None:
+    integration = tmp_path / "sample"
+    integration.mkdir()
+    config_path = integration / "config.json"
+    config_path.write_text('{"name":"sample","auth":{"type":"custom"}}\n', encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["auth", str(integration), "--auth-type", "none"])
+
+    assert result.exit_code == 0
+    assert json.loads(config_path.read_text(encoding="utf-8")) == {"name": "sample"}
+
+
 def test_structure_requires_discoverable_unit_test_name(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     assert CliRunner().invoke(app, ["create", "sample"]).exit_code == 0

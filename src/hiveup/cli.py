@@ -199,11 +199,15 @@ def init(
 @app.command()
 def auth(
     directory: Annotated[Path, typer.Argument(help="Integration directory to edit.")] = Path("."),
-    auth_type: Annotated[str, typer.Option("--auth-type", help="platform, custom, or none.")] = "none",
+    auth_type: Annotated[str | None, typer.Option("--auth-type", help="platform, custom, or none.")] = None,
     auth_provider: Annotated[str | None, typer.Option("--auth-provider", help="Platform auth provider.")] = None,
     auth_scopes: Annotated[str | None, typer.Option("--auth-scopes", help="Comma-separated platform scopes.")] = None,
 ) -> None:
     """Add, update, or remove the auth block in config.json."""
+
+    if auth_type is None:
+        typer.echo("--auth-type is required; use platform, custom, or none", err=True)
+        raise typer.Exit(2)
 
     config_path = directory / "config.json"
     if not config_path.is_file():
