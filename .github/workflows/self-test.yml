@@ -312,6 +312,80 @@ jobs:
           fi
           echo "✅ Missing argument correctly rejected"
 
+  test-deployment-packaging:
+    runs-on: ubuntu-latest
+    name: Test HiveUp deployment packaging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install HiveUp
+        run: python -m pip install -e . -q
+
+      - name: Create representative integrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          for fixture in no-dependencies pure-python native-wheel; do
+            mkdir -p "$RUNNER_TEMP/$fixture"
+            cp tests/examples/good-integration/icon.png "$RUNNER_TEMP/$fixture/icon.png"
+            printf 'fixture = object()\n' > "$RUNNER_TEMP/$fixture/fixture.py"
+            cat > "$RUNNER_TEMP/$fixture/config.json" <<'JSON'
+          {
+            "name": "fixture",
+            "version": "1.0.0",
+            "entry_point": "fixture.py"
+          }
+          JSON
+          done
+          : > "$RUNNER_TEMP/no-dependencies/requirements.txt"
+          printf 'idna==3.10\n' > "$RUNNER_TEMP/pure-python/requirements.txt"
+          printf 'multidict==6.6.3\n' > "$RUNNER_TEMP/native-wheel/requirements.txt"
+
+      - name: Package deployment fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          for fixture in no-dependencies pure-python native-wheel; do
+            hiveup package "$RUNNER_TEMP/$fixture" \
+              --skip-validate \
+              --output "$RUNNER_TEMP/$fixture.zip"
+          done
+
+      - name: Verify deployment archives
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import zipfile
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          archives = {}
+          for fixture in ("no-dependencies", "pure-python", "native-wheel"):
+              with zipfile.ZipFile(root / f"{fixture}.zip") as archive:
+                  names = archive.namelist()
+                  assert names == sorted(names), names
+                  assert {"config.json", "fixture.py", "icon.png", "requirements.txt"} <= set(names)
+                  assert not any(name.endswith(".pyc") for name in names)
+                  assert not any(name.startswith("tests/") for name in names)
+                  archives[fixture] = names
+
+          assert not any(name.startswith("dependencies/") for name in archives["no-dependencies"])
+          assert any(name.startswith("dependencies/idna/") for name in archives["pure-python"])
+          assert not any(name.endswith(".so") for name in archives["pure-python"])
+          assert any(
+              name.startswith("dependencies/multidict/")
+              and name.endswith(".cpython-313-x86_64-linux-gnu.so")
+              for name in archives["native-wheel"]
+          )
+          PY
+
   test-action-fixtures:
     runs-on: ubuntu-latest
     name: Test Action — ${{ matrix.name }}

@@ -93,16 +93,16 @@ def write_package_zip(directory: Path, package_path: Path, dependencies: Path | 
         compression=zipfile.ZIP_DEFLATED,
         compresslevel=9,
     ) as archive:
-        for path in _package_files(directory, package_path):
-            _write_file(archive, path, path.relative_to(directory).as_posix())
+        package_files = [
+            (path.relative_to(directory).as_posix(), path)
+            for path in _package_files(directory, package_path)
+        ]
         if dependencies:
-            dependency_files = sorted(
-                dependencies.rglob("*"),
-                key=lambda path: path.relative_to(dependencies).as_posix(),
-            )
-            for path in dependency_files:
+            for path in dependencies.rglob("*"):
                 if path.is_file() and not path.is_symlink() and path.suffix.lower() != ".pyc":
-                    _write_file(archive, path, f"dependencies/{path.relative_to(dependencies).as_posix()}")
+                    package_files.append((f"dependencies/{path.relative_to(dependencies).as_posix()}", path))
+        for archive_name, path in sorted(package_files):
+            _write_file(archive, path, archive_name)
 
 
 def _package_files(directory: Path, package_path: Path) -> list[Path]:
