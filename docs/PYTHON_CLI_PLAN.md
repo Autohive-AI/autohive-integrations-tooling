@@ -398,6 +398,13 @@ Deliverable: .NET CLI parity; archive it.
 Other possible DX checks and watch mode should be scoped independently rather
 than being required for .NET CLI parity.
 
+## Migration verification
+
+The one-off local comparison against the unchanged .NET CLI is documented in
+[HIVEUP_SHADOW_RESULTS.md](HIVEUP_SHADOW_RESULTS.md). It exercises seven real
+integrations across authentication, source-layout, and dependency categories.
+The comparison is intentionally not retained as a permanent CI shadow job.
+
 ## Explicitly out of scope for v1
 
 - Publishing/deploying to the Autohive platform (no backend API exists in the
