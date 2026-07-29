@@ -221,7 +221,7 @@ Integration: my-integration
 ============================================================
 
 Errors (2):
-  ❌ Missing required file: icon.png or icon.svg (Integration icon)
+  ❌ Missing integration icon: icon.png, icon.jpg, or icon.jpeg
   ❌ requirements.txt must include 'autohive-integrations-sdk'
 
 Warnings (1):

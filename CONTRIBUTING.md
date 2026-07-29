@@ -26,6 +26,7 @@ uv venv --python 3.13
 source .venv/bin/activate   # Linux/macOS
 # .venv\Scripts\activate    # Windows
 uv pip install -r requirements-dev.txt
+uv pip install -e .
 ```
 
 ## Validating Your Integration
@@ -34,13 +35,13 @@ Run these before submitting a PR:
 
 ```bash
 # Validate structure and config
-python scripts/validate_integration.py my-integration
+hiveup check structure my-integration
 
 # Run all code quality checks (syntax, imports, JSON, lint, format, security, deps, config sync, fetch pattern)
-python scripts/check_code.py my-integration
+hiveup validate my-integration
 
 # Run unit tests when the integration has test_*_unit.py files
-python scripts/run_tests.py my-integration
+hiveup test my-integration
 ```
 
 ### What Gets Checked
@@ -90,7 +91,7 @@ docs: update Netlify README with auth setup
 
 ## Pull Request Process
 
-1. **Run validation locally** — `validate_integration.py`, `check_code.py`, and `run_tests.py` when unit tests exist
+1. **Run validation locally** — `hiveup validate` and `hiveup test` when unit tests exist
 2. **Update the main README.md** — add your integration to the integrations table
 3. **Use a conventional commit PR title** — CI enforces this
 4. **One integration per PR** — keep PRs focused

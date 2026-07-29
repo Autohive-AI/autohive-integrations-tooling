@@ -157,9 +157,100 @@ For example, `2.1.0` means "the second tooling release for SDK v2" — it does n
 | `2.0.0` | Initial tooling release for SDK v2 |
 | `2.1.0` | New checks or features (still SDK v2) |
 | `2.1.1` | Bug-fix to the tooling (still SDK v2) |
+| `2.4.0a1` | First Python HiveUp rewrite prerelease after tooling `2.3.0` |
 | `3.0.0` | Tooling targeting SDK v3 |
 
-## Setup
+The Python distribution, import package, and executable are all named `hiveup`.
+`src/hiveup/__init__.py` is the single package-version source; build metadata
+reads the version from there.
+
+## Install HiveUp from a local build
+
+HiveUp is currently distributed as a local prerelease build. It is **not
+published to PyPI**. PyPI Trusted Publishing is deferred to
+[issue #50](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/50).
+
+Build the wheel and source distribution:
+
+```bash
+git clone https://github.com/Autohive-AI/autohive-integrations-tooling.git
+cd autohive-integrations-tooling
+
+uv python install 3.13
+uv venv --python 3.13
+source .venv/bin/activate   # Linux/macOS
+# .venv\Scripts\activate    # Windows
+uv pip install -r requirements-dev.txt
+python -m build
+python -m twine check dist/*
+```
+
+Install the resulting wheel as an isolated command-line tool:
+
+```bash
+uv tool install --force ./dist/hiveup-2.4.0a1-py3-none-any.whl
+hiveup --version
+```
+
+`pipx` is also supported:
+
+```bash
+pipx install --force ./dist/hiveup-2.4.0a1-py3-none-any.whl
+```
+
+Rebuild and repeat the `--force` installation to upgrade a local prerelease.
+To remove it:
+
+```bash
+uv tool uninstall hiveup
+# or: pipx uninstall hiveup
+```
+
+Pull-request CI builds both `hiveup-2.4.0a1-py3-none-any.whl` and
+`hiveup-2.4.0a1.tar.gz`, verifies their metadata, installs the wheel outside the
+source checkout, exercises the supported CLI lifecycle, and uploads them as a
+GitHub Actions artifact. It does not publish either file.
+
+### Compatibility
+
+| Component | Supported contract |
+|-----------|--------------------|
+| Python running HiveUp | Python 3.13+ |
+| Integration SDK | SDK 2.x (`autohive-integrations-sdk~=2.0`) |
+| Deployment dependencies | CPython 3.13 wheels for `manylinux2014_x86_64` |
+| Integration icons | PNG, JPG, or JPEG; exactly 512×512 |
+| Integration entry point | Root-level `.py` file with `<module> = Integration.load(...)` |
+| Reserved runtime file | `main.py` may not be an integration entry point |
+
+### Migrating from the .NET HiveUp tool
+
+The Python rewrite preserves the established command name and parity surface:
+
+| .NET command | Python command |
+|--------------|----------------|
+| `hiveup create` | `hiveup create` |
+| `hiveup init` | `hiveup init` |
+| `hiveup validate` | `hiveup validate` |
+| `hiveup auth` | `hiveup auth` |
+| `hiveup package` | `hiveup package` |
+| `hiveup list-templates` | Removed; the Python rewrite currently has one SDK-aligned scaffold |
+
+The Python CLI also provides focused `check`, isolated `test`, CI, and `doctor`
+commands. Local action execution is not part of .NET parity and is tracked in
+[issue #49](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/49).
+
+After installing the local wheel, the old global .NET tool can be removed when
+the developer is ready:
+
+```bash
+dotnet tool uninstall --global Autohive.Integrations.Cli
+```
+
+Existing `scripts/*.py` entry points remain temporary compatibility shims, but
+new local workflows should use `hiveup validate`, `hiveup check`, and
+`hiveup test` directly.
+
+## Repository development setup
 
 ```bash
 uv python install 3.13
@@ -167,9 +258,10 @@ uv venv --python 3.13
 source .venv/bin/activate   # Linux/macOS
 # .venv\Scripts\activate    # Windows
 uv pip install -r requirements-dev.txt
+uv pip install -e .
 ```
 
-## HiveUp scaffolding (draft)
+## HiveUp scaffolding (prerelease)
 
 Create a public integration, or initialize the current directory:
 
@@ -203,20 +295,23 @@ hiveup auth my-integration --auth-type none
 
 ```bash
 # Validate structure and config
-python scripts/validate_integration.py my-integration
+hiveup check structure my-integration
 
 # Run code quality checks (syntax, imports, JSON, lint, format, security, deps, config sync, fetch pattern)
-python scripts/check_code.py my-integration
+hiveup validate my-integration
 
 # In PR/CI mode, pass a base ref so config/input drift fails for brand-new integrations
-python scripts/check_code.py --base-ref origin/main my-integration
+hiveup validate --base-ref origin/main my-integration
 
-# Check all imports in a file
-python scripts/check_imports.py my-integration/main.py
+# Check integration imports only
+hiveup check imports my-integration
 
 # Validate all integrations (auto-discovers at repo root)
-python scripts/validate_integration.py
+hiveup validate
 ```
+
+The existing `scripts/*.py` commands remain available as compatibility shims
+while integrations and external workflows migrate to HiveUp.
 
 ### Running unit tests
 
@@ -224,13 +319,13 @@ The test runner discovers `test_*_unit.py` files and runs them with pytest and c
 
 ```bash
 # Run unit tests for specific integrations
-python scripts/run_tests.py my-integration
+hiveup test my-integration
 
 # Run unit tests for multiple integrations
-python scripts/run_tests.py hackernews bitly notion
+hiveup test hackernews bitly notion
 
 # Run unit tests for all integrations (auto-discovers)
-python scripts/run_tests.py
+hiveup test
 ```
 
 Integrations without `test_*_unit.py` files are skipped with a warning.

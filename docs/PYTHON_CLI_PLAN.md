@@ -38,7 +38,7 @@ README pointer.
 
 ```text
 autohive-integrations-tooling/
-├── pyproject.toml                  # package: autohive-cli, console script: hiveup
+├── pyproject.toml                  # package and console script: hiveup
 ├── src/
 │   └── hiveup/
 │       ├── __init__.py             # __version__
@@ -98,8 +98,8 @@ autohive-integrations-tooling/
 | Python | 3.13+ | matches SDK requirement and existing tooling |
 | CLI framework | **Typer** | subcommands, completion, help text with minimal boilerplate |
 | Output | **Rich** | tables, panels, spinners; already the de-facto Python standard |
-| Packaging | `pyproject.toml`, console script `hiveup` | `uv tool install autohive-cli` / `pipx install autohive-cli` |
-| Distribution | PyPI (`autohive-cli`), plus `uvx autohive-cli` for zero-install | replaces install.sh/install.ps1 entirely |
+| Packaging | `pyproject.toml`, package and console script `hiveup` | local wheel installation through `uv tool` / `pipx` |
+| Distribution | Local wheel and source-distribution artifacts for the prerelease | PyPI Trusted Publishing is deferred to issue #50 |
 | Schema validation | `jsonschema` (Draft 7) | matches SDK's validator |
 | Lint/format/security | shell out to `ruff`, `bandit`, `pip-audit` as declared dependencies of the CLI | they're already the tools CI uses; installing them with the CLI removes the "pip install into current env" hack in `check_code.py` |
 | Command name | keep **`hiveup`** | continuity with existing docs/muscle memory |
@@ -412,5 +412,6 @@ than being required for .NET CLI parity.
    production runtime before hardcoding.
 2. Should tooling v2 (SDK 2.x) be the target, with SDK 3.0.0.dev0 pending? Plan
    assumes yes: build against 2.x, keep checks version-aware via requirements pin.
-3. PyPI name: `autohive-cli` with command `hiveup` (plan default) — or publish as
-   `hiveup` if the name is available?
+3. PyPI publication is deferred to
+   [issue #50](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/50);
+   the selected distribution and command name is `hiveup`.
