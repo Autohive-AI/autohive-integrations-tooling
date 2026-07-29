@@ -202,6 +202,77 @@ def test_auth_none_explicitly_removes_auth(tmp_path: Path) -> None:
     assert json.loads(config_path.read_text(encoding="utf-8")) == {"name": "sample"}
 
 
+def test_auth_preserves_custom_schema_and_unknown_config_fields(tmp_path: Path) -> None:
+    integration = tmp_path / "sample"
+    integration.mkdir()
+    config_path = integration / "config.json"
+    config = {
+        "name": "sample",
+        "extension": {"enabled": True},
+        "auth": {
+            "type": "custom",
+            "title": "Account credentials",
+            "documentation_url": "https://example.com/auth",
+            "fields": {
+                "type": "object",
+                "properties": {"token": {"type": "string", "format": "password"}},
+                "required": ["token"],
+            },
+        },
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["auth", str(integration), "--auth-type", "custom"])
+
+    assert result.exit_code == 0
+    assert json.loads(config_path.read_text(encoding="utf-8")) == config
+
+
+def test_auth_updates_only_requested_platform_fields(tmp_path: Path) -> None:
+    integration = tmp_path / "sample"
+    integration.mkdir()
+    config_path = integration / "config.json"
+    config = {
+        "name": "sample",
+        "auth": {
+            "type": "platform",
+            "provider": "github",
+            "scopes": ["repo"],
+            "authorization_options": {"prompt": "consent"},
+        },
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        app,
+        ["auth", str(integration), "--auth-type", "platform", "--auth-scopes", "read:user,user:email"],
+    )
+
+    assert result.exit_code == 0
+    updated = json.loads(config_path.read_text(encoding="utf-8"))
+    assert updated["name"] == "sample"
+    assert updated["auth"] == {
+        "type": "platform",
+        "provider": "github",
+        "scopes": ["read:user", "user:email"],
+        "authorization_options": {"prompt": "consent"},
+    }
+
+
+def test_auth_invalid_json_leaves_file_unchanged(tmp_path: Path) -> None:
+    integration = tmp_path / "sample"
+    integration.mkdir()
+    config_path = integration / "config.json"
+    original = b"{not json\n"
+    config_path.write_bytes(original)
+
+    result = CliRunner().invoke(app, ["auth", str(integration), "--auth-type", "none"])
+
+    assert result.exit_code == 2
+    assert "Could not read config.json" in result.output
+    assert config_path.read_bytes() == original
+
+
 def test_structure_requires_discoverable_unit_test_name(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     assert CliRunner().invoke(app, ["create", "sample"]).exit_code == 0

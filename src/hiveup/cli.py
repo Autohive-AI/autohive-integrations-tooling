@@ -214,9 +214,21 @@ def auth(
         typer.echo(f"config.json not found: {config_path}", err=True)
         raise typer.Exit(2)
 
-    config = json.loads(config_path.read_text(encoding="utf-8"))
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        typer.echo(f"Could not read config.json: {exc}", err=True)
+        raise typer.Exit(2)
+    if not isinstance(config, dict):
+        typer.echo("config.json must contain a JSON object", err=True)
+        raise typer.Exit(2)
+
     _apply_auth_config(config, auth_type, provider=auth_provider, scopes=auth_scopes)
-    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    try:
+        _atomic_write(config_path, (json.dumps(config, indent=2) + "\n").encode())
+    except OSError as exc:
+        typer.echo(f"Could not write config.json: {exc}", err=True)
+        raise typer.Exit(2)
     typer.echo(f"✅ Updated {config_path}")
 
 
@@ -518,10 +530,17 @@ def _apply_auth_config(config: dict, auth_type: str, *, provider: str | None = N
     if auth_type not in AUTH_TYPES:
         typer.echo(f"Unsupported auth type: {auth_type}", err=True)
         raise typer.Exit(2)
+    existing = config.get("auth")
+    compatible = existing if isinstance(existing, dict) and existing.get("type") == auth_type else {}
     if auth_type == "none":
         config.pop("auth", None)
     elif auth_type == "platform":
-        config["auth"] = {"type": "platform", "provider": provider or "github", "scopes": _csv_list(scopes)}
+        config["auth"] = {
+            **compatible,
+            "type": "platform",
+            "provider": provider or compatible.get("provider") or "github",
+            "scopes": _csv_list(scopes) if scopes is not None else compatible.get("scopes", []),
+        }
     else:
         config["auth"] = {
             "type": "custom",
@@ -531,6 +550,7 @@ def _apply_auth_config(config: dict, auth_type: str, *, provider: str | None = N
                 "properties": {"api_key": {"type": "string", "format": "password", "label": "API Key"}},
                 "required": ["api_key"],
             },
+            **compatible,
         }
 
 
