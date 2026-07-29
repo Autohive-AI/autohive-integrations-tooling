@@ -5,6 +5,7 @@ import struct
 import subprocess
 import zipfile
 from pathlib import Path
+from unittest.mock import Mock
 
 from typer.testing import CliRunner
 
@@ -13,6 +14,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from hiveup.cli import _emit_github_annotations, _write_github_outputs, _write_package_zip, app, run_validation  # noqa: E402
 from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
+from hiveup.packaging import (  # noqa: E402
+    TARGET_PLATFORM,
+    TARGET_PYTHON_VERSION,
+    PackageBuildError,
+    install_dependencies,
+)
 
 
 EXAMPLES = Path(__file__).resolve().parent / "examples"
@@ -303,6 +310,57 @@ def test_package_rejects_reserved_entry_point_when_validation_is_skipped(tmp_pat
 
     assert result.exit_code == 2
     assert RESERVED_ENTRY_POINT_MESSAGE in result.output
+
+
+def test_package_dependencies_target_deployment_runtime(tmp_path: Path, monkeypatch) -> None:
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("example==1.0\n", encoding="utf-8")
+    target = tmp_path / "dependencies"
+    run = Mock(return_value=subprocess.CompletedProcess([], 0, "", ""))
+    monkeypatch.setattr("hiveup.packaging.subprocess.run", run)
+
+    install_dependencies(requirements, target)
+
+    run.assert_called_once_with(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "-r",
+            str(requirements),
+            "--platform",
+            TARGET_PLATFORM,
+            "--python-version",
+            TARGET_PYTHON_VERSION,
+            "--only-binary=:all:",
+            "--target",
+            str(target),
+            "-q",
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_package_dependency_error_explains_wheel_contract(tmp_path: Path, monkeypatch) -> None:
+    requirements = tmp_path / "requirements.txt"
+    target = tmp_path / "dependencies"
+    monkeypatch.setattr(
+        "hiveup.packaging.subprocess.run",
+        Mock(return_value=subprocess.CompletedProcess([], 1, "", "No matching distribution found")),
+    )
+
+    try:
+        install_dependencies(requirements, target)
+    except PackageBuildError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("Expected dependency installation to fail")
+
+    assert f"Python {TARGET_PYTHON_VERSION} on {TARGET_PLATFORM}" in message
+    assert "must provide compatible wheels" in message
+    assert "No matching distribution found" in message
 
 
 def _jpeg_with_dimensions(width: int, height: int) -> bytes:

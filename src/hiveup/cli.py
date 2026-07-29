@@ -26,6 +26,7 @@ from hiveup.checks.static import available_checks
 from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE, is_reserved_entry_point
 from hiveup.core.discovery import changed_integrations, discover_integrations, explicit_integrations
 from hiveup.core.results import CheckMessage, CheckResult, ValidationReport
+from hiveup.packaging import PackageBuildError, install_dependencies
 from hiveup.render.console import render_report
 from hiveup.render.markdown import GROUPS, render_markdown
 
@@ -233,13 +234,10 @@ def package(
         deps_dir = Path(tmp) / "dependencies"
         requirements = directory / "requirements.txt"
         if requirements.is_file():
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-r", str(requirements), "--target", str(deps_dir), "-q"],
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0:
-                typer.echo(result.stderr or result.stdout, err=True)
+            try:
+                install_dependencies(requirements, deps_dir)
+            except PackageBuildError as exc:
+                typer.echo(str(exc), err=True)
                 raise typer.Exit(2)
 
         _write_package_zip(directory, package_path, deps_dir if deps_dir.exists() else None)
