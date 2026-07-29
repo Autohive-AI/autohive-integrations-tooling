@@ -105,7 +105,7 @@ autohive-integrations-tooling/
 | Command name | keep **`hiveup`** | continuity with existing docs/muscle memory |
 
 The SDK (`autohive-integrations-sdk`) is a **runtime dependency of the CLI**
-(needed by `hiveup run` and `hiveup test`). Pin `~=2.0` for the 2.x tooling line;
+(needed by scaffolding and integration test environments). Pin `~=2.0` for the 2.x tooling line;
 when SDK 3.0 releases, tooling 3.0 pins `~=3.0`.
 
 ## Command reference
@@ -141,7 +141,7 @@ Behavior:
 - `--modular` generates the `actions/` package layout from
   `docs/manual/integration_structure.md`, with `Integration.load(config_path)`
   using an explicit path (the SDK's default path resolution only works when vendored).
-- After generation, prints next steps: `hiveup validate`, `hiveup test`, `hiveup run`.
+- After generation, prints next steps: `hiveup validate` and `hiveup test`.
 
 ### `hiveup validate [dirs...]` — the flagship command
 
@@ -226,55 +226,14 @@ hiveup test --watch               # rerun on file change (watchfiles)
   never runs in `hiveup validate` or CI. Honors the `integration`/`destructive`
   marker conventions from the SDK skills.
 
-### `hiveup run` — local action execution (new capability)
+### Local action execution — deferred
 
-The biggest DX gap in the current tooling: there is no way to execute an action
-against the real API without writing a throwaway script. This is also a
-validation lever — developers who can trivially run actions locally submit
-working integrations.
-
-```
-hiveup run my_action                                # prompts for inputs from input_schema
-hiveup run my_action --inputs inputs.json           # or --input key=value (repeatable)
-hiveup run my_action --auth-profile default
-hiveup run --list                                   # list actions + triggers from config.json
-hiveup run --trigger new_items --last-poll-ts 2026-07-01T00:00:00Z
-hiveup run --connected-account
-```
-
-Mechanics (all verified against SDK internals):
-
-1. Read `config.json`, resolve `entry_point`, import the module with the
-   integration dir on `sys.path`.
-2. Discover the `Integration` instance by scanning module globals for the first
-   `isinstance(x, Integration)` (samples use varying variable names, so
-   discovery-by-type is required; error clearly if zero or multiple found).
-3. Build the **wrapped auth envelope** the SDK requires —
-   `{"auth_type": "Custom"|"PlatformOauth2"|..., "credentials": {...}}` — from
-   the auth store (below). For custom auth, map config `type: "custom"` →
-   runtime `auth_type: "Custom"`; validate credentials against
-   `config.auth.fields` before running so the user gets a clear error, not an
-   SDK traceback.
-4. Prompt for inputs interactively by walking `input_schema` (types, enums,
-   required), or take `--inputs file.json` / `--input k=v`.
-5. `async with ExecutionContext(auth=auth) as context:` →
-   `integration.execute_action(name, inputs, context)`. Handle all three result
-   shapes (`ACTION`, `ACTION_ERROR`, `VALIDATION_ERROR` with its `source` field)
-   and the raise-instead-of-wrap behavior of polling triggers / connected account.
-6. Pretty-print the `IntegrationResult`: status, `cost_usd` if present, data as
-   syntax-highlighted JSON. `--json` for raw output. `--verbose` echoes each
-   `context.fetch` call (method, URL, status) via a thin fetch wrapper.
-
-**Auth store** (`runner/authstore.py`):
-
-- Per-integration profiles in `<integration>/.hiveup/auth.json` (gitignored by
-  scaffold; the `hygiene` check errors if it's ever committed) with optional
-  user-global fallback `~/.config/hiveup/auth/<integration-name>.json`.
-- `hiveup auth set [--profile default]` prompts for each field in
-  `config.auth.fields` (password-masked for `format: password`); for platform
-  OAuth it stores a raw access token supplied by the user (`--token` or prompt) —
-  the CLI does not implement OAuth flows in v1.
-- Values support `env:VAR_NAME` indirection so profiles can reference `.env`.
+Local execution was not provided by the legacy .NET HiveUp CLI and is not part
+of the initial parity rewrite. A preliminary implementation was removed because
+it did not yet provide dependency isolation, schema validation, credential
+redaction, or explicit safeguards around real external API calls. The design and
+acceptance criteria for a safe future `hiveup run` command are tracked in
+[issue #49](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/49).
 
 ### `hiveup package [dir]`
 
@@ -304,11 +263,6 @@ with non-interactive flags (`--auth-type/--auth-provider/--auth-scopes`, custom
 field specs via `--field name:label:password`). When "none" is chosen, the auth
 key is **removed**, not set to `null` (fixes .NET behavior). Preserves key order
 and formatting of the rest of config.json.
-
-Subcommand `hiveup auth set` belongs to the runner credential store (see `run`).
-Disambiguation: `hiveup auth` with no subcommand edits config; `hiveup auth set`
-manages local credentials. (Implementer may instead choose `hiveup credentials`
-for the store if the overload proves confusing.)
 
 ### `hiveup doctor`
 
@@ -439,15 +393,16 @@ Deliverable: CI runs on the new CLI.
 template (incl. `--modular`), `package` with fixes, `auth` editing, `doctor`.
 Deliverable: .NET CLI parity; archive it.
 
-**Phase 5 — runner + new validation checks.** `hiveup run` (actions, triggers,
-connected account), auth store, `hygiene` + `coverage-map` + README-content
-checks (as warnings), `--watch`. Deliverable: full DX story.
+**Deferred enhancements.** Local action execution is tracked separately in
+[issue #49](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/49).
+Other possible DX checks and watch mode should be scoped independently rather
+than being required for .NET CLI parity.
 
 ## Explicitly out of scope for v1
 
 - Publishing/deploying to the Autohive platform (no backend API exists in the
   current CLI; add `hiveup publish` + login/token flow when the platform exposes one).
-- OAuth authorization flows in `hiveup run` (raw token entry only).
+- Local action, trigger, and connected-account execution (tracked in issue #49).
 - A local platform emulator/web UI.
 - Windows-specific installers (PyPI + uv/pipx covers all platforms).
 
@@ -459,6 +414,3 @@ checks (as warnings), `--watch`. Deliverable: full DX story.
    assumes yes: build against 2.x, keep checks version-aware via requirements pin.
 3. PyPI name: `autohive-cli` with command `hiveup` (plan default) — or publish as
    `hiveup` if the name is available?
-4. Is `hiveup run` allowed to hit real APIs by default, or should it require an
-   explicit `--live` flag? Plan default: real calls, since credentials are
-   explicitly configured.

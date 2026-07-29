@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
-import importlib.util
 import json
 import os
 import re
@@ -18,7 +15,6 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from autohive_integrations_sdk import ExecutionContext, Integration
 
 from hiveup import __version__
 from hiveup.checks.static import available_checks
@@ -297,36 +293,6 @@ def doctor(directory: Annotated[Path, typer.Argument(help="Directory to inspect.
     for label, value in checks:
         typer.echo(f"{label}: {value}")
     typer.echo(f"Looks like integration: {'yes' if (directory / 'config.json').is_file() else 'no'}")
-
-
-@app.command()
-def run(
-    action: Annotated[str | None, typer.Argument(help="Action name to execute.")] = None,
-    directory: Annotated[Path, typer.Option("--dir", help="Integration directory.")] = Path("."),
-    list_items: Annotated[bool, typer.Option("--list", help="List actions and triggers.")] = False,
-    inputs_file: Annotated[Path | None, typer.Option("--inputs", help="JSON file containing action inputs.")] = None,
-    input_values: Annotated[
-        list[str] | None,
-        typer.Option("--input", help="Input override as key=value. May be repeated."),
-    ] = None,
-    auth_file: Annotated[Path | None, typer.Option("--auth", help="JSON auth envelope or credentials file.")] = None,
-    json_output: Annotated[bool, typer.Option("--json", help="Emit raw JSON result.")] = False,
-) -> None:
-    """List or execute integration actions locally."""
-
-    config = _load_config(directory)
-    if list_items or action is None:
-        _print_runnable_items(config, json_output=json_output)
-        return
-
-    inputs = _load_inputs(inputs_file, input_values or [])
-    auth = _load_auth(auth_file, config)
-    result = asyncio.run(_execute_action(directory, config, action, inputs, auth))
-    data = _result_to_jsonable(result)
-    if json_output:
-        print(json.dumps(data, indent=2, default=str))
-    else:
-        typer.echo(json.dumps(data, indent=2, default=str))
 
 
 def run_validation(
@@ -783,118 +749,6 @@ def _load_config(directory: Path) -> dict:
         typer.echo(f"config.json not found: {config_path}", err=True)
         raise typer.Exit(2)
     return json.loads(config_path.read_text(encoding="utf-8"))
-
-
-def _print_runnable_items(config: dict, *, json_output: bool) -> None:
-    data = {
-        "actions": sorted(config.get("actions", {}).keys()),
-        "polling_triggers": sorted(config.get("polling_triggers", {}).keys()),
-        "supports_connected_account": bool(config.get("supports_connected_account")),
-    }
-    if json_output:
-        print(json.dumps(data, indent=2))
-        return
-    typer.echo("Actions:")
-    for action in data["actions"]:
-        typer.echo(f"  - {action}")
-    if data["polling_triggers"]:
-        typer.echo("Polling triggers:")
-        for trigger in data["polling_triggers"]:
-            typer.echo(f"  - {trigger}")
-
-
-def _load_inputs(inputs_file: Path | None, input_values: list[str]) -> dict:
-    inputs = {}
-    if inputs_file:
-        inputs.update(json.loads(inputs_file.read_text(encoding="utf-8")))
-    for item in input_values:
-        if "=" not in item:
-            typer.echo(f"Invalid --input value (expected key=value): {item}", err=True)
-            raise typer.Exit(2)
-        key, value = item.split("=", 1)
-        inputs[key] = _parse_scalar(value)
-    return inputs
-
-
-def _load_auth(auth_file: Path | None, config: dict) -> dict:
-    if auth_file:
-        auth = json.loads(auth_file.read_text(encoding="utf-8"))
-        if "auth_type" in auth and "credentials" in auth:
-            return auth
-        return {"auth_type": _runtime_auth_type(config), "credentials": auth}
-    return {"auth_type": _runtime_auth_type(config), "credentials": {}}
-
-
-def _runtime_auth_type(config: dict) -> str:
-    auth_type = (config.get("auth") or {}).get("type")
-    return {"custom": "Custom", "platform": "PlatformOauth2"}.get(auth_type, "None")
-
-
-async def _execute_action(directory: Path, config: dict, action: str, inputs: dict, auth: dict):
-    integration = _load_integration(directory, config)
-    async with ExecutionContext(auth=auth) as context:
-        return await integration.execute_action(action, inputs, context)
-
-
-def _load_integration(directory: Path, config: dict) -> Integration:
-    entry_point = config.get("entry_point")
-    if not entry_point:
-        typer.echo("config.json missing entry_point", err=True)
-        raise typer.Exit(2)
-    module_path = directory / entry_point
-    spec = importlib.util.spec_from_file_location(module_path.stem, module_path)
-    if spec is None or spec.loader is None:
-        typer.echo(f"Could not import entry point: {module_path}", err=True)
-        raise typer.Exit(2)
-
-    sys.path.insert(0, str(directory.resolve()))
-    try:
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-    finally:
-        with contextlib.suppress(ValueError):
-            sys.path.remove(str(directory.resolve()))
-
-    integrations = [value for value in vars(module).values() if isinstance(value, Integration)]
-    if len(integrations) != 1:
-        typer.echo(f"Expected exactly one Integration instance, found {len(integrations)}", err=True)
-        raise typer.Exit(2)
-    return integrations[0]
-
-
-def _result_to_jsonable(result) -> dict:
-    if hasattr(result, "result"):
-        inner = result.result
-        return {
-            "version": getattr(result, "version", None),
-            "type": _jsonable(getattr(result, "type", None)),
-            "data": _jsonable(getattr(inner, "data", None)),
-            "cost_usd": _jsonable(getattr(inner, "cost_usd", None)),
-        }
-    if hasattr(result, "model_dump"):
-        return _jsonable(result.model_dump())
-    if hasattr(result, "__dict__"):
-        return _jsonable(result.__dict__)
-    return {"result": result}
-
-
-def _jsonable(value):
-    if isinstance(value, dict):
-        return {key: _jsonable(item) for key, item in value.items()}
-    if isinstance(value, list | tuple):
-        return [_jsonable(item) for item in value]
-    if hasattr(value, "value"):
-        return value.value
-    if isinstance(value, str | int | float | bool) or value is None:
-        return value
-    return str(value)
-
-
-def _parse_scalar(value: str):
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError:
-        return value
 
 
 def main() -> None:
