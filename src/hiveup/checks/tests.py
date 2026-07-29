@@ -22,6 +22,7 @@ Examples:
     python scripts/run_tests.py
 """
 
+import os
 import re
 import shutil
 import subprocess
@@ -108,7 +109,17 @@ def _run_integration_tests(
         *[str(f) for f in test_files],
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    child_environment = os.environ.copy()
+    child_environment["PYTHONPATH"] = os.pathsep.join(
+        (str(integration_dir.parent.resolve()), str(integration_dir.resolve()))
+    )
+    result = subprocess.run(
+        cmd,
+        cwd=integration_dir,
+        env=child_environment,
+        capture_output=True,
+        text=True,
+    )
     return result.returncode, result.stdout + result.stderr
 
 

@@ -148,6 +148,11 @@ def test_integration_tests_run_with_isolated_interpreter(tmp_path: Path, monkeyp
     assert ["--override-ini", "markers=unit: isolated integration unit test"] == commands[0][0][9:11]
     assert str(integration) in commands[0][0]
     assert str(test_file) in commands[0][0]
+    assert commands[0][1]["cwd"] == integration
+    assert commands[0][1]["env"]["PYTHONPATH"].split(os.pathsep) == [
+        str(integration.parent.resolve()),
+        str(integration.resolve()),
+    ]
 
 
 def test_integration_tests_stage_config_where_installed_sdk_expects_it(tmp_path: Path, monkeypatch) -> None:
