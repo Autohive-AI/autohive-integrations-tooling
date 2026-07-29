@@ -19,6 +19,7 @@ from hiveup.packaging import (  # noqa: E402
     TARGET_PLATFORM,
     TARGET_PYTHON_VERSION,
     PackageBuildError,
+    build_package,
     install_dependencies,
     write_package_zip,
 )
@@ -438,6 +439,49 @@ def test_package_dependency_error_explains_wheel_contract(tmp_path: Path, monkey
     assert f"Python {TARGET_PYTHON_VERSION} on {TARGET_PLATFORM}" in message
     assert "must provide compatible wheels" in message
     assert "No matching distribution found" in message
+
+
+def test_package_requires_requirements_even_when_validation_is_skipped(tmp_path: Path) -> None:
+    integration = _integration_with_entry_point(tmp_path / "missing-requirements", "demo.py")
+    (integration / "requirements.txt").unlink()
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 2
+    assert "requirements.txt not found" in result.output
+
+
+def test_build_package_replaces_output_without_mutating_integration(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "requirements.txt").write_text("example==1.0\n", encoding="utf-8")
+    (integration / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
+    owned_dependencies = integration / "dependencies"
+    owned_dependencies.mkdir()
+    owned_file = owned_dependencies / "keep.txt"
+    owned_file.write_text("developer-owned", encoding="utf-8")
+    package = tmp_path / "demo.zip"
+    package.write_bytes(b"old archive")
+
+    def stage_dependencies(requirements: Path, target: Path) -> None:
+        assert requirements == integration / "requirements.txt"
+        (target / "pure_python").mkdir(parents=True)
+        (target / "pure_python" / "__init__.py").write_text("", encoding="utf-8")
+        (target / "native_extension.so").write_bytes(b"native wheel content")
+
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", stage_dependencies)
+
+    build_package(integration, package)
+
+    assert owned_file.read_text(encoding="utf-8") == "developer-owned"
+    assert set(integration.iterdir()) == {integration / "requirements.txt", integration / "demo.py", owned_dependencies}
+    with zipfile.ZipFile(package) as archive:
+        assert set(archive.namelist()) == {
+            "demo.py",
+            "requirements.txt",
+            "dependencies/native_extension.so",
+            "dependencies/pure_python/__init__.py",
+        }
 
 
 def _jpeg_with_dimensions(width: int, height: int) -> bytes:

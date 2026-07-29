@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -36,6 +37,19 @@ ZIP_FILE_MODE = 0o100644
 
 class PackageBuildError(RuntimeError):
     """Raised when an integration package cannot be built."""
+
+
+def build_package(directory: Path, package_path: Path) -> None:
+    """Install dependencies externally and write a deployable integration archive."""
+
+    requirements = directory / "requirements.txt"
+    if not requirements.is_file():
+        raise PackageBuildError(f"requirements.txt not found: {requirements}")
+
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        dependencies = Path(temporary_directory) / "dependencies"
+        install_dependencies(requirements, dependencies)
+        write_package_zip(directory, package_path, dependencies if dependencies.exists() else None)
 
 
 def install_dependencies(requirements: Path, target: Path) -> None:
