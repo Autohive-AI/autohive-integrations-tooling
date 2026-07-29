@@ -136,6 +136,7 @@ def test_integration_tests_run_with_isolated_interpreter(tmp_path: Path, monkeyp
         return type("Result", (), {"returncode": 0, "stdout": "1 passed\n", "stderr": ""})()
 
     monkeypatch.setattr(test_checks, "prepare_environment", prepare)
+    monkeypatch.setattr(test_checks, "_stage_sdk_config", lambda *args: None)
     monkeypatch.setattr(test_checks.subprocess, "run", run)
 
     exit_code, output = test_checks.run_integration_tests(integration, [test_file])
@@ -147,6 +148,37 @@ def test_integration_tests_run_with_isolated_interpreter(tmp_path: Path, monkeyp
     assert ["--override-ini", "markers=unit: isolated integration unit test"] == commands[0][0][9:11]
     assert str(integration) in commands[0][0]
     assert str(test_file) in commands[0][0]
+
+
+def test_integration_tests_stage_config_where_installed_sdk_expects_it(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    config = integration / "config.json"
+    config.write_text('{"name": "demo"}\n', encoding="utf-8")
+    environment_root = tmp_path / "cache"
+    sdk_root = environment_root / "lib" / "python3.13"
+    sdk_root.mkdir(parents=True)
+    isolated = environment.IntegrationEnvironment(
+        environment_root,
+        environment_root / "bin" / "python",
+        "key",
+        created=False,
+    )
+
+    def run(command, **kwargs):
+        assert command[0] == str(isolated.python)
+        assert command[1] == "-c"
+        return type(
+            "Result",
+            (),
+            {"returncode": 0, "stdout": f"{sdk_root / 'config.json'}\n", "stderr": ""},
+        )()
+
+    monkeypatch.setattr(test_checks.subprocess, "run", run)
+
+    test_checks._stage_sdk_config(isolated, integration)
+
+    assert (sdk_root / "config.json").read_bytes() == config.read_bytes()
 
 
 def test_test_check_reports_isolated_environment_failure(tmp_path: Path, monkeypatch) -> None:

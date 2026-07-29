@@ -23,6 +23,7 @@ Examples:
 """
 
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -88,6 +89,7 @@ def _run_integration_tests(
     integration_dir: Path,
     test_files: list[Path],
 ) -> tuple[int, str]:
+    _stage_sdk_config(environment, integration_dir)
     cmd = [
         str(environment.python),
         "-m",
@@ -108,6 +110,32 @@ def _run_integration_tests(
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     return result.returncode, result.stdout + result.stderr
+
+
+def _stage_sdk_config(environment: IntegrationEnvironment, integration_dir: Path) -> None:
+    """Mirror deployment config placement for SDK versions that infer it from their install path."""
+    config = integration_dir / "config.json"
+    if not config.is_file():
+        return
+
+    script = (
+        "from importlib.util import find_spec; "
+        "from pathlib import Path; "
+        "spec = find_spec('autohive_integrations_sdk'); "
+        "assert spec is not None and spec.origin is not None; "
+        "print(Path(spec.origin).resolve().parents[2] / 'config.json')"
+    )
+    result = subprocess.run(
+        [str(environment.python), "-c", script],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        output = (result.stderr or result.stdout).strip() or "Autohive integrations SDK is not installed"
+        raise EnvironmentBuildError(f"Could not prepare SDK configuration: {output}")
+
+    target = Path(result.stdout.strip())
+    shutil.copyfile(config, target)
 
 
 def parse_results(output: str) -> tuple[int, int, str]:
