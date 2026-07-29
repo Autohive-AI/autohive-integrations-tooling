@@ -207,6 +207,24 @@ def test_integration_tests_do_not_collect_hyphenated_root_as_package(tmp_path: P
     assert (integration / "__init__.py").is_file()
 
 
+def test_integration_tests_resolve_paths_before_changing_working_directory(tmp_path: Path, monkeypatch) -> None:
+    integration = Path("relative-integration")
+    test_file = integration / "tests" / "test_demo_unit.py"
+    isolated = environment.IntegrationEnvironment(tmp_path / "cache", Path(sys.executable), "key", created=False)
+    executed = []
+    monkeypatch.setattr(test_checks, "_stage_sdk_config", lambda *args: None)
+    monkeypatch.setattr(
+        test_checks,
+        "_execute_tests",
+        lambda selected, root, tests: executed.append((selected, root, tests)) or (0, ""),
+    )
+
+    result = test_checks._run_integration_tests(isolated, integration, [test_file])
+
+    assert result == (0, "")
+    assert executed == [(isolated, integration.resolve(), [test_file.resolve()])]
+
+
 def test_test_check_reports_isolated_environment_failure(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     tests_dir = integration / "tests"

@@ -91,6 +91,8 @@ def _run_integration_tests(
     integration_dir: Path,
     test_files: list[Path],
 ) -> tuple[int, str]:
+    integration_dir = integration_dir.resolve()
+    test_files = [test_file.resolve() for test_file in test_files]
     _stage_sdk_config(environment, integration_dir)
 
     if not integration_dir.name.isidentifier() and (integration_dir / "__init__.py").is_file():
