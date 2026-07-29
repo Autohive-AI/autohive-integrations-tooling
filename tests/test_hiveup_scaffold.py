@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+import hiveup.cli as cli
 from hiveup.cli import app
 from hiveup.checks import static
 from hiveup.checks import tests as test_checks
@@ -102,6 +103,67 @@ def test_scaffold_rejects_nonempty_target_without_force(tmp_path: Path, monkeypa
     assert "Directory is not empty" in result.output
     assert existing.read_text(encoding="utf-8") == "keep me"
     assert set(target.iterdir()) == {existing}
+
+
+def test_force_replaces_only_scaffold_owned_files(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "sample"
+    target.mkdir()
+    unknown = target / "notes.txt"
+    unknown.write_text("keep me", encoding="utf-8")
+    config = target / "config.json"
+    config.write_text("old config", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["create", "sample", "--force"])
+
+    assert result.exit_code == 0
+    assert "Files: 9 created, 1 replaced" in result.output
+    assert unknown.read_text(encoding="utf-8") == "keep me"
+    assert json.loads(config.read_text(encoding="utf-8"))["name"] == "sample"
+
+
+def test_force_preflights_directory_conflicts_before_writing(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "sample"
+    target.mkdir()
+    config = target / "config.json"
+    config.write_text("old config", encoding="utf-8")
+    (target / "tests").write_text("not a directory", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["create", "sample", "--force"])
+
+    assert result.exit_code == 2
+    assert "Cannot create scaffold directory" in result.output
+    assert config.read_text(encoding="utf-8") == "old config"
+
+
+def test_scaffold_rolls_back_owned_files_after_write_failure(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "sample"
+    target.mkdir()
+    config = target / "config.json"
+    config.write_text("old config", encoding="utf-8")
+    unknown = target / "notes.txt"
+    unknown.write_text("keep me", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    atomic_write = cli._atomic_write
+    writes = 0
+
+    def fail_during_write(path: Path, content: bytes) -> None:
+        nonlocal writes
+        writes += 1
+        if writes == 3:
+            raise OSError("disk full")
+        atomic_write(path, content)
+
+    monkeypatch.setattr(cli, "_atomic_write", fail_during_write)
+
+    result = CliRunner().invoke(app, ["create", "sample", "--force"])
+
+    assert result.exit_code == 2
+    assert "Could not write scaffold: disk full" in result.output
+    assert config.read_text(encoding="utf-8") == "old config"
+    assert unknown.read_text(encoding="utf-8") == "keep me"
+    assert set(target.iterdir()) == {config, unknown}
 
 
 def test_scaffold_rejects_invalid_auth_before_writing(tmp_path: Path, monkeypatch) -> None:

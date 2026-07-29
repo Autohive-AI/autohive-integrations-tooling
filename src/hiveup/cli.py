@@ -12,6 +12,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import zlib
 from pathlib import Path
 from typing import Annotated
@@ -170,8 +171,9 @@ def create(
     """Scaffold a new integration in a child directory."""
 
     target = Path(_slugify(name))
-    _scaffold(target, display_name=_display_name(name), auth_type=auth_type, force=force)
+    created, replaced = _scaffold(target, display_name=_display_name(name), auth_type=auth_type, force=force)
     typer.echo(f"✅ Created {target}")
+    typer.echo(f"Files: {created} created, {replaced} replaced")
     typer.echo(f"Next: cd {target} && hiveup validate && hiveup test")
 
 
@@ -184,8 +186,14 @@ def init(
     """Scaffold an integration in the current directory."""
 
     target = Path.cwd()
-    _scaffold(target, display_name=_display_name(name or target.name), auth_type=auth_type, force=force)
+    created, replaced = _scaffold(
+        target,
+        display_name=_display_name(name or target.name),
+        auth_type=auth_type,
+        force=force,
+    )
     typer.echo(f"✅ Initialized {target.name}")
+    typer.echo(f"Files: {created} created, {replaced} replaced")
 
 
 @app.command()
@@ -445,35 +453,37 @@ def _csv(value: str | None) -> set[str] | None:
     return {item.strip() for item in value.split(",") if item.strip()}
 
 
-def _scaffold(target: Path, *, display_name: str, auth_type: str, force: bool) -> None:
+def _scaffold(target: Path, *, display_name: str, auth_type: str, force: bool) -> tuple[int, int]:
     auth_type = auth_type.lower()
     if auth_type not in AUTH_TYPES:
         typer.echo(f"Unsupported auth type: {auth_type}", err=True)
+        raise typer.Exit(2)
+    if target.exists() and not target.is_dir():
+        typer.echo(f"Target is not a directory: {target}", err=True)
         raise typer.Exit(2)
     if target.exists() and any(target.iterdir()) and not force:
         typer.echo(f"Directory is not empty: {target} (use --force to overwrite)", err=True)
         raise typer.Exit(2)
 
-    target.mkdir(parents=True, exist_ok=True)
     name = _slugify(target.name)
     module = name.replace("-", "_")
     config = _default_config(name, module, display_name, auth_type)
-    _write_text(target / "config.json", json.dumps(config, indent=2) + "\n", force=force)
-    _write_text(target / "requirements.txt", "autohive-integrations-sdk~=2.0.1\n", force=force)
-    _write_text(target / "README.md", _readme_source(display_name, auth_type), force=force)
-    _write_text(
-        target / ".gitignore",
-        ".coverage\n.env\n.hiveup/\n.pytest_cache/\n.ruff_cache/\n.venv/\n__pycache__/\ndependencies/\n*.zip\n",
-        force=force,
-    )
-    _write_text(target / "__init__.py", f"from .{module} import {module}\n\n__all__ = [\"{module}\"]\n", force=force)
-    _write_text(target / f"{module}.py", _module_source(module), force=force)
-    _write_png(target / "icon.png", force=force)
-    tests = target / "tests"
-    tests.mkdir(exist_ok=True)
-    _write_text(tests / "__init__.py", "", force=force)
-    _write_text(tests / "conftest.py", _conftest_source(), force=force)
-    _write_text(tests / f"test_{module}_unit.py", _test_source(module), force=force)
+    files = {
+        Path("config.json"): (json.dumps(config, indent=2) + "\n").encode(),
+        Path("requirements.txt"): b"autohive-integrations-sdk~=2.0.1\n",
+        Path("README.md"): _readme_source(display_name, auth_type).encode(),
+        Path(".gitignore"): (
+            b".coverage\n.env\n.hiveup/\n.pytest_cache/\n.ruff_cache/\n.venv/\n"
+            b"__pycache__/\ndependencies/\n*.zip\n"
+        ),
+        Path("__init__.py"): f"from .{module} import {module}\n\n__all__ = [\"{module}\"]\n".encode(),
+        Path(f"{module}.py"): _module_source(module).encode(),
+        Path("icon.png"): _png_bytes(),
+        Path("tests/__init__.py"): b"",
+        Path("tests/conftest.py"): _conftest_source().encode(),
+        Path(f"tests/test_{module}_unit.py"): _test_source(module).encode(),
+    }
+    return _write_scaffold(target, files)
 
 
 def _default_config(name: str, module: str, display_name: str, auth_type: str) -> dict:
@@ -520,10 +530,56 @@ def _apply_auth_config(config: dict, auth_type: str, *, provider: str | None = N
         }
 
 
-def _write_text(path: Path, content: str, *, force: bool) -> None:
-    if path.exists() and not force:
-        return
-    path.write_text(content, encoding="utf-8")
+def _write_scaffold(target: Path, files: dict[Path, bytes]) -> tuple[int, int]:
+    """Atomically replace scaffold-owned files while preserving all other files."""
+
+    for relative in files:
+        destination = target / relative
+        if destination.exists() and (destination.is_dir() or destination.is_symlink()):
+            typer.echo(f"Cannot replace scaffold file: {destination}", err=True)
+            raise typer.Exit(2)
+        for parent in relative.parents:
+            if parent == Path("."):
+                continue
+            candidate = target / parent
+            if candidate.exists() and not candidate.is_dir():
+                typer.echo(f"Cannot create scaffold directory: {candidate}", err=True)
+                raise typer.Exit(2)
+
+    target.mkdir(parents=True, exist_ok=True)
+    originals = {
+        target / relative: (target / relative).read_bytes() if (target / relative).is_file() else None
+        for relative in files
+    }
+    try:
+        for relative, content in files.items():
+            destination = target / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write(destination, content)
+    except OSError as exc:
+        for destination, content in originals.items():
+            if content is None:
+                destination.unlink(missing_ok=True)
+            else:
+                _atomic_write(destination, content)
+        typer.echo(f"Could not write scaffold: {exc}", err=True)
+        raise typer.Exit(2)
+
+    created = sum(content is None for content in originals.values())
+    return created, len(files) - created
+
+
+def _atomic_write(path: Path, content: bytes) -> None:
+    temporary_name = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as temporary:
+            temporary.write(content)
+            temporary_name = temporary.name
+        os.chmod(temporary_name, 0o644)
+        os.replace(temporary_name, path)
+    finally:
+        if temporary_name:
+            Path(temporary_name).unlink(missing_ok=True)
 
 
 def _module_source(module: str) -> str:
@@ -622,14 +678,12 @@ hiveup package
 """
 
 
-def _write_png(path: Path, *, force: bool) -> None:
-    if path.exists() and not force:
-        return
+def _png_bytes() -> bytes:
     width = height = 512
     raw = b"".join(b"\x00" + b"\xff\xff\xff\xff" * width for _ in range(height))
     png = b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
     png += _png_chunk(b"IDAT", zlib.compress(raw)) + _png_chunk(b"IEND", b"")
-    path.write_bytes(png)
+    return png
 
 
 def _png_chunk(kind: bytes, data: bytes) -> bytes:
