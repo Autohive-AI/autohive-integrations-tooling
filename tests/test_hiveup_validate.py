@@ -1,5 +1,6 @@
 import sys
 import json
+import os
 import shutil
 import struct
 import subprocess
@@ -328,6 +329,36 @@ def test_package_writes_root_layout_and_excludes_development_files(tmp_path: Pat
             *included,
             "dependencies/example/__init__.py",
         }
+
+
+def test_package_is_reproducible_across_source_metadata_changes(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    source = integration / "demo.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    dependencies = tmp_path / "staged-dependencies"
+    dependency = dependencies / "example" / "__init__.py"
+    dependency.parent.mkdir(parents=True)
+    dependency.write_text("VERSION = '1.0'\n", encoding="utf-8")
+    bytecode = dependencies / "example" / "__pycache__" / "__init__.pyc"
+    bytecode.parent.mkdir()
+    bytecode.write_bytes(b"host-specific bytecode")
+    first = tmp_path / "first.zip"
+    second = tmp_path / "second.zip"
+
+    write_package_zip(integration, first, dependencies)
+    os.chmod(source, 0o755)
+    os.chmod(dependency, 0o700)
+    os.utime(source, (2_000_000_000, 2_000_000_000))
+    os.utime(dependency, (2_000_000_000, 2_000_000_000))
+    write_package_zip(integration, second, dependencies)
+
+    assert first.read_bytes() == second.read_bytes()
+    with zipfile.ZipFile(first) as archive:
+        assert archive.namelist() == ["demo.py", "dependencies/example/__init__.py"]
+        for info in archive.infolist():
+            assert info.date_time == (1980, 1, 1, 0, 0, 0)
+            assert info.external_attr >> 16 == 0o100644
 
 
 def test_structure_rejects_reserved_entry_point_basenames(tmp_path: Path) -> None:
