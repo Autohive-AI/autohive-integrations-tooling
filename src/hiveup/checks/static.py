@@ -324,7 +324,12 @@ def _check_file_imports(
         if isinstance(node, ast.Import):
             for alias in node.names:
                 module = alias.name
-                if not _is_import_available(module, integration_path, dependency_available=dependency_available):
+                if not _is_import_available(
+                    module,
+                    integration_path,
+                    source_dir=pyfile.parent,
+                    dependency_available=dependency_available,
+                ):
                     messages.append(_missing_import_message(module, pyfile, node.lineno))
         elif isinstance(node, ast.ImportFrom):
             if node.level > 0:
@@ -336,6 +341,7 @@ def _check_file_imports(
             elif node.module and not _is_import_available(
                 node.module,
                 integration_path,
+                source_dir=pyfile.parent,
                 dependency_available=dependency_available,
             ):
                 messages.append(_missing_import_message(node.module, pyfile, node.lineno))
@@ -357,16 +363,17 @@ def _is_import_available(
     module_name: str,
     integration_path: Path,
     *,
+    source_dir: Path,
     dependency_available: Callable[[str], bool],
 ) -> bool:
-    if _local_module_exists(module_name, integration_path):
+    if _local_module_exists(module_name, integration_path, source_dir=source_dir):
         return True
     return dependency_available(module_name)
 
 
-def _local_module_exists(module_name: str, integration_path: Path) -> bool:
+def _local_module_exists(module_name: str, integration_path: Path, *, source_dir: Path) -> bool:
     parts = module_name.split(".")
-    roots = [integration_path, integration_path.parent]
+    roots = [source_dir, integration_path, integration_path.parent]
     for root in roots:
         candidate = root.joinpath(*parts)
         if _module_path_exists(candidate):

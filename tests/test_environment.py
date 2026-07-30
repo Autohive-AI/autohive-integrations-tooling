@@ -117,6 +117,21 @@ def test_import_check_does_not_use_cli_environment_for_dependencies(tmp_path: Pa
     assert report.messages[0].message == "Missing module: pytest"
 
 
+def test_import_check_resolves_modules_beside_test_file(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    tests_dir = integration / "tests"
+    tests_dir.mkdir(parents=True)
+    (tests_dir / "context.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (tests_dir / "test_demo_unit.py").write_text("from context import VALUE\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(static, "module_available", lambda *args: False)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "passed"
+
+
 def test_integration_tests_run_with_isolated_interpreter(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     test_file = integration / "tests" / "test_demo_unit.py"
