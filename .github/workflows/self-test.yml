@@ -524,14 +524,14 @@ jobs:
             outcome: failure
             structure: success
             code: failure
-            failure_text: 'Missing module: context'
+            failure_text: '[netlify] lint: failed'
           - name: deprecated SDK fixture
             directory: tests/examples/sdk-deprecated-pin
             integration: sdk-deprecated-pin
             outcome: failure
             structure: success
             code: failure
-            failure_text: 'Missing module: context'
+            failure_text: '[sdk-deprecated-pin] format: failed'
           - name: old fetch pattern
             directory: tests/examples/sdk-v2-old-fetch-pattern
             integration: sdk-v2-old-fetch-pattern
