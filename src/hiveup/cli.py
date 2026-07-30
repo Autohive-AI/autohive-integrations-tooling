@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import keyword
 import os
 import re
 import shutil
@@ -470,6 +471,9 @@ def _scaffold(
 
     name = _slugify(target.name)
     module = name.replace("-", "_")
+    if not module.isidentifier() or keyword.iskeyword(module):
+        typer.echo(f"Integration name does not produce a valid Python identifier: {module}", err=True)
+        raise typer.Exit(2)
     config = _default_config(
         name,
         module,

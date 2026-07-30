@@ -95,6 +95,22 @@ def test_init_generates_scaffold_in_current_directory(tmp_path: Path, monkeypatc
     assert config["entry_point"] == "existing_directory.py"
 
 
+@pytest.mark.parametrize(("name", "target"), [("123 sample", "123-sample"), ("class", "class")])
+def test_create_rejects_names_that_are_invalid_python_identifiers(
+    tmp_path: Path,
+    monkeypatch,
+    name: str,
+    target: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["create", name])
+
+    assert result.exit_code == 2
+    assert "does not produce a valid Python identifier" in result.output
+    assert not (tmp_path / target).exists()
+
+
 def test_scaffold_rejects_nonempty_target_without_force(tmp_path: Path, monkeypatch) -> None:
     target = tmp_path / "sample"
     target.mkdir()
