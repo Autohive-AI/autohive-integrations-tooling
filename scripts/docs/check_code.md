@@ -350,12 +350,6 @@ Checking: my-integration
 
 ## Integration with CI
 
-Called by the `validate-integration.yml` workflow (on pull requests):
-
-```yaml
-- name: Code Check
-  if: steps.detect.outputs.dirs != ''
-  run: python scripts/check_code.py --base-ref origin/${{ github.base_ref }} ${{ steps.detect.outputs.dirs }}
-```
+`action.yml` installs HiveUp and invokes `hiveup ci`. HiveUp owns the code result group (`syntax`, `imports`, `json`, `lint`, `format`, `security`, `audit`, `sync`, and `fetch`) and passes the base ref to checks that compare against git history. When directories are not supplied, HiveUp discovers changed integrations from that base ref.
 
 Also exercised by the `self-test.yml` workflow against test examples in `tests/examples/` as a regression guard.

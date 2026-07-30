@@ -250,12 +250,6 @@ Total warnings: 1
 
 ## Integration with CI
 
-Called by the `validate-integration.yml` workflow (on pull requests) as the **Structure Check** step:
-
-```yaml
-- name: Structure Check
-  if: steps.detect.outputs.dirs != ''
-  run: python scripts/validate_integration.py ${{ steps.detect.outputs.dirs }}
-```
+`action.yml` installs HiveUp and invokes `hiveup ci`. HiveUp's `structure` check owns the structure result group. When directories are not supplied, HiveUp discovers changed integrations from the supplied base ref before running the five result groups.
 
 The script is also exercised by the `self-test.yml` workflow, which runs it against the test examples in `tests/examples/` as a regression guard whenever `scripts/` or `tests/` change.

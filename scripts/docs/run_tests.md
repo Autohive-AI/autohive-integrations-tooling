@@ -144,12 +144,6 @@ See the integrations repo's `CONTRIBUTING.md` for full details on running both t
 
 ## Integration with CI
 
-Called by the composite action in `action.yml`:
-
-```yaml
-- name: Tests
-  if: steps.detect.outputs.dirs != ''
-  run: python scripts/run_tests.py ${{ steps.detect.outputs.dirs }}
-```
+`action.yml` installs HiveUp and invokes `hiveup ci`. HiveUp's `tests` check owns the tests result group and runs unit tests with isolated per-integration dependencies. When directories are not supplied, HiveUp discovers changed integrations from the supplied base ref; integration tests remain excluded from CI.
 
 The test infrastructure (`pyproject.toml`, `conftest.py`, `requirements-test.txt`) lives in the integrations repo — see its `CONTRIBUTING.md` for how to write and run tests locally.

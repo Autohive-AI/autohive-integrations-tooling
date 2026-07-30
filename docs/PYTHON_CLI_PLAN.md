@@ -1,9 +1,9 @@
-# Plan: `hiveup` — Python CLI for Autohive Integrations
+# Historical Plan: `hiveup` — Python CLI for Autohive Integrations
 
-Status: proposed design, ready for implementation handoff.
+Status: historical design and implementation plan. See [README.md](../README.md) for the current supported behavior and command reference.
 
-This document specifies a new Python CLI that replaces the .NET `hiveup` tool
-(`autohive-integrations-cli`) and absorbs the validation scripts in this repo
+This document originally specified the Python CLI that replaced the .NET `hiveup` tool
+(`autohive-integrations-cli`) and absorbed the validation scripts in this repo
 (`autohive-integrations-tooling/scripts/`) into a single installable developer tool.
 
 ## Why
@@ -16,9 +16,9 @@ This document specifies a new Python CLI that replaces the .NET `hiveup` tool
    the current validation workflow is "run five separate scripts with the right
    args from the right directory". The CLI makes `hiveup validate` a single
    command that runs everything CI runs, locally, with auto-fix.
-3. **CI and local should be the same code.** Today `action.yml` shells out to
-   scripts; developers run the same scripts by hand with different args. The CLI
-   becomes the single implementation both use, so "passes locally" means
+3. **CI and local should be the same code.** Before the cutover, `action.yml`
+   shelled out to scripts. It now installs HiveUp and invokes `hiveup ci`, so the CLI
+   is the single implementation both use and "passes locally" means
    "passes in CI".
 
 ## Where it lives
@@ -253,8 +253,9 @@ hiveup package [dir] [-o out.zip] [--skip-validate] [--platform manylinux2014_x8
   nested `entry_point` paths consistently (validation and packaging disagreed in .NET).
 - Deterministic output name `<name>-<version>.zip` in cwd unless `-o` given.
 
-Note: production deploy targets (Lambda manylinux/3.13 assumptions) copied from
-the .NET CLI — **confirm with the platform team** before implementation locks this in.
+The deployment packaging contract is CPython 3.13 and
+`manylinux2014_x86_64`. Any future runtime change requires a deliberate update
+to validation, packaging, and their documentation.
 
 ### `hiveup auth [dir]`
 
@@ -340,9 +341,9 @@ desirable but not required for v1.
 1. **CI compatibility first.** `action.yml` switches from
    `python scripts/X.py` to `pip install <action_path> && hiveup ci ...`.
    Keep per-check outputs identical in name so downstream workflows don't break.
-2. **Scripts become shims.** Each `scripts/*.py` keeps its CLI surface but
-   delegates to `hiveup` internals, printing a deprecation note. Remove in the
-   next major.
+2. **Compatibility paths.** Keep legacy validation entry points under `scripts/`;
+   several delegate to `hiveup` internals so existing callers retain their CLI
+   surface while migrating.
 3. **Fixture reuse.** `tests/examples/*` (good-integration, Bad-Integration,
    config-mismatch, input-drift, etc.) become the CLI's own test fixtures;
    `self-test.yml` runs the CLI against them.
@@ -373,7 +374,22 @@ From the Python scripts:
 
 ## Implementation phases
 
-Each phase ends runnable and shippable.
+The phases below are the historical rollout sequence. Current status:
+
+| Area | Status |
+|------|--------|
+| Core CLI and validation | Implemented |
+| CI cutover (`action.yml` → `hiveup ci`) | Implemented |
+| Isolated dependency/test environments | Implemented |
+| Scaffold, auth, and package parity | Implemented |
+| Local action execution (`hiveup run`) | Deferred to [#49](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/49) |
+| PyPI publication | Deferred to [#50](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/50) |
+
+The proposed `hygiene` and action-to-test coverage mapping checks, modular
+scaffolding, and integration-test flags/watch mode did not ship and remain
+historical design ideas rather than supported behavior.
+
+Each phase was intended to end runnable and shippable.
 
 **Phase 1 — package skeleton + validate core.** `pyproject.toml`, Typer app,
 result model, discovery, renderers (console + JSON); port `structure`,
@@ -420,9 +436,9 @@ policy decisions required before moving the floating Action tag.
 
 ## Open questions for the team
 
-1. Package/vendoring target (`manylinux2014_x86_64`, Python 3.13) — confirm the
-   production runtime before hardcoding.
-2. Should tooling v2 (SDK 2.x) be the target, with SDK 3.0.0.dev0 pending? Plan
+1. Package/vendoring is a fixed current contract: CPython 3.13 and
+   `manylinux2014_x86_64`. Future runtime changes require a deliberate update.
+2. Should tooling v2 (SDK 2.x) be the target, with SDK 3.0.0.dev0 pending? The implementation
    assumes yes: build against 2.x, keep checks version-aware via requirements pin.
 3. PyPI publication is deferred to
    [issue #50](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/50);

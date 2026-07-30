@@ -8,34 +8,32 @@ Manual review checklist for integration PRs. Use alongside the automated CI chec
 
 ## CI Checks Summary
 
-These checks run automatically on every PR. See `scripts/docs/` for detailed documentation on each script.
+These HiveUp checks run automatically on every PR and are reported in five result groups. Linked legacy script docs remain useful as detailed compatibility references.
 
-| Check | Script | What It Validates |
-|-------|--------|-------------------|
-| Structure | [`validate_integration.py`](scripts/docs/validate_integration.md) | Folder name, required files, config.json schema, `__init__.py` minimality, requirements.txt, tests/, icon, unused scopes |
-| Code quality | [`check_code.py`](scripts/docs/check_code.md) | Syntax, imports, JSON validity, ruff lint, ruff format, bandit security, pip-audit CVEs, config-code sync |
-| README update | [`check_readme.py`](scripts/docs/check_readme.md) | Main repo README.md was updated with the new integration |
-| Version bump | [`check_version_bump.py`](scripts/docs/check_version_bump.md) | config.json version incremented; recommends major/minor/patch based on changes |
-| Conventional commits | `conv-commits.yml` | PR title follows conventional commit format |
+| Result group | HiveUp checks | What It Validates |
+|--------------|---------------|-------------------|
+| Structure | `structure` ([details](scripts/docs/validate_integration.md)) | Folder name, required files, config.json schema, `__init__.py` minimality, requirements.txt, tests/, icon, unused scopes |
+| Code | `syntax`, `imports`, `json`, `lint`, `format`, `security`, `audit`, `sync`, `fetch` ([details](scripts/docs/check_code.md)) | Syntax, imports, JSON validity, Ruff lint/format, Bandit security, pip-audit CVEs, config-code sync, fetch patterns |
+| Tests | `tests` ([details](scripts/docs/run_tests.md)) | Isolated dependencies and unit tests |
+| README | `readme` ([details](scripts/docs/check_readme.md)) | Main repo README.md was updated with the new integration |
+| Version | `version` ([details](scripts/docs/check_version_bump.md)) | config.json version incremented; recommends major/minor/patch based on changes |
+| Separate workflow | Conventional commits | PR title follows conventional commit format (`conv-commits.yml`) |
 
 ### Running Locally
 
 ```bash
 # Validate structure and config
-python scripts/validate_integration.py my-integration
+hiveup check structure my-integration
 
-# Run all code quality checks
-python scripts/check_code.py my-integration
+# Run the complete validation suite
+hiveup validate my-integration
 ```
 
 ### Auto-Fixing Common CI Failures
 
 ```bash
-# Auto-fix lint issues (unused imports, style)
-ruff check --fix my-integration
-
-# Auto-format code
-ruff format my-integration
+# Auto-fix supported lint and formatting issues, then validate
+hiveup validate --fix my-integration
 ```
 
 ### Lint Configuration

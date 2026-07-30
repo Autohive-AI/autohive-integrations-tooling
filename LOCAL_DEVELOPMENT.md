@@ -64,10 +64,14 @@ hiveup validate --base-ref origin/main my-integration
 ### 3. Fix common issues
 
 ```bash
-# Auto-fix lint issues
-ruff check --fix --config /path/to/autohive-integrations-tooling/ruff.toml my-integration
+# Apply the supported lint and format fixes, then validate again
+hiveup validate --fix my-integration
+```
 
-# Auto-format code
+For advanced standalone Ruff use:
+
+```bash
+ruff check --fix --config /path/to/autohive-integrations-tooling/ruff.toml my-integration
 ruff format --config /path/to/autohive-integrations-tooling/ruff.toml my-integration
 ```
 
@@ -102,7 +106,7 @@ Useful when you've added or renamed actions and want to verify `config.json` mat
 
 ### Check multiple integrations
 
-All scripts accept multiple directories:
+HiveUp validation commands accept multiple directories:
 
 ```bash
 hiveup validate integration-a integration-b
@@ -130,11 +134,10 @@ hiveup validate --changed --base-ref origin/main
 
 ```
 1. Edit code
-2. ruff format --config path/to/ruff.toml my-integration   (auto-format)
-3. ruff check --fix --config path/to/ruff.toml my-integration  (auto-fix lint)
-4. hiveup validate my-integration                         (full check)
-5. Fix any remaining issues
-6. Repeat from 1
+2. hiveup validate --fix my-integration   (auto-fix lint and formatting)
+3. hiveup validate my-integration         (full check)
+4. Fix any remaining issues
+5. Repeat from 1
 ```
 
 Once everything passes, run `hiveup validate` for a final check before pushing.
@@ -167,18 +170,17 @@ They are excluded from auto-discovery by two mechanisms:
 
 ## What CI Runs on Your PR
 
-The `validate-integration.yml` workflow uses the composite action defined in `action.yml` to run these checks on every PR:
+The `validate-integration.yml` workflow uses `action.yml`, which installs HiveUp and invokes `hiveup ci`. HiveUp discovers changed integrations from the base ref and reports five groups:
 
-| Step | Script | What It Does |
-|------|--------|-------------|
-| 1 | `get_changed_dirs.py` | Detects which integration folders changed |
-| 2 | `validate_integration.py` | Structure and config validation |
-| 3 | `check_code.py` | Syntax, imports, JSON, lint, format, security, deps, config sync, fetch pattern checks |
-| 4 | `run_tests.py` | Installs each integration's deps, runs `test_*_unit.py` files (unit tests only) |
-| 5 | `check_readme.py` | Checks that the main README.md was updated for new integrations |
-| 6 | `check_version_bump.py` | Checks that config.json version was incremented, recommends bump level |
+| Result group | HiveUp checks | What It Does |
+|--------------|---------------|--------------|
+| Structure | `structure` | Structure and config validation |
+| Code | `syntax`, `imports`, `json`, `lint`, `format`, `security`, `audit`, `sync`, `fetch` | Compilation, imports, JSON, Ruff, security, dependencies, config sync, and fetch patterns |
+| Tests | `tests` | Installs isolated dependencies and runs unit tests |
+| README | `readme` | Checks that the repository README was updated for new integrations |
+| Version | `version` | Checks that config.json version increased and recommends a bump level |
 
-If no integration directories changed (only `scripts/`, `tests/`, etc.), steps 2–6 are skipped.
+If no integration directories changed (only tooling or test infrastructure changed), all five groups are skipped.
 
 Results are posted as a sticky PR comment showing ✅ Passed, ⚠️ Passed with warnings, or ❌ Failed for each check.
 

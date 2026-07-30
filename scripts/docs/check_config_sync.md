@@ -129,7 +129,7 @@ No external dependencies are required. The script uses only Python's standard li
 
 ## Integration with CI
 
-This script is called by [`check_code.py`](check_code.md) as part of the code check. In CI, the composite action passes the PR base ref through `check_code.py` so new integrations fail on input drift while existing integrations continue to warn. It is also exercised independently by the `self-test.yml` workflow against test examples in `tests/examples/`.
+`action.yml` installs HiveUp and invokes `hiveup ci`. HiveUp's `sync` check belongs to the code result group and receives the PR base ref, so new integrations fail on input drift while existing integrations continue to warn. When directories are not supplied, HiveUp also uses that base ref to discover changed integrations. This legacy script is exercised independently by `self-test.yml`.
 
 ```python
 # Called internally by check_code.py:

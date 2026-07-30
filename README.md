@@ -41,15 +41,12 @@ flowchart TB
 
     subgraph wf1["validate-integration.yml"]
         ACTION["action.yml (composite action)"]
-        ACTION --> GCD[get_changed_dirs.py]
-        GCD -->|dirs| COND{dirs empty?}
+        ACTION --> INSTALL["Install HiveUp"]
+        INSTALL --> CI["hiveup ci"]
+        CI -->|discover changed dirs from base ref| COND{dirs empty?}
         COND -->|Yes| SKIP[Skip all checks]
-        COND -->|No| VI[validate_integration.py]
-        VI --> CC[check_code.py]
-        CC --> RT[run_tests.py]
-        RT --> CR[check_readme.py]
-        CR --> VB[check_version_bump.py]
-        VB --> CMT_POST[Post PR comment]
+        COND -->|No| GROUPS["Five result groups:<br/>structure · code · tests · readme · version"]
+        GROUPS --> CMT_POST[Post PR comment]
     end
 
     subgraph wf2["self-test.yml"]
@@ -73,16 +70,17 @@ flowchart TB
     EXT -.-> ACTION
 ```
 
-**What each step checks:**
+**What each HiveUp result group owns:**
 
-| Step | Script | Checks |
-|------|--------|--------|
-| Detect changes | `get_changed_dirs.py` | `git diff` → extract top-level dirs, filter out `.github`, `scripts`, `tests` |
-| Structure check | `validate_integration.py` | Folder name, required files, config.json schema, `__init__.py`, requirements.txt, tests/, icon size, unused scopes |
-| Code check | `check_code.py` | Isolated dependency and import validation, py_compile, JSON validity, ruff check, ruff format, bandit, pip-audit, check_config_sync, check_fetch_pattern |
-| Tests | `run_tests.py` | Runs each integration's `test_*_unit.py` files with pytest and its own isolated dependencies. Warns (does not fail) if no unit tests exist |
-| README check | `check_readme.py` | New integration files added → was README.md also updated? |
-| Version check | `check_version_bump.py` | Version in config.json incremented? Recommends major/minor/patch based on config and code changes |
+| Result group | HiveUp checks | Checks |
+|--------------|---------------|--------|
+| Structure | `structure` | Folder name, required files, config.json schema, `__init__.py`, requirements.txt, tests/, icon size, unused scopes ([legacy script details](scripts/docs/validate_integration.md)) |
+| Code | `syntax`, `imports`, `json`, `lint`, `format`, `security`, `audit`, `sync`, `fetch` | Isolated dependency and import validation, compilation, JSON validity, Ruff, Bandit, pip-audit, config sync, and fetch-response patterns ([legacy code-check details](scripts/docs/check_code.md)) |
+| Tests | `tests` | Runs each integration's `test_*_unit.py` files with pytest and isolated dependencies; warns if none exist ([legacy runner details](scripts/docs/run_tests.md)) |
+| README | `readme` | For a new integration, checks that the repository README was updated ([legacy check details](scripts/docs/check_readme.md)) |
+| Version | `version` | Checks that config.json version increased and recommends a bump level ([legacy check details](scripts/docs/check_version_bump.md)) |
+
+When directories are not supplied, `hiveup ci` discovers changed integration directories from `base_ref`; the legacy discovery behavior is documented [here](scripts/docs/get_changed_dirs.md).
 
 ## Usage as GitHub Action
 
@@ -246,8 +244,8 @@ the developer is ready:
 dotnet tool uninstall --global Autohive.Integrations.Cli
 ```
 
-Existing `scripts/*.py` entry points remain temporary compatibility shims, but
-new local workflows should use `hiveup validate`, `hiveup check`, and
+Legacy validation entry points under `scripts/` remain available as compatibility
+paths, but new local workflows should use `hiveup validate`, `hiveup check`, and
 `hiveup test` directly.
 
 ## Repository development setup
@@ -300,6 +298,14 @@ hiveup check structure my-integration
 # Run code quality checks (syntax, imports, JSON, lint, format, security, deps, config sync, fetch pattern)
 hiveup validate my-integration
 
+# Machine-readable output, or apply supported Ruff lint/format fixes
+hiveup validate --json my-integration
+hiveup validate --fix my-integration
+
+# Select checks by name
+hiveup validate --skip tests,audit my-integration
+hiveup validate --only structure,sync my-integration
+
 # In PR/CI mode, pass a base ref so config/input drift fails for brand-new integrations
 hiveup validate --base-ref origin/main my-integration
 
@@ -310,8 +316,8 @@ hiveup check imports my-integration
 hiveup validate
 ```
 
-The existing `scripts/*.py` commands remain available as compatibility shims
-while integrations and external workflows migrate to HiveUp.
+Legacy script commands remain available as compatibility interfaces while
+integrations and external workflows migrate to HiveUp.
 
 ### Running unit tests
 
