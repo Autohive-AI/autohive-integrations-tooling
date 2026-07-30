@@ -406,6 +406,10 @@ integrations at a fixed repository commit across validation, isolated tests,
 deployment packaging, and representative reproducibility checks. The comparison
 is intentionally not retained as a permanent CI shadow job.
 
+The released-`v2` CI-to-HiveUp rollout delta is documented separately in
+[HIVEUP_CI_ROLLOUT.md](HIVEUP_CI_ROLLOUT.md). It identifies the historical-test
+policy decisions required before moving the floating Action tag.
+
 ## Explicitly out of scope for v1
 
 - Publishing/deploying to the Autohive platform (no backend API exists in the
