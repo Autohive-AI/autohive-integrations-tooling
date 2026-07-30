@@ -90,6 +90,28 @@ def test_discovery_includes_candidate_dir_missing_config(tmp_path: Path) -> None
     assert discover_integrations(tmp_path) == [candidate.resolve()]
 
 
+def test_discovery_scans_children_when_repository_root_has_python_files(tmp_path: Path) -> None:
+    (tmp_path / "conftest.py").write_text("ROOT_FIXTURE = True\n", encoding="utf-8")
+    (tmp_path / "setup.py").write_text("# Repository tooling\n", encoding="utf-8")
+    alpha = tmp_path / "alpha"
+    beta = tmp_path / "beta"
+    alpha.mkdir()
+    beta.mkdir()
+    (alpha / "config.json").write_text("{}\n", encoding="utf-8")
+    (beta / "config.json").write_text("{}\n", encoding="utf-8")
+
+    assert discover_integrations(tmp_path) == [alpha.resolve(), beta.resolve()]
+
+
+def test_discovery_selects_root_when_it_has_integration_config(tmp_path: Path) -> None:
+    (tmp_path / "config.json").write_text("{}\n", encoding="utf-8")
+    child = tmp_path / "nested"
+    child.mkdir()
+    (child / "config.json").write_text("{}\n", encoding="utf-8")
+
+    assert discover_integrations(tmp_path) == [tmp_path.resolve()]
+
+
 def test_changed_discovery_includes_new_top_level_dir_without_config(tmp_path: Path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)

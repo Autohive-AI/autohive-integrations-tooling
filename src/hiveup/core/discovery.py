@@ -35,7 +35,7 @@ def is_candidate_integration_dir(path: Path) -> bool:
 
 def discover_integrations(root: Path) -> list[Path]:
     root = root.resolve()
-    if is_candidate_integration_dir(root):
+    if is_integration_dir(root):
         return [root]
 
     integrations: list[Path] = []
