@@ -24,6 +24,47 @@ def test_environment_key_tracks_requirements_and_test_tools(tmp_path: Path) -> N
     assert initial != environment.environment_key(integration)
 
 
+def test_environment_key_tracks_nested_requirements_and_constraints(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "requirements.txt").write_text("-r extra.txt\n-c constraints.txt\n", encoding="utf-8")
+    extra = integration / "extra.txt"
+    constraints = integration / "constraints.txt"
+    extra.write_text("idna==3.10\n", encoding="utf-8")
+    constraints.write_text("urllib3==2.5.0\n", encoding="utf-8")
+
+    initial = environment.environment_key(integration)
+    extra.write_text("idna==3.7\n", encoding="utf-8")
+    after_requirement_change = environment.environment_key(integration)
+    constraints.write_text("urllib3==2.6.0\n", encoding="utf-8")
+
+    assert initial != after_requirement_change
+    assert after_requirement_change != environment.environment_key(integration)
+
+
+def test_environment_key_tracks_local_requirement_directory(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    local_package = integration / "vendor" / "example"
+    local_package.mkdir(parents=True)
+    (integration / "requirements.txt").write_text("-e ./vendor/example\n", encoding="utf-8")
+    source = local_package / "example.py"
+    source.write_text("VERSION = '1.0'\n", encoding="utf-8")
+
+    initial = environment.environment_key(integration)
+    source.write_text("VERSION = '2.0'\n", encoding="utf-8")
+
+    assert initial != environment.environment_key(integration)
+
+
+def test_environment_key_handles_recursive_requirement_includes(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "requirements.txt").write_text("-r extra.txt\n", encoding="utf-8")
+    (integration / "extra.txt").write_text("-r requirements.txt\n", encoding="utf-8")
+
+    assert environment.environment_key(integration)
+
+
 def test_prepare_environment_reuses_valid_cached_environment(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()

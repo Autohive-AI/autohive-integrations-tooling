@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -12,8 +13,9 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
-CACHE_SCHEMA = 1
+CACHE_SCHEMA = 2
 CACHE_MAX_AGE_DAYS = 30
 MARKER_NAME = ".hiveup-environment.json"
 TEST_REQUIREMENTS = ("pytest>=9.0", "pytest-asyncio>=0.23", "pytest-cov>=4.0")
@@ -175,8 +177,92 @@ def _run(command: list[str], *, cwd: Path | None = None) -> None:
 
 
 def _requirements_hash(requirements: Path) -> str:
-    content = requirements.read_bytes() if requirements.is_file() else b""
-    return hashlib.sha256(content).hexdigest()
+    digest = hashlib.sha256()
+    visited: set[Path] = set()
+
+    def hash_path(path: Path) -> None:
+        path = path.expanduser().resolve()
+        if path in visited:
+            return
+        visited.add(path)
+        digest.update(str(path).encode())
+        digest.update(b"\0")
+        if path.is_dir():
+            for child in sorted(path.rglob("*")):
+                if child.is_file() and not child.is_symlink() and not _ignored_local_requirement_path(child, path):
+                    digest.update(child.relative_to(path).as_posix().encode())
+                    digest.update(b"\0")
+                    digest.update(child.read_bytes())
+                    digest.update(b"\0")
+            return
+        if not path.is_file():
+            digest.update(b"missing\0")
+            return
+
+        content = path.read_bytes()
+        digest.update(content)
+        digest.update(b"\0")
+        for referenced in _requirement_input_paths(content, path.parent):
+            hash_path(referenced)
+
+    hash_path(requirements)
+    return digest.hexdigest()
+
+
+def _requirement_input_paths(content: bytes, base: Path) -> list[Path]:
+    paths: list[Path] = []
+    for raw_line in content.decode("utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            tokens = shlex.split(line, comments=False)
+        except ValueError:
+            continue
+        if not tokens:
+            continue
+
+        referenced = _option_path(tokens, "-r", "--requirement") or _option_path(tokens, "-c", "--constraint")
+        if referenced:
+            paths.append(_resolve_requirement_path(referenced, base))
+            continue
+
+        local = _option_path(tokens, "-e", "--editable")
+        if not local and "@" in tokens:
+            index = tokens.index("@")
+            local = tokens[index + 1] if index + 1 < len(tokens) else None
+        if not local and tokens and _is_local_requirement(tokens[0]):
+            local = tokens[0]
+        if local and _is_local_requirement(local):
+            paths.append(_resolve_requirement_path(local, base))
+    return paths
+
+
+def _option_path(tokens: list[str], short: str, long: str) -> str | None:
+    first = tokens[0]
+    if first in {short, long}:
+        return tokens[1] if len(tokens) > 1 else None
+    if first.startswith(f"{long}="):
+        return first.split("=", 1)[1]
+    if first.startswith(short) and first != short:
+        return first[len(short) :]
+    return None
+
+
+def _is_local_requirement(value: str) -> bool:
+    return value.startswith((".", "/", "~", "file:"))
+
+
+def _resolve_requirement_path(value: str, base: Path) -> Path:
+    if value.startswith("file:"):
+        value = unquote(urlparse(value).path)
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else base / path
+
+
+def _ignored_local_requirement_path(path: Path, root: Path) -> bool:
+    ignored = {".git", ".hiveup", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "__pycache__", "venv"}
+    return bool(ignored.intersection(path.relative_to(root).parts))
 
 
 def _environment_python(path: Path) -> Path:
