@@ -1,56 +1,68 @@
-# HiveUp local shadow comparison
+# HiveUp all-public shadow comparison
 
 ## Purpose
 
 This one-off comparison checked the Python HiveUp rewrite against the unchanged
-legacy .NET CLI using real integrations. It was run locally rather than added as
-a permanent CI job. Generated environments, logs, and archives were kept under
-`/tmp` and removed after each run.
+legacy .NET CLI using every public integration. It was run locally rather than
+added as a permanent CI job. Generated environments, logs, and archives were
+kept under `/tmp` and removed after the results were collected.
 
 ## Fixed inputs
 
 | Input | Commit |
 | --- | --- |
-| Initial Python HiveUp comparison | `b91b79774a37aab4247d941714e8f99adaf91f85` |
-| Final Python HiveUp code | `a8c90d12314ab3134b8b0b992f65f5925291486f` |
+| Initial all-public Python comparison | `1974c03515df9d0d6f6171046d9c62a7476fd6a7` |
+| Final Python HiveUp verification | `6e0561a31c16b2a6f179ab1ca3fc93dd28315c94` |
 | Legacy .NET HiveUp `origin/master` | `b8d999b3b1492f6c7284f3ed31a7ec6b7882f01b` |
 | Integrations `origin/master` | `d1ac5b7fdeb3ec1ad091f183453e358bc70e8c46` |
 
 The Python wheel was built and installed into a clean Python 3.13 environment.
 The .NET CLI was built from a detached worktree and invoked directly without a
-global installation or source changes. Each integration was copied separately
-for each tool while preserving its original directory basename.
+global installation or source changes. All 97 immediate child directories with
+a `config.json` were copied separately for each tool while preserving their
+original directory basename. No integration was omitted.
 
-## Selected integrations
+## Complete scope
 
-| Integration | Coverage reason |
-| --- | --- |
-| `api-call` | No authentication, SDK-only dependencies, legacy SDK/tests |
-| `active-campaign` | Custom API-key authentication, SDK-only dependencies |
-| `shopify-customer` | OAuth2 PKCE and older test/import conventions |
-| `gmail` | Platform authentication and Google dependencies |
-| `aws` | Modular `actions/` layout and pure-Python dependencies |
-| `box` | Platform authentication and native `aiohttp` dependencies |
-| `code-analysis` | Large native dependency tree and security auditing |
+`active-campaign`, `agno-agent`, `api-call`, `app-business-reviews`, `asana`,
+`aws`, `bigquery`, `bitly`, `box`, `calendly`, `canva`, `circle`, `clickup`,
+`coda`, `code-analysis`, `companies-register`, `doc-maker`, `dropbox`,
+`elevenlabs`, `eventbrite`, `facebook`, `fathom`, `fergus`, `float`,
+`freshdesk`, `freshsales`, `front`, `ghost`, `github`, `gitlab`, `gmail`,
+`gong`, `google-ads`, `google-analytics`, `google-business-profie`,
+`google-calendar`, `google-chat`, `google-docs`, `google-forms`, `google-looker`,
+`google-search-console`, `google-sheets`, `google-tasks`, `grammarly`,
+`hackernews`, `harvest`, `heartbeat`, `heygen`, `hubspot`, `humanitix`,
+`instagram`, `jira`, `linkedin`, `linkedin-ads`, `lumin-pdf`, `mailchimp`,
+`microsoft-excel`, `microsoft-planner`, `microsoft-powerpoint`,
+`microsoft-word`, `microsoft365`, `missive`, `monday-com`, `netlify`, `notion`,
+`nzbn`, `perplexity`, `pipedrive`, `powerbi`, `productboard`, `projectworks`,
+`reddit`, `retail-express`, `rss-reader-atoma-ah-fetch`,
+`rss-reader-feedparser`, `salesforce`, `shopify-admin`, `shopify-customer`,
+`shopify-storefront`, `slider`, `spreadsheet-tools`, `stripe`, `substack`,
+`supabase`, `supadata`, `teams`, `tiktok`, `toggl`, `trello`, `typeform`,
+`webcal`, `whatsapp`, `x`, `xero`, `youtube`, `zoho`, and `zoom`.
 
 ## Final behavioral results
 
-The .NET columns record the unchanged baseline. Python results include the
-environment fixes discovered during the comparison.
+The .NET columns record the unchanged baseline. Python validation and tests were
+rerun after fixing every test-runner regression discovered by the comparison.
 
-| Integration | .NET validate | .NET package | Python validate | Python test | Python package |
-| --- | --- | --- | --- | --- | --- |
-| `api-call` | Pass | Pass | Fail | Pass with no-tests warning | Fail |
-| `active-campaign` | Pass | Pass | Fail on tests | Fail: missing `make_context` fixture | Pass |
-| `shopify-customer` | Fail: unsupported auth | Fail | Fail | Pass, 31 tests | Fail |
-| `gmail` | Pass | Pass | Pass with warnings | Pass, 110 tests | Pass |
-| `aws` | Fail: modular actions missed | Pass | Pass with warning | Pass, 37 tests | Pass |
-| `box` | Pass | Pass | Pass with warning | Pass, 38 tests | Pass |
-| `code-analysis` | Pass | Pass | Fail | Pass, 7 tests | Fail |
+| Operation | Success | Failure | Timeout |
+| --- | ---: | ---: | ---: |
+| .NET `validate` | 91 | 6 | 0 |
+| Python `validate` | 54 | 43 | 0 |
+| Python-only `test` | 97 | 0 | 0 |
+| .NET `package` | 95 | 2 | 0 |
+| Python `package` | 55 | 42 | 0 |
 
 Packaging intentionally runs the deployment checks rather than the complete CI
-test and audit suite. ActiveCampaign can therefore package even though its
-existing unit-test fixtures are incomplete.
+test and audit suite. Python package failures are therefore not expected to map
+one-to-one to full validation failures.
+
+The 43 remaining Python validation failures contain concrete stricter-check or
+integration findings. The comparison found no remaining likely Python
+regression, unresolved tooling issue, or timeout.
 
 ## Python regressions found and fixed
 
@@ -81,13 +93,20 @@ package context does not exist in the deployment ZIP. HiveUp now tests a
 temporary source copy with that root package marker removed. The original source
 is never modified.
 
-Regression tests cover all three cases. The final tooling suite contains 75
+### Shared pytest configuration in temporary source copies
+
+The temporary copy initially lost repository-level pytest configuration. That
+removed shared fixtures from the root `conftest.py` and `asyncio_mode = "auto"`
+from `pyproject.toml`. HiveUp now copies only applicable pytest project files to
+the temporary root. It does not copy `.env` files or credentials.
+
+Regression tests cover all four cases. The final tooling suite contains 75
 passing tests.
 
 ## Package comparison
 
-Both tools produced archives for ActiveCampaign and AWS during the initial
-comparison. The Python archives met the backend package contract:
+Both tools produced archives for 55 integrations. The Python archives met the
+backend package contract:
 
 - Python 3.13 and `manylinux2014_x86_64`
 - compatible wheels only
@@ -97,18 +116,30 @@ comparison. The Python archives met the backend package contract:
 - no injected `main.py`
 - no integration tests, `.pyc`, or `__pycache__`
 - native extensions identified as ELF x86-64 CPython 3.13 files
-- byte-identical output across repeated builds
+- deterministic output, verified through representative repeated builds
 
-| Archive | Files | Dependency files | Native extensions |
-| --- | ---: | ---: | ---: |
-| ActiveCampaign .NET | 447 | 443 | 8 |
-| ActiveCampaign Python | 297 | 291 | 8 |
-| AWS .NET | 2,811 | 2,800 | 8 |
-| AWS Python | 2,466 | 2,453 | 8 |
+| Paired package measurement | .NET | Python |
+| --- | ---: | ---: |
+| Archives compared | 55 | 55 |
+| Total archive size | 352.9 MB | 278.6 MB |
+| Median dependency files | 443 | 291 |
+| Native extensions | 497 | 497 |
+| Root README present | 0 | 55 |
+| Root requirements present | 0 | 55 |
 
-The legacy archives included 152 and 347 generated `.pyc` files respectively.
-The Python archives excluded them and included root README and requirements
-files omitted by the legacy packager.
+Both tools consistently retained the root entry point, config, and icon. Python
+excluded cache and `.pyc` files in all paired archives, while the legacy
+archives included them. Neither included integration-owned test directories.
+
+Repeated Python packages were byte-identical for ActiveCampaign and AWS. The
+corresponding .NET packages differed between builds. Spreadsheet Tools failed
+Python validation consistently on both package attempts, while .NET produced
+two different archives.
+
+The two .NET package failures were `rss-reader-feedparser` and
+`shopify-customer`, both caused by legacy polymorphic config discriminator
+parsing. Python package failures were validation-gated rather than unexplained
+packager crashes.
 
 Files such as `aiohttp.test_utils` and `jsonschema/benchmarks` remain in the
 Python archive because they are contents of upstream wheels. HiveUp does not
@@ -129,23 +160,41 @@ The following differences are intentional and are not parity regressions:
 
 ## Remaining integration findings
 
-These are findings in the selected integrations rather than HiveUp regressions:
+The .NET validator rejected six integrations: `aws`, `facebook`, `humanitix`,
+`instagram`, `rss-reader-feedparser`, and `shopify-customer`. AWS demonstrates a
+legacy validator defect: it misses actions in the modular `actions/` package but
+packages the integration anyway.
 
-- `api-call` uses SDK 1.0.2, has no discoverable `_unit.py` test, and retains a
-  legacy `context` import.
-- `active-campaign` unit tests require an unavailable `make_context` fixture.
-- `shopify-customer` uses `oauth2_pkce`, has a legacy `context` import, README
-  formatting drift, and config/code schema drift.
-- `code-analysis` has an E402 lint violation, README formatting drift, and pins
-  vulnerable `PyPDF2` 3.0.1 (`PYSEC-2026-1835`, fixed in 3.9.0).
-- Several integrations pin deprecated SDK 2.0.0 instead of 2.0.1 or later.
+Python validation reported findings in 43 integrations:
+
+`api-call`, `app-business-reviews`, `bigquery`, `circle`, `code-analysis`,
+`companies-register`, `facebook`, `fathom`, `float`, `gong`, `google-ads`,
+`google-analytics`, `google-business-profie`, `google-chat`, `google-docs`,
+`google-looker`, `google-search-console`, `google-tasks`, `heartbeat`, `heygen`,
+`humanitix`, `jira`, `mailchimp`, `microsoft-excel`, `microsoft-planner`,
+`microsoft-powerpoint`, `microsoft-word`, `notion`, `nzbn`, `pipedrive`,
+`powerbi`, `productboard`, `reddit`, `retail-express`, `rss-reader-feedparser`,
+`shopify-admin`, `shopify-customer`, `shopify-storefront`, `spreadsheet-tools`,
+`stripe`, `tiktok`, `webcal`, and `xero`.
+
+The failures include missing modern unit-test files or imports, deprecated SDK
+constraints, Ruff and README formatting findings, dependency vulnerabilities,
+and config/schema drift. Notion changed from pass to fail after shared pytest
+configuration was correctly preserved because the repository's Ruff settings
+expose an existing unused import in `tests/context.py`.
+
+All 97 standalone Python test runs pass. None of the remaining validation or
+package differences is classified as a likely HiveUp regression or unresolved
+tooling issue.
 
 No changes to these integrations or to the legacy .NET CLI are included in the
 Python HiveUp rewrite.
 
 ## Conclusion
 
-The local comparison exposed three test-environment compatibility regressions,
-all now fixed and verified against the affected real integrations. Remaining
-failures are either deliberately stricter Python checks or existing integration
-issues. No permanent shadow CI workflow is required.
+The all-public comparison exposed four test-environment compatibility issues,
+all now fixed and verified across every public integration. Python HiveUp tests
+pass for 97/97 integrations, package outputs match the backend contract, and no
+likely Python regression remains. Validation failures are deliberately stricter
+checks or existing integration findings. No permanent shadow CI workflow is
+required.

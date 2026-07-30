@@ -401,9 +401,10 @@ than being required for .NET CLI parity.
 ## Migration verification
 
 The one-off local comparison against the unchanged .NET CLI is documented in
-[HIVEUP_SHADOW_RESULTS.md](HIVEUP_SHADOW_RESULTS.md). It exercises seven real
-integrations across authentication, source-layout, and dependency categories.
-The comparison is intentionally not retained as a permanent CI shadow job.
+[HIVEUP_SHADOW_RESULTS.md](HIVEUP_SHADOW_RESULTS.md). It exercises all 97 public
+integrations at a fixed repository commit across validation, isolated tests,
+deployment packaging, and representative reproducibility checks. The comparison
+is intentionally not retained as a permanent CI shadow job.
 
 ## Explicitly out of scope for v1
 
