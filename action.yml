@@ -98,14 +98,17 @@ runs:
           BASE_REF_ARGS=(--base-ref "${{ inputs.base_ref }}")
         fi
         COMMENT_FILE="${{ runner.temp }}/validation-comment.md"
+        COMMIT="${{ github.event.pull_request.head.sha || github.sha }}"
         if [ -n "${{ inputs.directories }}" ]; then
           hiveup ci "${BASE_REF_ARGS[@]}" ${{ inputs.directories }} \
             --github-annotations \
+            --commit "$COMMIT" \
             --comment-file "$COMMENT_FILE" \
             --output-file "$GITHUB_OUTPUT"
         else
           hiveup ci "${BASE_REF_ARGS[@]}" \
             --github-annotations \
+            --commit "$COMMIT" \
             --comment-file "$COMMENT_FILE" \
             --output-file "$GITHUB_OUTPUT"
         fi

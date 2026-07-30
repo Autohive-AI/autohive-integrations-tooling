@@ -129,6 +129,7 @@ def ci(
     github_annotations: Annotated[bool, typer.Option("--github-annotations", help="Emit GitHub annotations.")] = False,
     comment_file: Annotated[Path | None, typer.Option("--comment-file", help="Write PR-comment markdown.")] = None,
     output_file: Annotated[Path | None, typer.Option("--output-file", help="Append GitHub Action outputs.")] = None,
+    commit: Annotated[str | None, typer.Option("--commit", help="Commit SHA to identify in CI output.")] = None,
 ) -> None:
     """Run the CI validation profile."""
 
@@ -144,8 +145,8 @@ def ci(
         comment_file.write_text(
             render_markdown(
                 report,
-                commit=os.environ.get("GITHUB_SHA", ""),
-                commit_msg=_git_commit_subject(),
+                commit=commit or os.environ.get("GITHUB_SHA", ""),
+                commit_msg=_git_commit_subject(commit or "HEAD"),
                 dirs=dirs_output,
             ),
             encoding="utf-8",
@@ -438,8 +439,8 @@ def _escape_annotation_prop(value: str) -> str:
     return _escape_annotation(value).replace(":", "%3A").replace(",", "%2C")
 
 
-def _git_commit_subject() -> str:
-    result = subprocess.run(["git", "log", "-1", "--format=%s"], capture_output=True, text=True)
+def _git_commit_subject(ref: str = "HEAD") -> str:
+    result = subprocess.run(["git", "log", "-1", "--format=%s", ref], capture_output=True, text=True)
     return result.stdout.strip() if result.returncode == 0 else ""
 
 

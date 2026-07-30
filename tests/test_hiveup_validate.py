@@ -13,11 +13,13 @@ from typer.testing import CliRunner
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import hiveup.cli as cli  # noqa: E402
 from hiveup.cli import _emit_github_annotations, _report_dirs, _write_github_outputs, app, run_validation  # noqa: E402
 from hiveup import __version__  # noqa: E402
 from hiveup.checks.static import _legacy_check  # noqa: E402
 from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE, ROOT_ENTRY_POINT_MESSAGE  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
+from hiveup.core.results import CheckResult, ValidationReport  # noqa: E402
 from hiveup.packaging import (  # noqa: E402
     TARGET_PLATFORM,
     TARGET_PYTHON_VERSION,
@@ -308,6 +310,44 @@ def test_github_outputs_include_legacy_action_keys(tmp_path: Path) -> None:
     assert "structure_result<<EOF_structure_result\nsuccess" in output
     assert "code_result<<EOF_code_result\nsuccess" in output
     assert "comment_path<<EOF_comment_path" in output
+
+
+def test_ci_uses_explicit_pull_request_head_for_comment_metadata(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    comment_file = tmp_path / "comment.md"
+    report = ValidationReport(
+        [CheckResult(check="json", integration="demo", status="passed")],
+        directories=[str(integration)],
+    )
+    rendered = {}
+    requested_refs = []
+    monkeypatch.setattr(cli, "run_validation", lambda *args, **kwargs: report)
+
+    def commit_subject(ref: str = "HEAD") -> str:
+        requested_refs.append(ref)
+        return "pull request head subject"
+
+    def render(report, *, commit: str, commit_msg: str, dirs: str) -> str:
+        rendered.update(commit=commit, commit_msg=commit_msg, dirs=dirs)
+        return "comment"
+
+    monkeypatch.setattr(cli, "_git_commit_subject", commit_subject)
+    monkeypatch.setattr(cli, "render_markdown", render)
+    monkeypatch.setenv("GITHUB_SHA", "synthetic-merge-sha")
+
+    result = CliRunner().invoke(
+        app,
+        ["ci", str(integration), "--commit", "pull-request-head-sha", "--comment-file", str(comment_file)],
+    )
+
+    assert result.exit_code == 0
+    assert requested_refs == ["pull-request-head-sha"]
+    assert rendered == {
+        "commit": "pull-request-head-sha",
+        "commit_msg": "pull request head subject",
+        "dirs": str(integration),
+    }
 
 
 def test_github_directories_output_preserves_distinct_repository_paths(tmp_path: Path, monkeypatch) -> None:
