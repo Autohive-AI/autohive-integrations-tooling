@@ -209,6 +209,26 @@ def test_git_based_checks_work_outside_repo_cwd(tmp_path: Path, monkeypatch) -> 
     }
 
 
+def test_existing_integration_without_canonical_unit_tests_warns_with_base_ref(tmp_path: Path) -> None:
+    integration, base_ref = _git_integration_without_canonical_tests(tmp_path, existing=True)
+
+    report = run_validation([integration], base_ref=base_ref, only={"structure"})
+
+    assert report.exit_code() == 0
+    assert report.results[0].status == "warning"
+    assert any("Missing unit test file" in message.message for message in report.results[0].messages)
+
+
+def test_new_integration_without_canonical_unit_tests_fails_with_base_ref(tmp_path: Path) -> None:
+    integration, base_ref = _git_integration_without_canonical_tests(tmp_path, existing=False)
+
+    report = run_validation([integration], base_ref=base_ref, only={"structure"})
+
+    assert report.exit_code() == 1
+    assert report.results[0].status == "failed"
+    assert any("Missing unit test file" in message.message for message in report.results[0].messages)
+
+
 def test_github_outputs_include_legacy_action_keys(tmp_path: Path) -> None:
     report = run_validation([EXAMPLES / "good-integration"], only={"structure", "json"})
     output_file = tmp_path / "github-output.txt"
@@ -547,6 +567,38 @@ def test_build_package_replaces_output_without_mutating_integration(tmp_path: Pa
             "dependencies/native_extension.so",
             "dependencies/pure_python/__init__.py",
         }
+
+
+def _git_integration_without_canonical_tests(tmp_path: Path, *, existing: bool) -> tuple[Path, str]:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    (repo / "README.md").write_text("# Integrations\n", encoding="utf-8")
+    integration = repo / "good-integration"
+
+    if existing:
+        shutil.copytree(EXAMPLES / "good-integration", integration)
+        (integration / "tests" / "test_good_integration_unit.py").unlink()
+
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=repo, check=True)
+    base_ref = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    if not existing:
+        shutil.copytree(EXAMPLES / "good-integration", integration)
+        (integration / "tests" / "test_good_integration_unit.py").unlink()
+        subprocess.run(["git", "add", "."], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "add integration"], cwd=repo, check=True)
+
+    return integration, base_ref
 
 
 def _jpeg_with_dimensions(width: int, height: int) -> bytes:

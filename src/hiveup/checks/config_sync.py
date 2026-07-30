@@ -245,7 +245,7 @@ def _git_path(path: Path, repo_root: Path) -> str:
     return path.resolve().relative_to(repo_root).as_posix()
 
 
-def _is_new_integration(dir_path: Path, base_ref: str | None, repo_root: Path | None) -> bool:
+def is_new_integration(dir_path: Path, base_ref: str | None, repo_root: Path | None) -> bool:
     """Return True when config.json did not exist at base_ref."""
     if not base_ref or repo_root is None:
         return False
@@ -351,7 +351,7 @@ def check_config_sync(dir_path: str, *, base_ref: str | None = None) -> int:
 
     errors: list[str] = []
     warnings: list[str] = []
-    is_new_integration = _is_new_integration(path, base_ref, repo_root)
+    integration_is_new = is_new_integration(path, base_ref, repo_root)
 
     # Check 1: Actions in config but not in code
     for action_name in config_actions:
@@ -411,7 +411,7 @@ def check_config_sync(dir_path: str, *, base_ref: str | None = None) -> int:
     if errors:
         for error in errors:
             print(f"❌ {error}")
-    if is_new_integration and warnings:
+    if integration_is_new and warnings:
         print("❌ New integrations must keep config.json input_schema in sync with code")
         for warning in warnings:
             print(f"❌ {warning}")
@@ -423,7 +423,7 @@ def check_config_sync(dir_path: str, *, base_ref: str | None = None) -> int:
         for warning in warnings:
             print(f"⚠️  {warning}")
 
-    if errors or (is_new_integration and warnings):
+    if errors or (integration_is_new and warnings):
         return 1
     return 0
 

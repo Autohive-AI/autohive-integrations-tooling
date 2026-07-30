@@ -14,7 +14,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from hiveup.checks.config_sync import check_config_sync
+from hiveup.checks.config_sync import check_config_sync, is_new_integration
 from hiveup.checks.fetch_pattern import check_fetch_pattern
 from hiveup.checks.readme import check_readme
 from hiveup.checks.structure import IntegrationValidator
@@ -30,7 +30,7 @@ RUFF_CONFIG = Path(str(importlib.resources.files("hiveup").joinpath("data/ruff.t
 
 def available_checks(*, base_ref: str | None = None, fix: bool = False) -> dict[str, CheckFn]:
     return {
-        "structure": check_structure,
+        "structure": lambda path: check_structure(path, base_ref=base_ref),
         "syntax": check_syntax,
         "imports": check_imports_all,
         "json": check_json,
@@ -46,9 +46,16 @@ def available_checks(*, base_ref: str | None = None, fix: bool = False) -> dict[
     }
 
 
-def check_structure(path: Path) -> CheckResult:
+def check_structure(path: Path, *, base_ref: str | None = None) -> CheckResult:
     start = time.perf_counter()
-    validator = IntegrationValidator(path)
+    repo_root = _git_repo_root(path) if base_ref else None
+    allow_legacy_missing_unit_tests = bool(
+        base_ref and repo_root and not is_new_integration(path, base_ref, repo_root)
+    )
+    validator = IntegrationValidator(
+        path,
+        allow_legacy_missing_unit_tests=allow_legacy_missing_unit_tests,
+    )
     try:
         validator.validate()
     except Exception as exc:  # pragma: no cover - defensive boundary for legacy validator

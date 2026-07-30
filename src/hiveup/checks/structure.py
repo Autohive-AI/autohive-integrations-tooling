@@ -152,9 +152,10 @@ class ValidationError:
 class IntegrationValidator:
     """Validates an integration folder structure."""
 
-    def __init__(self, integration_path: Path):
+    def __init__(self, integration_path: Path, *, allow_legacy_missing_unit_tests: bool = False):
         self.path = integration_path
         self.name = integration_path.name
+        self.allow_legacy_missing_unit_tests = allow_legacy_missing_unit_tests
         self.errors: List[ValidationError] = []
         self.warnings: List[ValidationError] = []
         self.config: Dict = {}
@@ -446,7 +447,11 @@ class IntegrationValidator:
         # Unit-test execution discovers only files with the _unit.py suffix.
         test_files = list(tests_path.glob('test_*_unit.py'))
         if not test_files:
-            self.add_error("Missing unit test file: tests/test_*_unit.py")
+            message = "Missing unit test file: tests/test_*_unit.py"
+            if self.allow_legacy_missing_unit_tests:
+                self.add_warning(message)
+            else:
+                self.add_error(message)
 
     def _check_main_python_file(self):
         """Check main Python file and integration modules for required patterns."""
