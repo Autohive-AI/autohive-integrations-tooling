@@ -349,7 +349,13 @@ def run_validation(
     for integration in integrations:
         for check_name in sorted(selected_names, key=list(checks).index):
             results.append(checks[check_name](integration))
-    return ValidationReport(results)
+    directories = []
+    for integration in integrations:
+        try:
+            directories.append(integration.resolve().relative_to(root.resolve()).as_posix())
+        except ValueError:
+            directories.append(integration.resolve().as_posix())
+    return ValidationReport(results, directories=directories)
 
 
 def _select_integrations(root: Path, dirs: list[Path], *, changed: bool, base_ref: str | None) -> list[Path]:
@@ -370,13 +376,7 @@ def _select_checks(names: set[str] | list[str] | dict, *, skip: set[str], only: 
 
 
 def _report_dirs(report: ValidationReport) -> str:
-    dirs = []
-    for result in report.results:
-        if result.check in {"discovery", "selection"}:
-            continue
-        if result.integration not in dirs:
-            dirs.append(result.integration)
-    return " ".join(dirs)
+    return " ".join(report.directories)
 
 
 def _emit_github_annotations(report: ValidationReport) -> None:

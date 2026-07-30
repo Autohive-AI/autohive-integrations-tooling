@@ -558,6 +558,7 @@ jobs:
           ACTUAL_OUTCOME: ${{ steps.validate.outcome }}
           EXPECTED_OUTCOME: ${{ matrix.outcome }}
           EXPECTED_INTEGRATION: ${{ matrix.integration }}
+          EXPECTED_DIRECTORY: ${{ matrix.directory }}
           EXPECTED_STRUCTURE: ${{ matrix.structure }}
           EXPECTED_CODE: ${{ matrix.code }}
           EXPECTED_FAILURE_TEXT: ${{ matrix.failure_text }}
@@ -578,8 +579,8 @@ jobs:
             echo "Expected Action outcome '$EXPECTED_OUTCOME', got '$ACTUAL_OUTCOME'"
             exit 1
           }
-          [ "$DIRECTORIES" = "$EXPECTED_INTEGRATION" ] || {
-            echo "Expected directories output '$EXPECTED_INTEGRATION', got '$DIRECTORIES'"
+          [ "$DIRECTORIES" = "$EXPECTED_DIRECTORY" ] || {
+            echo "Expected directories output '$EXPECTED_DIRECTORY', got '$DIRECTORIES'"
             exit 1
           }
           [ "$STRUCTURE_RESULT" = "$EXPECTED_STRUCTURE" ] || {

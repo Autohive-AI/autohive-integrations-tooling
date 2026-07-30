@@ -13,7 +13,7 @@ from typer.testing import CliRunner
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from hiveup.cli import _emit_github_annotations, _write_github_outputs, app, run_validation  # noqa: E402
+from hiveup.cli import _emit_github_annotations, _report_dirs, _write_github_outputs, app, run_validation  # noqa: E402
 from hiveup import __version__  # noqa: E402
 from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE, ROOT_ENTRY_POINT_MESSAGE  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
@@ -281,6 +281,19 @@ def test_github_outputs_include_legacy_action_keys(tmp_path: Path) -> None:
     assert "structure_result<<EOF_structure_result\nsuccess" in output
     assert "code_result<<EOF_code_result\nsuccess" in output
     assert "comment_path<<EOF_comment_path" in output
+
+
+def test_github_directories_output_preserves_distinct_repository_paths(tmp_path: Path, monkeypatch) -> None:
+    first = tmp_path / "foo" / "shared"
+    second = tmp_path / "bar" / "shared"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+
+    report = run_validation([Path("foo/shared"), Path("bar/shared")], only={"json"})
+
+    assert [result.integration for result in report.results] == ["shared", "shared"]
+    assert _report_dirs(report) == "foo/shared bar/shared"
 
 
 def test_github_annotations_include_validation_failures(capsys) -> None:

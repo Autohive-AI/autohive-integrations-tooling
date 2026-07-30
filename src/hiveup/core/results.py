@@ -31,6 +31,7 @@ class CheckResult:
 @dataclass
 class ValidationReport:
     results: list[CheckResult]
+    directories: list[str] = field(default_factory=list)
 
     def has_failures(self) -> bool:
         return any(result.status in {"failed", "error"} for result in self.results)
