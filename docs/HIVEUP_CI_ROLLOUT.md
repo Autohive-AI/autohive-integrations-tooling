@@ -11,7 +11,7 @@ without adding permanent shadow CI.
 | Input | Commit |
 | --- | --- |
 | Released tooling tag `v2` | `c929fa6db69d61022f5da4b39edbaa9cb62720b4` |
-| Python HiveUp | `858b61fbaa06bc1a18b0acc768be4e4e003fe659` |
+| Python HiveUp | `3040c4fa0044891cd5b37252a04b9bccfa4ca822` |
 | Public integrations | `d1ac5b7fdeb3ec1ad091f183453e358bc70e8c46` |
 | PR-style base ref | `44c2719538cf47d8cedc10ec397aed1da4a09fa6` |
 
@@ -26,15 +26,19 @@ were included, and no command timed out.
 
 | Result | Integrations |
 | --- | ---: |
-| Pass released CI / pass HiveUp | 9 |
+| Pass released CI / pass HiveUp | 25 |
 | Fail released CI / fail HiveUp | 25 |
-| Pass released CI / fail HiveUp | 16 |
+| Pass released CI / fail HiveUp | 0 |
 | Fail released CI / pass HiveUp | 47 |
 
-### Pass both (9)
+### Pass both (25)
 
-`agno-agent`, `doc-maker`, `elevenlabs`, `lumin-pdf`, `notion`, `nzbn`,
-`rss-reader-atoma-ah-fetch`, `slider`, and `teams`.
+`agno-agent`, `api-call`, `companies-register`, `doc-maker`, `elevenlabs`,
+`facebook`, `fathom`, `google-ads`, `google-business-profie`, `google-chat`,
+`google-docs`, `google-tasks`, `heartbeat`, `jira`, `lumin-pdf`,
+`microsoft-powerpoint`, `notion`, `nzbn`, `powerbi`, `reddit`,
+`rss-reader-atoma-ah-fetch`, `rss-reader-feedparser`, `slider`, `teams`, and
+`tiktok`.
 
 ### Fail both (25)
 
@@ -49,18 +53,17 @@ These are existing CI debt. Reasons do not always align because HiveUp removes
 obsolete structural checks while adding formatting, import, audit, and schema
 checks. Substantive findings remain blocking.
 
-### Newly blocked by HiveUp (16)
+### Newly blocked by HiveUp (0)
 
-`api-call`, `companies-register`, `facebook`, `fathom`, `google-ads`,
-`google-business-profie`, `google-chat`, `google-docs`, `google-tasks`,
-`heartbeat`, `jira`, `microsoft-powerpoint`, `powerbi`, `reddit`,
-`rss-reader-feedparser`, and `tiktok`.
+No existing public integration passes the released CI while failing HiveUp.
 
-All 16 pass released CI because its test runner silently succeeds when no
-canonical `tests/test_*_unit.py` file exists. Full `hiveup ci` currently treats
-the absence of a canonical unit-test file as blocking. Other notices shown for
-some of these integrations—deprecated SDK pins, recommended config fields, and
-potentially unused scopes—remain warnings and are not the blocking delta.
+The initial comparison found 16 such integrations because the released test
+runner silently succeeds when no canonical `tests/test_*_unit.py` file exists.
+HiveUp now uses the PR base ref to preserve that historical state: an existing
+integration without canonical tests receives a non-blocking warning, while a
+new integration without canonical tests fails. Scaffolds continue to generate
+canonical unit tests. This avoids an integration migration while preventing new
+zero-test integrations from entering the repository.
 
 ### Newly passing with HiveUp (47)
 
@@ -88,16 +91,21 @@ HiveUp now also resolves modules beside the importing source file. The fix is
 covered by a regression test. Installed-wheel verification confirms that NZBN
 passes imports, all 42 unit tests, and full `hiveup ci`.
 
-No likely HiveUp regression, unresolved tooling issue, or timeout remains.
+The final installed-wheel rerun covered all 97 integrations after the
+compatibility policy was implemented: 72 passed, 25 failed, no command timed
+out, and the failed set exactly matched the previous fail-both set. No likely
+HiveUp regression or unresolved tooling issue remains.
 
 ## Rollout policy decisions
 
-Before moving the floating Action tag, decide the following explicitly:
+The rollout policies are:
 
-1. **Canonical unit tests:** either migrate the 16 integrations, grandfather
-   their existing missing-test state, or initially keep absence warning-only.
-2. **Legacy context helper:** approve removal of mandatory `tests/context.py`.
-   Current SDK-aligned scaffolds and isolated tests do not require it.
+1. **Canonical unit tests:** preserve the missing-test state of existing
+   integrations as a warning when a base ref proves they already exist; require
+   canonical tests for new integrations.
+2. **Legacy context helper:** do not require `tests/context.py`. Current
+   SDK-aligned scaffolds and isolated tests use the shared fixture model, while
+   legacy helpers remain supported when present.
 3. **Blocking correctness checks:** keep syntax, unresolved imports, known
    vulnerabilities, failing tests, and deployment/package integrity blocking.
 4. **Staged debt:** formatting, deprecated SDK pins, old test naming, and
@@ -106,10 +114,11 @@ Before moving the floating Action tag, decide the following explicitly:
 
 ## Recommendation
 
-Do not move the floating `v2` tag until the first two policy decisions are made.
-The implementation delta itself is understood: the only discovered import
-regression is fixed, existing substantive failures remain visible, and the
-remaining newly blocking group has one common missing-unit-test cause.
+The floating `v2` tag can move without newly blocking any existing public
+integration represented by the fixed snapshot. The 25 integrations that fail
+HiveUp also fail released CI today, though HiveUp may expose different or
+additional reasons within that already-failing group. New integrations are
+intentionally held to the canonical unit-test requirement.
 
 No integration source changes or legacy tooling changes are part of this
 comparison.
