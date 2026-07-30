@@ -51,6 +51,7 @@ SKIP_FOLDERS = {
     ".pytest_cache",
     "tools",
 }
+PYTEST_PROJECT_FILES = ("conftest.py", "pyproject.toml", "pytest.ini", "tox.ini", "setup.cfg")
 
 
 def find_unit_test_files(integration_dir: Path) -> list[Path]:
@@ -97,7 +98,12 @@ def _run_integration_tests(
 
     if not integration_dir.name.isidentifier() and (integration_dir / "__init__.py").is_file():
         with tempfile.TemporaryDirectory(prefix="hiveup-tests-") as temporary:
-            test_root = Path(temporary) / integration_dir.name
+            temporary_root = Path(temporary)
+            for filename in PYTEST_PROJECT_FILES:
+                source = integration_dir.parent / filename
+                if source.is_file():
+                    shutil.copyfile(source, temporary_root / filename)
+            test_root = temporary_root / integration_dir.name
             shutil.copytree(integration_dir, test_root)
             (test_root / "__init__.py").unlink()
             staged_tests = [test_root / test_file.relative_to(integration_dir) for test_file in test_files]

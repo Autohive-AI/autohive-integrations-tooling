@@ -190,11 +190,22 @@ def test_integration_tests_do_not_collect_hyphenated_root_as_package(tmp_path: P
     integration = tmp_path / "hyphenated-integration"
     tests_dir = integration / "tests"
     tests_dir.mkdir(parents=True)
+    (tmp_path / "conftest.py").write_text(
+        "import pytest\n\n@pytest.fixture\ndef shared_value():\n    return 1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.pytest.ini_options]\nasyncio_mode = "auto"\n',
+        encoding="utf-8",
+    )
     (integration / "__init__.py").write_text("from .demo import VALUE\n", encoding="utf-8")
     (integration / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
     test_file = tests_dir / "test_demo_unit.py"
     test_file.write_text(
-        "import pytest\n\npytestmark = pytest.mark.unit\n\ndef test_demo():\n    assert 1 == 1\n",
+        "import pytest\n\n"
+        "pytestmark = pytest.mark.unit\n\n"
+        "async def test_demo(shared_value):\n"
+        "    assert shared_value == 1\n",
         encoding="utf-8",
     )
     isolated = environment.IntegrationEnvironment(tmp_path / "cache", Path(sys.executable), "key", created=False)
