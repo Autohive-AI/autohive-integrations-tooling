@@ -464,6 +464,29 @@ def test_package_is_reproducible_across_source_metadata_changes(tmp_path: Path) 
             assert info.external_attr >> 16 == 0o100644
 
 
+def test_package_preserves_existing_archive_when_write_fails(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
+    package = tmp_path / "demo.zip"
+    package.write_bytes(b"existing release archive")
+
+    def fail_write(*args, **kwargs) -> None:
+        raise OSError("forced write failure")
+
+    monkeypatch.setattr("hiveup.packaging._write_file", fail_write)
+
+    try:
+        write_package_zip(integration, package, None)
+    except PackageBuildError as exc:
+        assert "forced write failure" in str(exc)
+    else:
+        raise AssertionError("Expected package write to fail")
+
+    assert package.read_bytes() == b"existing release archive"
+    assert list(tmp_path.glob(".demo.zip.*.tmp")) == []
+
+
 def test_structure_rejects_reserved_entry_point_basenames(tmp_path: Path) -> None:
     for index, entry_point in enumerate(("main.py", "MAIN.PY", "source/main.py")):
         integration = _integration_with_entry_point(tmp_path / f"reserved-{index}", entry_point)

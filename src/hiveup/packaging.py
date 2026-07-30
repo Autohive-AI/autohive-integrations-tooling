@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -84,25 +85,38 @@ def install_dependencies(requirements: Path, target: Path) -> None:
 
 
 def write_package_zip(directory: Path, package_path: Path, dependencies: Path | None) -> None:
-    """Write an integration and staged dependencies directly to a deployment ZIP root."""
+    """Write an integration and staged dependencies atomically to a deployment ZIP root."""
 
     package_path.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(
-        package_path,
-        "w",
-        compression=zipfile.ZIP_DEFLATED,
-        compresslevel=9,
-    ) as archive:
-        package_files = [
-            (path.relative_to(directory).as_posix(), path)
-            for path in _package_files(directory, package_path)
-        ]
-        if dependencies:
-            for path in dependencies.rglob("*"):
-                if path.is_file() and not path.is_symlink() and path.suffix.lower() != ".pyc":
-                    package_files.append((f"dependencies/{path.relative_to(dependencies).as_posix()}", path))
-        for archive_name, path in sorted(package_files):
-            _write_file(archive, path, archive_name)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=package_path.parent,
+        prefix=f".{package_path.name}.",
+        suffix=".tmp",
+    )
+    os.close(descriptor)
+    temporary_path = Path(temporary_name)
+    try:
+        with zipfile.ZipFile(
+            temporary_path,
+            "w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=9,
+        ) as archive:
+            package_files = [
+                (path.relative_to(directory).as_posix(), path)
+                for path in _package_files(directory, temporary_path)
+            ]
+            if dependencies:
+                for path in dependencies.rglob("*"):
+                    if path.is_file() and not path.is_symlink() and path.suffix.lower() != ".pyc":
+                        package_files.append((f"dependencies/{path.relative_to(dependencies).as_posix()}", path))
+            for archive_name, path in sorted(package_files):
+                _write_file(archive, path, archive_name)
+        temporary_path.replace(package_path)
+    except OSError as exc:
+        raise PackageBuildError(f"Could not write package {package_path}: {exc}") from exc
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 def _package_files(directory: Path, package_path: Path) -> list[Path]:
