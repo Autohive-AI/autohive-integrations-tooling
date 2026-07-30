@@ -338,6 +338,8 @@ def test_package_writes_root_layout_and_excludes_development_files(tmp_path: Pat
         path.write_text(content, encoding="utf-8")
     for name in (
         "tests/test_demo.py",
+        ".env",
+        ".env.local",
         ".git/config",
         ".venv/lib/module.py",
         "__pycache__/demo.pyc",
@@ -363,6 +365,19 @@ def test_package_writes_root_layout_and_excludes_development_files(tmp_path: Pat
             *included,
             "dependencies/example/__init__.py",
         }
+
+
+def test_package_excludes_root_git_worktree_metadata(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (integration / ".git").write_text("gitdir: /Users/alice/project/.git/worktrees/demo\n", encoding="utf-8")
+    package = tmp_path / "demo.zip"
+
+    write_package_zip(integration, package, None)
+
+    with zipfile.ZipFile(package) as archive:
+        assert archive.namelist() == ["demo.py"]
 
 
 def test_package_is_reproducible_across_source_metadata_changes(tmp_path: Path) -> None:
