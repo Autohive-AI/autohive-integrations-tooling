@@ -10,80 +10,81 @@ without adding permanent shadow CI.
 
 | Input | Commit |
 | --- | --- |
-| Released tooling tag `v2` | `c929fa6db69d61022f5da4b39edbaa9cb62720b4` |
+| Remote floating tooling tag `v2` | `3e141f9332408c7d823ccdedc91d47e46fa828c4` |
 | Python HiveUp | `3040c4fa0044891cd5b37252a04b9bccfa4ca822` |
 | Public integrations | `d1ac5b7fdeb3ec1ad091f183453e358bc70e8c46` |
 | PR-style base ref | `44c2719538cf47d8cedc10ec397aed1da4a09fa6` |
 
-Each released-tooling run used a clean Python 3.13 environment to model a fresh
-single-integration GitHub Action invocation. The old combined result ran the
-exact released structure, code, test, README, and version scripts. The new
-result ran the installed wheel's full `hiveup ci` profile with the same base
-reference. All 97 immediate integration directories containing `config.json`
-were included, and no command timed out.
+The floating tag was resolved from the remote immediately before the run rather
+than from a potentially stale local tag. Each released-tooling run used an
+isolated Python 3.13 environment to model a fresh single-integration GitHub
+Action invocation. The current combined result ran the exact released
+structure, code, test, README, and version scripts. The new result ran the
+installed wheel's full `hiveup ci` profile with the same base reference. All 97
+immediate integration directories containing `config.json` were included, and
+no command timed out. A live no-op Asana PR independently confirmed that the
+floating action accepts `tests/conftest.py` and matches the local result.
 
 ## Aggregate delta
 
 | Result | Integrations |
 | --- | ---: |
-| Pass released CI / pass HiveUp | 25 |
-| Fail released CI / fail HiveUp | 25 |
-| Pass released CI / fail HiveUp | 0 |
-| Fail released CI / pass HiveUp | 47 |
+| Pass current floating CI / pass HiveUp | 72 |
+| Fail current floating CI / fail HiveUp | 24 |
+| Pass current floating CI / fail HiveUp | 1 |
+| Fail current floating CI / pass HiveUp | 0 |
 
-### Pass both (25)
+### Pass both (72)
 
-`agno-agent`, `api-call`, `companies-register`, `doc-maker`, `elevenlabs`,
-`facebook`, `fathom`, `google-ads`, `google-business-profie`, `google-chat`,
-`google-docs`, `google-tasks`, `heartbeat`, `jira`, `lumin-pdf`,
-`microsoft-powerpoint`, `notion`, `nzbn`, `powerbi`, `reddit`,
-`rss-reader-atoma-ah-fetch`, `rss-reader-feedparser`, `slider`, `teams`, and
-`tiktok`.
+`active-campaign`, `agno-agent`, `api-call`, `asana`, `aws`, `bitly`, `box`,
+`calendly`, `canva`, `clickup`, `coda`, `companies-register`, `doc-maker`,
+`dropbox`, `elevenlabs`, `eventbrite`, `facebook`, `fathom`, `fergus`,
+`freshdesk`, `freshsales`, `front`, `ghost`, `github`, `gitlab`, `gmail`,
+`google-ads`, `google-business-profie`, `google-calendar`, `google-chat`,
+`google-docs`, `google-forms`, `google-sheets`, `google-tasks`, `grammarly`,
+`hackernews`, `harvest`, `heartbeat`, `hubspot`, `instagram`, `jira`,
+`linkedin`, `linkedin-ads`, `lumin-pdf`, `microsoft-powerpoint`,
+`microsoft365`, `missive`, `monday-com`, `netlify`, `notion`, `nzbn`,
+`perplexity`, `powerbi`, `projectworks`, `reddit`,
+`rss-reader-atoma-ah-fetch`, `rss-reader-feedparser`, `salesforce`, `slider`,
+`substack`, `supabase`, `supadata`, `teams`, `tiktok`, `toggl`, `trello`,
+`typeform`, `whatsapp`, `x`, `youtube`, `zoho`, and `zoom`.
 
-### Fail both (25)
+### Fail both (24)
 
 `app-business-reviews`, `bigquery`, `circle`, `code-analysis`, `float`, `gong`,
 `google-analytics`, `google-looker`, `google-search-console`, `heygen`,
-`humanitix`, `mailchimp`, `microsoft-excel`, `microsoft-planner`,
-`microsoft-word`, `pipedrive`, `productboard`, `retail-express`,
-`shopify-admin`, `shopify-customer`, `shopify-storefront`, `spreadsheet-tools`,
-`stripe`, `webcal`, and `xero`.
+`mailchimp`, `microsoft-excel`, `microsoft-planner`, `microsoft-word`,
+`pipedrive`, `productboard`, `retail-express`, `shopify-admin`,
+`shopify-customer`, `shopify-storefront`, `spreadsheet-tools`, `stripe`,
+`webcal`, and `xero`.
 
-These are existing CI debt. Reasons do not always align because HiveUp removes
-obsolete structural checks while adding formatting, import, audit, and schema
-checks. Substantive findings remain blocking.
+All 24 fail Ruff formatting in both implementations. `code-analysis` also
+reports the known-vulnerable `pypdf2 3.0.1` dependency. These are existing CI
+debt rather than rollout regressions.
 
-### Newly blocked by HiveUp (0)
+### Newly blocked by HiveUp (1)
 
-No existing public integration passes the released CI while failing HiveUp.
+`humanitix` passes current floating CI but fails HiveUp's broader static import
+scan because `tests/test_humanitix_integration.py` imports
+`curl_cffi.requests.AsyncSession`. `curl_cffi` is not declared in the
+integration's requirements. The import is inside an opt-in live test, so the
+current unit-test runner never imports it, while HiveUp scans the file
+statically. The live test itself is skipped without `HUMANITIX_API_KEY`, and
+Humanitix's 40 unit tests pass in HiveUp.
 
-The initial comparison found 16 such integrations because the released test
-runner silently succeeds when no canonical `tests/test_*_unit.py` file exists.
-HiveUp now uses the PR base ref to preserve that historical state: an existing
-integration without canonical tests receives a non-blocking warning, while a
-new integration without canonical tests fails. Scaffolds continue to generate
-canonical unit tests. This avoids an integration migration while preventing new
-zero-test integrations from entering the repository.
+This is the one remaining rollout policy decision: either exclude opt-in live
+integration tests from HiveUp's static import scan, or regard their undeclared
+dependencies as blocking. No public integration changes are included here.
 
-### Newly passing with HiveUp (47)
+### Newly passing with HiveUp (0)
 
-`active-campaign`, `asana`, `aws`, `bitly`, `box`, `calendly`, `canva`,
-`clickup`, `coda`, `dropbox`, `eventbrite`, `fergus`, `freshdesk`, `freshsales`,
-`front`, `ghost`, `github`, `gitlab`, `gmail`, `google-calendar`, `google-forms`,
-`google-sheets`, `grammarly`, `hackernews`, `harvest`, `hubspot`, `instagram`,
-`linkedin`, `linkedin-ads`, `microsoft365`, `missive`, `monday-com`, `netlify`,
-`perplexity`, `projectworks`, `salesforce`, `substack`, `supabase`, `supadata`,
-`toggl`, `trello`, `typeform`, `whatsapp`, `x`, `youtube`, `zoho`, and `zoom`.
-
-All 47 fail the released structure validator because it requires
-`tests/context.py`. HiveUp uses isolated environments and the current SDK-aligned
-shared fixture/scaffold model, so that obsolete helper file is not required.
-Removal of this old structural requirement should be explicitly approved as a
-rollout policy decision.
+Current floating CI already accepts either `tests/context.py` or
+`tests/conftest.py`, so removing the legacy-only requirement creates no delta.
 
 ## Regression found and fixed
 
-The initial comparison had one additional pass-old/fail-new integration:
+An earlier development comparison found an import-resolution regression in
 `nzbn`. Its tests legitimately import `context` from `tests/context.py`, but the
 static import resolver considered only the integration root and parent.
 
@@ -92,9 +93,9 @@ covered by a regression test. Installed-wheel verification confirms that NZBN
 passes imports, all 42 unit tests, and full `hiveup ci`.
 
 The final installed-wheel rerun covered all 97 integrations after the
-compatibility policy was implemented: 72 passed, 25 failed, no command timed
-out, and the failed set exactly matched the previous fail-both set. No likely
-HiveUp regression or unresolved tooling issue remains.
+compatibility policy was implemented: 72 passed, 25 failed, and no command
+timed out. The current floating scripts passed 73 and failed 24. Humanitix is
+the only behavioral mismatch requiring a policy decision before rollout.
 
 ## Rollout policy decisions
 
@@ -114,11 +115,11 @@ The rollout policies are:
 
 ## Recommendation
 
-The floating `v2` tag can move without newly blocking any existing public
-integration represented by the fixed snapshot. The 25 integrations that fail
-HiveUp also fail released CI today, though HiveUp may expose different or
-additional reasons within that already-failing group. New integrations are
-intentionally held to the canonical unit-test requirement.
+Do not move the floating `v2` tag to the HiveUp implementation until the
+Humanitix live-test import policy is decided. Apart from Humanitix, the fixed
+snapshot has no newly blocked integration: 24 fail both implementations and 72
+pass both. New integrations are intentionally held to the canonical unit-test
+requirement.
 
 No integration source changes or legacy tooling changes are part of this
 comparison.
