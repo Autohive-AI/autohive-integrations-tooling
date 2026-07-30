@@ -287,11 +287,14 @@ def _legacy_check(check: str, path: Path, run: Callable[[], int], *, cwd: Path |
 
     output = (stdout.getvalue() + stderr.getvalue()).strip()
     messages: list[CheckMessage] = []
-    if output:
-        severity = "error" if code else "warning"
-        for line in output.splitlines():
-            if line.strip():
-                messages.append(CheckMessage(severity, line.strip()))
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if code == 0 and "⚠️" in line:
+            messages.append(CheckMessage("warning", line))
+        elif code != 0:
+            messages.append(CheckMessage("error", line))
 
     if code == 0:
         status = "warning" if messages else "passed"

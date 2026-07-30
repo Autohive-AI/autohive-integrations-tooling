@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from hiveup.cli import _emit_github_annotations, _report_dirs, _write_github_outputs, app, run_validation  # noqa: E402
 from hiveup import __version__  # noqa: E402
+from hiveup.checks.static import _legacy_check  # noqa: E402
 from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE, ROOT_ENTRY_POINT_MESSAGE  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
 from hiveup.packaging import (  # noqa: E402
@@ -245,9 +246,22 @@ def test_git_based_checks_work_outside_repo_cwd(tmp_path: Path, monkeypatch) -> 
 
     assert report.exit_code() == 0
     assert {(result.check, result.status) for result in report.results} == {
-        ("readme", "warning"),
-        ("version", "warning"),
+        ("readme", "passed"),
+        ("version", "passed"),
     }
+
+
+def test_successful_legacy_check_only_reports_actual_warnings(tmp_path: Path) -> None:
+    def legacy_output() -> int:
+        print("✅ CHECK PASSED")
+        print("⚠️ consider a larger version bump")
+        return 0
+
+    result = _legacy_check("version", tmp_path, legacy_output)
+
+    assert result.status == "warning"
+    assert [message.message for message in result.messages] == ["⚠️ consider a larger version bump"]
+    assert "✅ CHECK PASSED" in result.raw_output
 
 
 def test_existing_integration_without_canonical_unit_tests_warns_with_base_ref(tmp_path: Path) -> None:
