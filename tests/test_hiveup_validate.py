@@ -371,6 +371,31 @@ def test_ci_uses_explicit_pull_request_head_for_comment_metadata(tmp_path: Path,
     }
 
 
+def test_ci_leaves_comment_path_empty_when_no_comment_was_written(tmp_path: Path, monkeypatch) -> None:
+    comment_file = tmp_path / "comment.md"
+    output_file = tmp_path / "github-output.txt"
+    monkeypatch.setattr(cli, "run_validation", lambda *args, **kwargs: ValidationReport([]))
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "ci",
+            "--base-ref",
+            "HEAD",
+            "--comment-file",
+            str(comment_file),
+            "--output-file",
+            str(output_file),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert not comment_file.exists()
+    output = output_file.read_text(encoding="utf-8")
+    assert "comment_path<<EOF_comment_path\n\nEOF_comment_path" in output
+    assert str(comment_file) not in output
+
+
 def test_github_directories_output_preserves_distinct_repository_paths(tmp_path: Path, monkeypatch) -> None:
     first = tmp_path / "foo" / "shared"
     second = tmp_path / "bar" / "shared"

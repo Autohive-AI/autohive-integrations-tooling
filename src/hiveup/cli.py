@@ -139,6 +139,7 @@ def ci(
         base_ref=base_ref,
     )
     dirs_output = _report_dirs(report)
+    written_comment_file = None
     if github_annotations:
         _emit_github_annotations(report)
     if comment_file and report.results:
@@ -151,8 +152,9 @@ def ci(
             ),
             encoding="utf-8",
         )
+        written_comment_file = comment_file
     if output_file:
-        _write_github_outputs(output_file, report, comment_file=comment_file, dirs=dirs_output)
+        _write_github_outputs(output_file, report, comment_file=written_comment_file, dirs=dirs_output)
     if json_output:
         print(json.dumps(report.to_dict(), indent=2))
     else:
