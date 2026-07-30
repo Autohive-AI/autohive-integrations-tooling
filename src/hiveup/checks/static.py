@@ -103,10 +103,9 @@ def check_imports_all(path: Path) -> CheckResult:
     availability: dict[str, bool] = {}
 
     def dependency_available(module_name: str) -> bool:
-        top_level = module_name.split(".", 1)[0]
-        if top_level not in availability:
-            availability[top_level] = module_available(environment, top_level)
-        return availability[top_level]
+        if module_name not in availability:
+            availability[module_name] = module_available(environment, module_name)
+        return availability[module_name]
 
     for pyfile in _python_files(path):
         try:

@@ -118,7 +118,7 @@ def environment_cache_root() -> Path:
 
 
 def module_available(environment: IntegrationEnvironment, module_name: str) -> bool:
-    """Check for a top-level module using the isolated interpreter."""
+    """Check for a module using the isolated interpreter."""
 
     script = (
         "import importlib.util, sys; "

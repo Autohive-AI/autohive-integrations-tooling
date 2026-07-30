@@ -103,6 +103,39 @@ def test_import_check_resolves_dependencies_with_isolated_environment(tmp_path: 
     assert prepared == [(integration, True)]
 
 
+def test_import_check_validates_and_caches_full_dotted_module_names(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "main.py").write_text("import os.definitely_missing\n", encoding="utf-8")
+    (integration / "other.py").write_text("import os.definitely_missing\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    checked_modules = []
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+
+    def available(selected, name: str) -> bool:
+        assert selected == isolated
+        checked_modules.append(name)
+        return False
+
+    monkeypatch.setattr(static, "module_available", available)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "failed"
+    assert checked_modules == ["os.definitely_missing"]
+    assert [message.message for message in report.messages] == [
+        "Missing module: os.definitely_missing",
+        "Missing module: os.definitely_missing",
+    ]
+
+
+def test_module_available_rejects_missing_dotted_submodule(tmp_path: Path) -> None:
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+
+    assert environment.module_available(isolated, "email.message")
+    assert not environment.module_available(isolated, "os.definitely_missing")
+
+
 def test_import_check_does_not_use_cli_environment_for_dependencies(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()
