@@ -66,6 +66,25 @@ def test_validate_reports_config_sync_failures() -> None:
     assert any("defined in config.json" in message.message for message in report.results[0].messages)
 
 
+def test_legacy_check_exception_is_processing_error_and_validation_continues(tmp_path: Path) -> None:
+    broken = tmp_path / "broken"
+    broken.mkdir()
+    (broken / "broken.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (broken / "config.json").write_text(
+        json.dumps({"entry_point": "broken.py", "actions": []}),
+        encoding="utf-8",
+    )
+
+    report = run_validation([broken, EXAMPLES / "good-integration"], only={"sync"})
+
+    assert report.exit_code() == 2
+    assert [(result.integration, result.status) for result in report.results] == [
+        ("broken", "error"),
+        ("good-integration", "passed"),
+    ]
+    assert report.results[0].messages[0].message == "'list' object has no attribute 'items'"
+
+
 def test_validate_rejects_unknown_check() -> None:
     report = run_validation([EXAMPLES / "good-integration"], only={"not-a-check"})
 

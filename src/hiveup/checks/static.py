@@ -271,8 +271,19 @@ def _legacy_check(check: str, path: Path, run: Callable[[], int], *, cwd: Path |
     stdout = io.StringIO()
     stderr = io.StringIO()
     cwd_context = contextlib.chdir(cwd) if cwd else contextlib.nullcontext()
-    with cwd_context, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-        code = run()
+    try:
+        with cwd_context, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = run()
+    except Exception as exc:  # Defensive boundary around migrated script checks.
+        output = (stdout.getvalue() + stderr.getvalue()).strip()
+        return _result(
+            check,
+            path,
+            "error",
+            [CheckMessage("error", str(exc) or type(exc).__name__)],
+            start,
+            raw_output=output,
+        )
 
     output = (stdout.getvalue() + stderr.getvalue()).strip()
     messages: list[CheckMessage] = []
