@@ -80,3 +80,11 @@ def _render_result_details(result: CheckResult) -> None:
         print(f"  {prefix} {location}{message.message}")
         if message.fix_hint:
             print(f"     Fix: {message.fix_hint}")
+    if (
+        result.status in {"failed", "error"}
+        and result.raw_output
+        and all(result.raw_output != message.message for message in result.messages)
+    ):
+        print("  Output:")
+        for line in result.raw_output.splitlines():
+            print(f"    {line}")

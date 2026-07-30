@@ -19,7 +19,7 @@ from hiveup import __version__  # noqa: E402
 from hiveup.checks.static import _legacy_check  # noqa: E402
 from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE, ROOT_ENTRY_POINT_MESSAGE  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
-from hiveup.core.results import CheckResult, ValidationReport  # noqa: E402
+from hiveup.core.results import CheckMessage, CheckResult, ValidationReport  # noqa: E402
 from hiveup.packaging import (  # noqa: E402
     TARGET_PLATFORM,
     TARGET_PYTHON_VERSION,
@@ -28,6 +28,7 @@ from hiveup.packaging import (  # noqa: E402
     install_dependencies,
     write_package_zip,
 )
+from hiveup.render.console import render_report  # noqa: E402
 
 
 EXAMPLES = Path(__file__).resolve().parent / "examples"
@@ -213,6 +214,26 @@ def test_validate_json_output_is_valid_json() -> None:
     encoded = json.dumps(report.to_dict())
 
     assert json.loads(encoded)["exit_code"] == 0
+
+
+def test_console_renders_raw_unit_test_failure_output(capsys) -> None:
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="tests",
+                integration="demo",
+                status="failed",
+                messages=[CheckMessage("error", "Unit tests failed", fix_hint="Run: hiveup test demo")],
+                raw_output="FAILED tests/test_demo_unit.py::test_demo\nAssertionError: expected 2, got 1",
+            )
+        ]
+    )
+
+    render_report(report)
+
+    output = capsys.readouterr().out
+    assert "FAILED tests/test_demo_unit.py::test_demo" in output
+    assert "AssertionError: expected 2, got 1" in output
 
 
 def test_git_based_checks_work_outside_repo_cwd(tmp_path: Path, monkeypatch) -> None:
