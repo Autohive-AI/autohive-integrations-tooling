@@ -102,6 +102,19 @@ def test_explicit_missing_directory_is_processing_error(tmp_path: Path) -> None:
     assert "does not exist" in report.results[0].messages[0].message
 
 
+def test_explicit_skipped_directory_is_validated_instead_of_silently_dropped(tmp_path: Path) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+
+    report = run_validation([docs], only={"structure"})
+
+    assert report.exit_code() == 1
+    assert len(report.results) == 1
+    assert report.results[0].integration == "docs"
+    assert report.results[0].status == "failed"
+    assert any("Missing required file: config.json" in message.message for message in report.results[0].messages)
+
+
 def test_discovery_includes_candidate_dir_missing_config(tmp_path: Path) -> None:
     candidate = tmp_path / "new-integration"
     candidate.mkdir()

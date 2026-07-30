@@ -50,8 +50,6 @@ def discover_integrations(root: Path) -> list[Path]:
 def explicit_integrations(dirs: list[Path]) -> list[Path]:
     integrations: list[Path] = []
     for path in dirs:
-        if path.name in SKIP_DIRS:
-            continue
         if not path.exists():
             raise RuntimeError(f"Integration directory does not exist: {path}")
         if not path.is_dir():
