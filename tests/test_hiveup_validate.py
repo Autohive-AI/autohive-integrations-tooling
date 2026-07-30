@@ -741,6 +741,21 @@ def test_package_requires_requirements_even_when_validation_is_skipped(tmp_path:
     assert "requirements.txt not found" in result.output
 
 
+def test_doctor_handles_successful_version_command_without_output(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        Mock(return_value=subprocess.CompletedProcess([], 0, "", "")),
+    )
+
+    result = CliRunner().invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "ruff: unknown" in result.output
+    assert "bandit: unknown" in result.output
+    assert "pip-audit: unknown" in result.output
+
+
 def test_build_package_replaces_output_without_mutating_integration(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()

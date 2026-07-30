@@ -746,7 +746,8 @@ def _csv_list(value: str | None) -> list[str]:
 def _module_version(module: str) -> str:
     result = subprocess.run([sys.executable, "-m", module, "--version"], capture_output=True, text=True)
     if result.returncode == 0:
-        return (result.stdout or result.stderr).strip().splitlines()[0]
+        output = (result.stdout or result.stderr).strip()
+        return output.splitlines()[0] if output else "unknown"
     return "missing"
 
 
