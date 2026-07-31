@@ -843,6 +843,18 @@ def test_package_allowlist_excludes_unrelated_credentials_and_private_files(tmp_
         assert set(archive.namelist()) == set(included)
 
 
+def test_package_rejects_symlinked_helper_module(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "demo.py").write_text("import helper\n", encoding="utf-8")
+    external = tmp_path / "external.py"
+    external.write_text("VALUE = 1\n", encoding="utf-8")
+    (integration / "helper.py").symlink_to(external)
+
+    with pytest.raises(PackageBuildError, match="helper.py"):
+        write_package_zip(integration, tmp_path / "demo.zip", None)
+
+
 def test_package_excludes_root_git_worktree_metadata(tmp_path: Path) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()

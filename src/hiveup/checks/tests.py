@@ -84,6 +84,16 @@ def _run_integration_tests(
     test_files = [test_file.resolve() for test_file in test_files]
     _stage_sdk_config(environment, integration_dir)
 
+    for source in integration_dir.rglob("*.py"):
+        relative = source.relative_to(integration_dir)
+        ignored = {"__pycache__", ".venv", "venv", "dependencies", ".hiveup", "test", "tests"}
+        if (
+            source.is_symlink()
+            and not ignored.intersection(relative.parts)
+            and not any(part.startswith(".") for part in relative.parts)
+        ):
+            raise EnvironmentBuildError(f"Deployment source cannot be a symlink: {relative.as_posix()}")
+
     with tempfile.TemporaryDirectory(prefix="hiveup-tests-") as temporary:
         temporary_root = Path(temporary)
         for filename in PYTEST_PROJECT_FILES:

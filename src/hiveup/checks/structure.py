@@ -179,10 +179,22 @@ class IntegrationValidator:
         self._check_init_py()
         self._check_requirements_txt()
         self._check_tests_folder()
+        self._check_deployment_symlinks()
         self._check_main_python_file()
         self._check_unused_scopes()
 
         return len(self.errors) == 0
+
+    def _check_deployment_symlinks(self):
+        """Reject deployment source symlinks that packaging cannot include."""
+        ignored = {'__pycache__', '.venv', 'venv', 'dependencies', '.hiveup', 'test', 'tests'}
+        for source in sorted(self.path.rglob('*')):
+            relative = source.relative_to(self.path)
+            if ignored.intersection(relative.parts) or any(part.startswith('.') for part in relative.parts):
+                continue
+            deployable = source.suffix.casefold() == '.py' or relative.parts[0].casefold() in {'assets', 'fonts'}
+            if deployable and source.is_symlink():
+                self.add_error(f"Deployment source cannot be a symlink: {relative.as_posix()}")
 
     def _check_folder_name(self):
         """Check that folder name is lowercase."""

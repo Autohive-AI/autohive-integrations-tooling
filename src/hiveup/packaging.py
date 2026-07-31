@@ -82,9 +82,22 @@ def _validate_deployment_files(directory: Path) -> None:
     if not icons:
         raise PackageBuildError("A regular, non-symlink icon.png, icon.jpg, or icon.jpeg is required")
 
+    _reject_deployment_symlinks(directory)
+
 
 def _is_regular_file(path: Path) -> bool:
     return path.is_file() and not path.is_symlink()
+
+
+def _reject_deployment_symlinks(directory: Path) -> None:
+    for path in directory.rglob("*"):
+        relative = path.relative_to(directory)
+        if EXCLUDED_DIRECTORIES.intersection(relative.parts[:-1]):
+            continue
+        if any(part.startswith(".") for part in relative.parts):
+            continue
+        if path.is_symlink() and _is_deployment_path(relative):
+            raise PackageBuildError(f"Deployment source cannot be a symlink: {relative.as_posix()}")
 
 
 def install_dependencies(requirements: Path, target: Path) -> None:
@@ -157,10 +170,14 @@ def _package_files(directory: Path, package_path: Path) -> list[Path]:
     output = package_path.resolve()
     files = []
     for path in sorted(directory.rglob("*")):
-        if not path.is_file() or path.is_symlink():
-            continue
         relative = path.relative_to(directory)
         if EXCLUDED_DIRECTORIES.intersection(relative.parts[:-1]):
+            continue
+        if path.is_symlink():
+            if _is_deployment_path(relative) and not any(part.startswith(".") for part in relative.parts):
+                raise PackageBuildError(f"Deployment source cannot be a symlink: {relative.as_posix()}")
+            continue
+        if not path.is_file():
             continue
         if (
             path.resolve() == output
@@ -186,6 +203,12 @@ def _is_deployment_source(relative: Path) -> bool:
         )
     return relative.parts[0].casefold() in ASSET_DIRECTORIES and not any(
         part.startswith(".") for part in relative.parts
+    )
+
+
+def _is_deployment_path(relative: Path) -> bool:
+    return _is_deployment_source(relative) or (
+        len(relative.parts) == 1 and relative.name.casefold() in ASSET_DIRECTORIES
     )
 
 

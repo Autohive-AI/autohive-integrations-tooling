@@ -413,7 +413,11 @@ def _local_module_exists(module_name: str, integration_path: Path, *, source_dir
 
 
 def _module_path_exists(path: Path) -> bool:
-    return path.with_suffix(".py").is_file() or (path.is_dir() and (path / "__init__.py").is_file())
+    module_file = path.with_suffix(".py")
+    package_init = path / "__init__.py"
+    return (module_file.is_file() and not module_file.is_symlink()) or (
+        path.is_dir() and not path.is_symlink() and package_init.is_file() and not package_init.is_symlink()
+    )
 
 
 def _is_relative_import_available(pyfile: Path, level: int, module: str, names: list[str]) -> bool:
@@ -429,7 +433,9 @@ def _is_relative_import_available(pyfile: Path, level: int, module: str, names: 
 
 
 def _python_files(path: Path) -> list[Path]:
-    return [pyfile for pyfile in sorted(path.rglob("*.py")) if not _is_ignored(pyfile)]
+    return [
+        pyfile for pyfile in sorted(path.rglob("*.py")) if not pyfile.is_symlink() and not _is_ignored(pyfile)
+    ]
 
 
 def _is_ignored(path: Path) -> bool:
