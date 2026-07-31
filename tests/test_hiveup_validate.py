@@ -9,6 +9,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -710,6 +711,22 @@ def test_structure_rejects_invalid_jpeg_icon(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("filename", ["config.json", "good_integration.py", "icon.png"])
+def test_structure_rejects_symlinked_deployment_files(tmp_path: Path, filename: str) -> None:
+    integration = tmp_path / "symlinked-deployment-file"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    deployment_file = integration / filename
+    external = tmp_path / f"external-{filename.replace('.', '-')}"
+    external.write_bytes(deployment_file.read_bytes())
+    deployment_file.unlink()
+    deployment_file.symlink_to(external)
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.results[0].status == "failed"
+    assert any("regular, non-symlink file" in message.message for message in report.results[0].messages)
+
+
 def test_package_includes_only_supported_icon_formats(tmp_path: Path) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()
@@ -959,6 +976,32 @@ def test_package_rejects_non_identifier_entry_point_when_validation_is_skipped(t
     assert ENTRY_POINT_IDENTIFIER_MESSAGE in result.output
 
 
+def test_package_rejects_missing_entry_point_when_validation_is_skipped(tmp_path: Path) -> None:
+    integration = _integration_with_entry_point(tmp_path / "missing-entry-package", "demo.py")
+    (integration / "demo.py").unlink()
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 2
+    assert "entry_point must be a regular, non-symlink file" in result.output
+
+
+@pytest.mark.parametrize("filename", ["config.json", "demo.py", "icon.png"])
+def test_build_package_rejects_symlinked_deployment_files(
+    tmp_path: Path, monkeypatch, filename: str
+) -> None:
+    integration = _integration_with_entry_point(tmp_path / f"symlink-package-{filename}", "demo.py")
+    deployment_file = integration / filename
+    external = tmp_path / f"external-package-{filename.replace('.', '-')}"
+    external.write_bytes(deployment_file.read_bytes())
+    deployment_file.unlink()
+    deployment_file.symlink_to(external)
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *args: None)
+
+    with pytest.raises(PackageBuildError, match="regular, non-symlink"):
+        build_package(integration, tmp_path / "package.zip")
+
+
 def test_package_dependencies_target_deployment_runtime(tmp_path: Path, monkeypatch) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("example==1.0\n", encoding="utf-8")
@@ -1038,8 +1081,10 @@ def test_doctor_handles_successful_version_command_without_output(monkeypatch) -
 def test_build_package_replaces_output_without_mutating_integration(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()
-    (integration / "requirements.txt").write_text("example==1.0\n", encoding="utf-8")
+    (integration / "config.json").write_text('{"entry_point": "demo.py"}\n', encoding="utf-8")
     (integration / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (integration / "icon.png").write_bytes(b"png")
+    (integration / "requirements.txt").write_text("example==1.0\n", encoding="utf-8")
     owned_dependencies = integration / "dependencies"
     owned_dependencies.mkdir()
     owned_file = owned_dependencies / "keep.txt"
@@ -1058,10 +1103,18 @@ def test_build_package_replaces_output_without_mutating_integration(tmp_path: Pa
     build_package(integration, package)
 
     assert owned_file.read_text(encoding="utf-8") == "developer-owned"
-    assert set(integration.iterdir()) == {integration / "requirements.txt", integration / "demo.py", owned_dependencies}
+    assert set(integration.iterdir()) == {
+        integration / "config.json",
+        integration / "requirements.txt",
+        integration / "demo.py",
+        integration / "icon.png",
+        owned_dependencies,
+    }
     with zipfile.ZipFile(package) as archive:
         assert set(archive.namelist()) == {
+            "config.json",
             "demo.py",
+            "icon.png",
             "dependencies/native_extension.so",
             "dependencies/pure_python/__init__.py",
         }

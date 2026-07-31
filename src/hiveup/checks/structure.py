@@ -205,8 +205,11 @@ class IntegrationValidator:
         ]
 
         for filename, description in required_files:
-            if not (self.path / filename).exists():
+            required_path = self.path / filename
+            if not required_path.exists():
                 self.add_error(f"Missing required file: {filename} ({description})")
+            elif required_path.is_symlink() or not required_path.is_file():
+                self.add_error(f"Required file must be a regular, non-symlink file: {filename}")
 
         # __init__.py is optional for modular integrations (those with an actions/
         # subdirectory) because adding it causes circular imports when action files
@@ -226,6 +229,8 @@ class IntegrationValidator:
         )
         if icon_path is None:
             self.add_error("Missing required file: icon.png, icon.jpg, or icon.jpeg (Integration icon)")
+        elif icon_path.is_symlink():
+            self.add_error(f"Integration icon must be a regular, non-symlink file: {icon_path.name}")
         elif icon_path.suffix.lower() == '.png':
             self._check_icon_png_size(icon_path)
         else:
@@ -287,6 +292,8 @@ class IntegrationValidator:
                 self.add_error(ENTRY_POINT_IDENTIFIER_MESSAGE)
             elif not (self.path / entry_point).exists():
                 self.add_error(f"entry_point file does not exist: {entry_point}")
+            elif (self.path / entry_point).is_symlink() or not (self.path / entry_point).is_file():
+                self.add_error(f"entry_point must be a regular, non-symlink file: {entry_point}")
 
         # Check version format
         if 'version' in self.config:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -43,14 +44,46 @@ class PackageBuildError(RuntimeError):
 def build_package(directory: Path, package_path: Path) -> None:
     """Install dependencies externally and write a deployable integration archive."""
 
+    _validate_deployment_files(directory)
     requirements = directory / "requirements.txt"
-    if not requirements.is_file():
+    if not _is_regular_file(requirements):
         raise PackageBuildError(f"requirements.txt not found: {requirements}")
 
     with tempfile.TemporaryDirectory() as temporary_directory:
         dependencies = Path(temporary_directory) / "dependencies"
         install_dependencies(requirements, dependencies)
         write_package_zip(directory, package_path, dependencies if dependencies.exists() else None)
+
+
+def _validate_deployment_files(directory: Path) -> None:
+    config_path = directory / "config.json"
+    if not _is_regular_file(config_path):
+        raise PackageBuildError(f"config.json must be a regular, non-symlink file: {config_path}")
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise PackageBuildError(f"Could not read config.json: {exc}") from exc
+    if not isinstance(config, dict):
+        raise PackageBuildError("config.json must contain a JSON object")
+
+    entry_point = config.get("entry_point")
+    if not isinstance(entry_point, str) or not entry_point or Path(entry_point).name != entry_point:
+        raise PackageBuildError("entry_point must name a Python file at the integration root")
+    entry_path = directory / entry_point
+    if not _is_regular_file(entry_path):
+        raise PackageBuildError(f"entry_point must be a regular, non-symlink file: {entry_path}")
+
+    icons = [
+        path
+        for path in directory.iterdir()
+        if path.name.casefold() in {"icon.jpeg", "icon.jpg", "icon.png"} and _is_regular_file(path)
+    ]
+    if not icons:
+        raise PackageBuildError("A regular, non-symlink icon.png, icon.jpg, or icon.jpeg is required")
+
+
+def _is_regular_file(path: Path) -> bool:
+    return path.is_file() and not path.is_symlink()
 
 
 def install_dependencies(requirements: Path, target: Path) -> None:
