@@ -30,7 +30,7 @@ EXCLUDED_DIRECTORIES = {
     "tests",
     "venv",
 }
-EXCLUDED_FILES = {".coverage", ".git"}
+EXCLUDED_FILES = {".coverage", ".git", "requirements.txt"}
 SUPPORTED_ICON_SUFFIXES = {".jpeg", ".jpg", ".png"}
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 ZIP_FILE_MODE = 0o100644

@@ -400,7 +400,6 @@ def test_fresh_scaffold_validates_tests_and_packages(tmp_path: Path, monkeypatch
             "config.json",
             "dependencies/sdk_dependency.py",
             "icon.png",
-            "requirements.txt",
             "sample.py",
         } <= set(archive.namelist())
         assert not any(name.startswith("tests/") for name in archive.namelist())

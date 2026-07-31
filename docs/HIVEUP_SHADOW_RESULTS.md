@@ -110,13 +110,17 @@ backend package contract:
 
 - Python 3.13 and `manylinux2014_x86_64`
 - compatible wheels only
-- source, config, icon, README, and requirements at ZIP root
+- source, config, icon, and README at ZIP root
 - dependencies under `dependencies/`
 - root-level configured entry point
 - no injected `main.py`
 - no integration tests, `.pyc`, or `__pycache__`
 - native extensions identified as ELF x86-64 CPython 3.13 files
 - deterministic output, verified through representative repeated builds
+
+`requirements.txt` is used to stage dependencies but omitted from the deployment
+ZIP so container processing consumes the expanded `dependencies/` tree instead
+of treating it as an offline wheel index.
 
 | Paired package measurement | .NET | Python |
 | --- | ---: | ---: |

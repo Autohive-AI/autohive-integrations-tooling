@@ -249,7 +249,9 @@ hiveup package [dir] [-o out.zip] [--skip-validate] [--platform manylinux2014_x8
   `pip install -r requirements.txt --platform manylinux2014_x86_64 --python-version 3.13 --only-binary=:all: --target <tmp>`;
   prefers `uv pip` when available.
 - Zip contents: all `.py` (excluding tests/venvs/caches — reuse the .NET exclude
-  list), `config.json`, the single validated `icon.*`, `dependencies/**`. Honors
+  list), `config.json`, the single validated `icon.*`, `dependencies/**`; the
+  staging `requirements.txt` is omitted so container processing consumes the
+  expanded dependencies rather than treating them as an offline wheel index. Honors
   nested `entry_point` paths consistently (validation and packaging disagreed in .NET).
 - Deterministic output name `<name>-<version>.zip` in cwd unless `-o` given.
 

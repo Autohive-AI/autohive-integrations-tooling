@@ -724,9 +724,32 @@ def test_package_writes_root_layout_and_excludes_development_files(tmp_path: Pat
 
     with zipfile.ZipFile(package) as archive:
         assert set(archive.namelist()) == {
-            *included,
+            *(set(included) - {"requirements.txt"}),
             "dependencies/example/__init__.py",
         }
+
+
+def test_package_uses_expanded_dependencies_without_triggering_container_reinstall(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "requirements.txt").write_text("example==1.0\n", encoding="utf-8")
+    (integration / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
+    dependencies = tmp_path / "staged-dependencies"
+    package_module = dependencies / "example" / "__init__.py"
+    package_module.parent.mkdir(parents=True)
+    package_module.write_text("VERSION = '1.0'\n", encoding="utf-8")
+    metadata = dependencies / "example-1.0.dist-info" / "METADATA"
+    metadata.parent.mkdir()
+    metadata.write_text("Name: example\nVersion: 1.0\n", encoding="utf-8")
+    package = tmp_path / "demo.zip"
+
+    write_package_zip(integration, package, dependencies)
+
+    with zipfile.ZipFile(package) as archive:
+        names = set(archive.namelist())
+    assert "requirements.txt" not in names
+    assert "dependencies/example/__init__.py" in names
+    assert "dependencies/example-1.0.dist-info/METADATA" in names
 
 
 def test_package_excludes_root_git_worktree_metadata(tmp_path: Path) -> None:
@@ -998,7 +1021,6 @@ def test_build_package_replaces_output_without_mutating_integration(tmp_path: Pa
     with zipfile.ZipFile(package) as archive:
         assert set(archive.namelist()) == {
             "demo.py",
-            "requirements.txt",
             "dependencies/native_extension.so",
             "dependencies/pure_python/__init__.py",
         }
