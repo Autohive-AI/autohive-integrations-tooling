@@ -217,7 +217,7 @@ GitHub Actions artifact. It does not publish either file.
 | Integration SDK | SDK 2.x (`autohive-integrations-sdk~=2.0`) |
 | Deployment dependencies | CPython 3.13 wheels for `manylinux2014_x86_64` |
 | Integration icons | PNG, JPG, or JPEG; exactly 512×512 |
-| Integration entry point | Root-level `.py` file with `<module> = Integration.load(...)` |
+| Integration entry point | Root-level `.py` file with a valid, non-keyword identifier stem and `<module> = Integration.load(...)` |
 | Reserved runtime file | `main.py` may not be an integration entry point |
 
 ### Migrating from the .NET HiveUp tool

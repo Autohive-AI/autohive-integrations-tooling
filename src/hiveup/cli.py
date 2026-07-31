@@ -20,8 +20,10 @@ import typer
 from hiveup import __version__
 from hiveup.checks.static import available_checks
 from hiveup.checks.structure import (
+    ENTRY_POINT_IDENTIFIER_MESSAGE,
     RESERVED_ENTRY_POINT_MESSAGE,
     ROOT_ENTRY_POINT_MESSAGE,
+    has_valid_entry_point_identifier,
     is_reserved_entry_point,
     is_root_python_entry_point,
 )
@@ -270,6 +272,9 @@ def package(
         raise typer.Exit(2)
     if not is_root_python_entry_point(config.get("entry_point")):
         typer.echo(ROOT_ENTRY_POINT_MESSAGE, err=True)
+        raise typer.Exit(2)
+    if not has_valid_entry_point_identifier(config.get("entry_point")):
+        typer.echo(ENTRY_POINT_IDENTIFIER_MESSAGE, err=True)
         raise typer.Exit(2)
     package_path = output or Path.cwd() / f"{config.get('name', directory.name)}-{config.get('version', '0.0.0')}.zip"
 

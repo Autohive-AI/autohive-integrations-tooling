@@ -19,6 +19,7 @@ from hiveup import __version__  # noqa: E402
 from hiveup.checks.readme import check_readme  # noqa: E402
 from hiveup.checks.static import _legacy_check  # noqa: E402
 from hiveup.checks.structure import (  # noqa: E402
+    ENTRY_POINT_IDENTIFIER_MESSAGE,
     RESERVED_ENTRY_POINT_MESSAGE,
     ROOT_ENTRY_POINT_MESSAGE,
     validate as validate_structure,
@@ -771,6 +772,17 @@ def test_structure_rejects_nested_entry_point(tmp_path: Path) -> None:
     assert any(message.message == ROOT_ENTRY_POINT_MESSAGE for message in report.results[0].messages)
 
 
+def test_structure_rejects_non_identifier_entry_point_stems(tmp_path: Path) -> None:
+    for index, entry_point in enumerate(("my-api.py", "class.py")):
+        integration = _integration_with_entry_point(tmp_path / f"invalid-identifier-{index}", entry_point)
+
+        report = run_validation([integration], only={"structure"})
+
+        assert report.results[0].status == "failed"
+        assert any(message.message == ENTRY_POINT_IDENTIFIER_MESSAGE for message in report.results[0].messages)
+        assert not any("must define" in message.message for message in report.results[0].messages)
+
+
 def test_structure_requires_named_integration_load_export(tmp_path: Path) -> None:
     integration = _integration_with_entry_point(tmp_path / "wrong-export", "demo.py")
     entry_point = integration / "demo.py"
@@ -821,6 +833,15 @@ def test_package_rejects_nested_entry_point_when_validation_is_skipped(tmp_path:
 
     assert result.exit_code == 2
     assert ROOT_ENTRY_POINT_MESSAGE in result.output
+
+
+def test_package_rejects_non_identifier_entry_point_when_validation_is_skipped(tmp_path: Path) -> None:
+    integration = _integration_with_entry_point(tmp_path / "invalid-identifier-package", "my-api.py")
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 2
+    assert ENTRY_POINT_IDENTIFIER_MESSAGE in result.output
 
 
 def test_package_dependencies_target_deployment_runtime(tmp_path: Path, monkeypatch) -> None:

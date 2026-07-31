@@ -26,6 +26,7 @@ Examples:
 import argparse
 import ast
 import json
+import keyword
 import re
 import struct
 import sys
@@ -68,6 +69,10 @@ RESERVED_ENTRY_POINT_MESSAGE = (
     "entry_point cannot be named main.py because that filename is reserved for the Autohive runtime wrapper"
 )
 ROOT_ENTRY_POINT_MESSAGE = "entry_point must be a Python file at the integration root"
+ENTRY_POINT_IDENTIFIER_MESSAGE = (
+    "entry_point filename stem must be a valid, non-keyword Python identifier; "
+    "rename the file and update config.json"
+)
 
 
 def is_reserved_entry_point(entry_point: object) -> bool:
@@ -85,6 +90,15 @@ def is_root_python_entry_point(entry_point: object) -> bool:
         return False
     normalized = entry_point.replace('\\', '/')
     return '/' not in normalized and normalized.casefold().endswith('.py')
+
+
+def has_valid_entry_point_identifier(entry_point: object) -> bool:
+    """Return whether an entry-point filename can be imported and exported by stem."""
+
+    if not is_root_python_entry_point(entry_point):
+        return False
+    stem = Path(entry_point).stem
+    return stem.isidentifier() and not keyword.iskeyword(stem)
 
 
 def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
@@ -280,6 +294,8 @@ class IntegrationValidator:
                 self.add_error(RESERVED_ENTRY_POINT_MESSAGE)
             if not is_root_python_entry_point(entry_point):
                 self.add_error(ROOT_ENTRY_POINT_MESSAGE)
+            elif not has_valid_entry_point_identifier(entry_point):
+                self.add_error(ENTRY_POINT_IDENTIFIER_MESSAGE)
             elif not (self.path / entry_point).exists():
                 self.add_error(f"entry_point file does not exist: {entry_point}")
 
@@ -459,7 +475,7 @@ class IntegrationValidator:
             return
 
         entry_point = self.config['entry_point']
-        if not is_root_python_entry_point(entry_point):
+        if not is_root_python_entry_point(entry_point) or not has_valid_entry_point_identifier(entry_point):
             return  # Already reported by the config check.
         main_file = self.path / entry_point
         if not main_file.exists():
