@@ -402,7 +402,9 @@ def _is_import_available(
 
 def _local_module_exists(module_name: str, integration_path: Path, *, source_dir: Path) -> bool:
     parts = module_name.split(".")
-    roots = [source_dir, integration_path, integration_path.parent]
+    roots = [source_dir, integration_path]
+    if parts[0] == integration_path.name:
+        roots.append(integration_path.parent)
     for root in roots:
         candidate = root.joinpath(*parts)
         if _module_path_exists(candidate):

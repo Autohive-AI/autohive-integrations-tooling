@@ -250,6 +250,37 @@ def test_import_check_does_not_use_cli_environment_for_dependencies(tmp_path: Pa
     assert report.messages[0].message == "Missing module: pytest"
 
 
+def test_import_check_does_not_resolve_modules_from_sibling_integrations(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "selected"
+    integration.mkdir()
+    (integration / "selected.py").write_text("import sibling\n", encoding="utf-8")
+    sibling = tmp_path / "sibling"
+    sibling.mkdir()
+    (sibling / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(static, "module_available", lambda *args: False)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "failed"
+    assert report.messages[0].message == "Missing module: sibling"
+
+
+def test_import_check_allows_selected_integration_package_import(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "selected"
+    integration.mkdir()
+    (integration / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (integration / "selected.py").write_text("import selected\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(static, "module_available", lambda *args: False)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "passed"
+
+
 def test_import_check_resolves_modules_beside_test_file(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     tests_dir = integration / "tests"
@@ -294,12 +325,14 @@ def test_integration_tests_run_with_isolated_interpreter(tmp_path: Path, monkeyp
     assert prepared == [(integration, True)]
     assert commands[0][0][0:3] == [str(isolated_python), "-m", "pytest"]
     assert ["--override-ini", "markers=unit: isolated integration unit test"] == commands[0][0][9:11]
-    assert str(integration) in commands[0][0]
-    assert str(test_file) in commands[0][0]
-    assert commands[0][1]["cwd"] == integration
+    staged_integration = commands[0][1]["cwd"]
+    assert staged_integration.name == integration.name
+    assert staged_integration != integration
+    assert str(staged_integration) in commands[0][0]
+    assert str(staged_integration / "tests" / test_file.name) in commands[0][0]
     assert commands[0][1]["env"]["PYTHONPATH"].split(os.pathsep) == [
-        str(integration.parent.resolve()),
-        str(integration.resolve()),
+        str(staged_integration.parent.resolve()),
+        str(staged_integration.resolve()),
     ]
 
 
@@ -366,9 +399,12 @@ def test_integration_tests_do_not_collect_hyphenated_root_as_package(tmp_path: P
     assert (integration / "__init__.py").is_file()
 
 
-def test_integration_tests_resolve_paths_before_changing_working_directory(tmp_path: Path, monkeypatch) -> None:
+def test_integration_tests_stage_resolved_relative_paths(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
     integration = Path("relative-integration")
     test_file = integration / "tests" / "test_demo_unit.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.touch()
     isolated = environment.IntegrationEnvironment(tmp_path / "cache", Path(sys.executable), "key", created=False)
     executed = []
     monkeypatch.setattr(test_checks, "_stage_sdk_config", lambda *args: None)
@@ -381,7 +417,12 @@ def test_integration_tests_resolve_paths_before_changing_working_directory(tmp_p
     result = test_checks._run_integration_tests(isolated, integration, [test_file])
 
     assert result == (0, "")
-    assert executed == [(isolated, integration.resolve(), [test_file.resolve()])]
+    assert len(executed) == 1
+    selected, staged_integration, staged_tests = executed[0]
+    assert selected == isolated
+    assert staged_integration.name == integration.name
+    assert staged_integration != integration.resolve()
+    assert staged_tests == [staged_integration / "tests" / test_file.name]
 
 
 def test_test_check_reports_isolated_environment_failure(tmp_path: Path, monkeypatch) -> None:
