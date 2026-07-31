@@ -330,7 +330,58 @@ def test_github_outputs_include_legacy_action_keys(tmp_path: Path) -> None:
     assert "directories<<EOF_directories\ngood-integration" in output
     assert "structure_result<<EOF_structure_result\nsuccess" in output
     assert "code_result<<EOF_code_result\nsuccess" in output
+    assert "tests_result<<EOF_tests_result\nskipped" in output
+    assert "readme_result<<EOF_readme_result\nskipped" in output
+    assert "version_result<<EOF_version_result\nskipped" in output
     assert "comment_path<<EOF_comment_path" in output
+
+
+def test_github_outputs_report_run_errors_in_every_group(tmp_path: Path) -> None:
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="discovery",
+                integration=str(tmp_path),
+                status="error",
+                messages=[CheckMessage("error", "Integration directory does not exist: missing")],
+            )
+        ]
+    )
+    output_file = tmp_path / "github-output.txt"
+
+    _write_github_outputs(output_file, report, comment_file=tmp_path / "comment.md", dirs="")
+    output = output_file.read_text(encoding="utf-8")
+
+    for group in ("structure", "code", "tests", "readme", "version"):
+        assert f"{group}_result<<EOF_{group}_result\nfailure" in output
+        assert f"{group}_output<<EOF_{group}_output" in output
+    assert output.count("Integration directory does not exist: missing") == 5
+
+
+def test_ci_writes_failure_comment_and_outputs_when_discovery_fails(tmp_path: Path) -> None:
+    comment_file = tmp_path / "comment.md"
+    output_file = tmp_path / "github-output.txt"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "ci",
+            str(tmp_path / "missing"),
+            "--comment-file",
+            str(comment_file),
+            "--output-file",
+            str(output_file),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert comment_file.is_file()
+    comment = comment_file.read_text(encoding="utf-8")
+    assert "❌ Failed" in comment
+    assert "Integration directory does not exist" in comment
+    output = output_file.read_text(encoding="utf-8")
+    assert f"comment_path<<EOF_comment_path\n{comment_file}" in output
+    assert "structure_result<<EOF_structure_result\nfailure" in output
 
 
 def test_ci_uses_explicit_pull_request_head_for_comment_metadata(tmp_path: Path, monkeypatch) -> None:
@@ -394,6 +445,8 @@ def test_ci_leaves_comment_path_empty_when_no_comment_was_written(tmp_path: Path
     output = output_file.read_text(encoding="utf-8")
     assert "comment_path<<EOF_comment_path\n\nEOF_comment_path" in output
     assert str(comment_file) not in output
+    for group in ("structure", "code", "tests", "readme", "version"):
+        assert f"{group}_result<<EOF_{group}_result\nskipped" in output
 
 
 def test_github_directories_output_preserves_distinct_repository_paths(tmp_path: Path, monkeypatch) -> None:

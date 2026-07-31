@@ -592,8 +592,8 @@ jobs:
             exit 1
           }
           [ "$TESTS_RESULT" = success ]
-          [ "$README_RESULT" = success ]
-          [ "$VERSION_RESULT" = success ]
+          [ "$README_RESULT" = skipped ]
+          [ "$VERSION_RESULT" = skipped ]
           [ -f "$COMMENT_PATH" ]
           grep -Fq "[$EXPECTED_INTEGRATION]" "$COMMENT_PATH"
 

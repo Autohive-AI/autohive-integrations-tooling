@@ -406,10 +406,22 @@ def _write_github_outputs(
     dirs: str,
 ) -> None:
     values = {"directories": dirs, "comment_path": str(comment_file or "")}
+    grouped_checks = set().union(*GROUPS.values())
+    run_errors = [
+        result
+        for result in report.results
+        if result.check not in grouped_checks and result.status in {"failed", "error"}
+    ]
     for group in GROUPS:
         results = [result for result in report.results if result.check in GROUPS[group]]
-        values[f"{group}_result"] = "failure" if any(r.status in {"failed", "error"} for r in results) else "success"
-        values[f"{group}_output"] = _group_output(results)
+        if run_errors or any(result.status in {"failed", "error"} for result in results):
+            status = "failure"
+        elif not results or all(result.status == "skipped" for result in results):
+            status = "skipped"
+        else:
+            status = "success"
+        values[f"{group}_result"] = status
+        values[f"{group}_output"] = _group_output([*run_errors, *results])
     with output_file.open("a", encoding="utf-8") as file:
         for key, value in values.items():
             _write_github_output(file, key, value)

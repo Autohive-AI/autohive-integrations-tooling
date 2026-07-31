@@ -18,6 +18,12 @@ GROUPS = {
 def render_markdown(report: ValidationReport, *, commit: str = "", commit_msg: str = "", dirs: str = "") -> str:
     rows = []
     sections = []
+    grouped_checks = set().union(*GROUPS.values())
+    run_errors = [
+        result
+        for result in report.results
+        if result.check not in grouped_checks and result.status in {"failed", "error"}
+    ]
     for label, group in [
         ("Structure", "structure"),
         ("Code", "code"),
@@ -26,8 +32,11 @@ def render_markdown(report: ValidationReport, *, commit: str = "", commit_msg: s
         ("Version", "version"),
     ]:
         results = list(_group_results(report, group))
-        rows.append(f"| {label} | {_group_status_text(results)} |")
+        rows.append(f"| {label} | {_group_status_text([*run_errors, *results])} |")
         sections.append(_section(label, results))
+
+    if run_errors:
+        sections.insert(0, _section("Run", run_errors))
 
     header = "## 🔍 Integration Validation Results\n\n"
     if commit:

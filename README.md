@@ -128,11 +128,11 @@ jobs:
 | Output | Description |
 |--------|-------------|
 | `directories` | Space-separated list of validated directories |
-| `structure_result` | `success` or `failure` |
-| `code_result` | `success` or `failure` |
-| `tests_result` | `success` or `failure` |
-| `readme_result` | `success` or `failure` |
-| `version_result` | `success` or `failure` |
+| `structure_result` | `success`, `failure`, or `skipped` |
+| `code_result` | `success`, `failure`, or `skipped` |
+| `tests_result` | `success`, `failure`, or `skipped` |
+| `readme_result` | `success`, `failure`, or `skipped` |
+| `version_result` | `success`, `failure`, or `skipped` |
 | `structure_output` | Full output of the structure check |
 | `code_output` | Full output of the code check |
 | `tests_output` | Full output of the test runner |

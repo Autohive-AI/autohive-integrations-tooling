@@ -32,19 +32,19 @@ outputs:
     description: Space-separated list of integration directories that were validated
     value: ${{ steps.ci.outputs.directories }}
   structure_result:
-    description: "'success' or 'failure'"
+    description: "'success', 'failure', or 'skipped'"
     value: ${{ steps.ci.outputs.structure_result }}
   code_result:
-    description: "'success' or 'failure'"
+    description: "'success', 'failure', or 'skipped'"
     value: ${{ steps.ci.outputs.code_result }}
   readme_result:
-    description: "'success' or 'failure'"
+    description: "'success', 'failure', or 'skipped'"
     value: ${{ steps.ci.outputs.readme_result }}
   version_result:
-    description: "'success' or 'failure'"
+    description: "'success', 'failure', or 'skipped'"
     value: ${{ steps.ci.outputs.version_result }}
   tests_result:
-    description: "'success' or 'failure'"
+    description: "'success', 'failure', or 'skipped'"
     value: ${{ steps.ci.outputs.tests_result }}
   structure_output:
     description: Full output of the structure check
@@ -114,14 +114,14 @@ runs:
         fi
 
     - name: Delete stale PR comment
-      if: always() && steps.ci.outputs.directories == '' && inputs.post_comment == 'true'
+      if: always() && steps.ci.outputs.directories == '' && steps.ci.outputs.comment_path == '' && inputs.post_comment == 'true'
       uses: marocchino/sticky-pull-request-comment@v2
       with:
         header: ${{ inputs.comment_header }}
         delete: true
 
     - name: Post PR comment
-      if: always() && steps.ci.outputs.directories != '' && inputs.post_comment == 'true'
+      if: always() && steps.ci.outputs.comment_path != '' && inputs.post_comment == 'true'
       uses: marocchino/sticky-pull-request-comment@v2
       with:
         header: ${{ inputs.comment_header }}
