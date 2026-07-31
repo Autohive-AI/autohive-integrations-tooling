@@ -1,9 +1,13 @@
-import os
+import errno
 import importlib.util
+import json
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+import pytest
 
 import hiveup.core.environment as environment
 from hiveup.checks import static
@@ -95,6 +99,61 @@ def test_prepare_environment_reuses_valid_cached_environment(tmp_path: Path, mon
     assert changed.created is True
     assert len(builds) == 2
     assert first.path.parent == cache / "envs"
+
+
+def test_prepare_environment_accepts_valid_winner_after_posix_rename_race(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("HIVEUP_CACHE_DIR", str(cache))
+    key = environment.environment_key(integration)
+    target = cache / "envs" / key
+
+    def create(path: Path) -> None:
+        python = environment._environment_python(path)
+        python.parent.mkdir(parents=True)
+        python.touch()
+
+    original_rename = Path.rename
+
+    def racing_rename(source: Path, destination: Path) -> Path:
+        if destination == target:
+            create(target)
+            (target / environment.MARKER_NAME).write_text(
+                json.dumps({"schema": environment.CACHE_SCHEMA, "key": key}), encoding="utf-8"
+            )
+            raise OSError(errno.ENOTEMPTY, "Directory not empty")
+        return original_rename(source, destination)
+
+    monkeypatch.setattr(environment, "_create_environment", create)
+    monkeypatch.setattr(environment, "_install_dependencies", lambda *args, **kwargs: None)
+    monkeypatch.setattr(Path, "rename", racing_rename)
+
+    prepared = environment.prepare_environment(integration)
+
+    assert prepared.path == target
+    assert prepared.python.is_file()
+
+
+def test_prepare_environment_rejects_invalid_target_after_rename_error(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    monkeypatch.setenv("HIVEUP_CACHE_DIR", str(tmp_path / "cache"))
+
+    def create(path: Path) -> None:
+        python = environment._environment_python(path)
+        python.parent.mkdir(parents=True)
+        python.touch()
+
+    def failed_rename(*args) -> None:
+        raise OSError(errno.ENOTEMPTY, "Directory not empty")
+
+    monkeypatch.setattr(environment, "_create_environment", create)
+    monkeypatch.setattr(environment, "_install_dependencies", lambda *args, **kwargs: None)
+    monkeypatch.setattr(Path, "rename", failed_rename)
+
+    with pytest.raises(environment.EnvironmentBuildError, match="Directory not empty"):
+        environment.prepare_environment(integration)
 
 
 def test_prepare_environment_removes_expired_cache_entries(tmp_path: Path, monkeypatch) -> None:

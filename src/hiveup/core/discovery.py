@@ -25,6 +25,11 @@ SKIP_DIRS = {
 }
 
 
+def is_ignored_top_level_dir(path: Path) -> bool:
+    """Return whether a top-level directory is repository tooling rather than an integration."""
+    return path.name in SKIP_DIRS or path.name.startswith(".")
+
+
 def is_integration_dir(path: Path) -> bool:
     return path.is_dir() and (path / "config.json").is_file()
 
@@ -40,7 +45,7 @@ def discover_integrations(root: Path) -> list[Path]:
 
     integrations: list[Path] = []
     for child in sorted(root.iterdir()):
-        if child.name in SKIP_DIRS or child.name.startswith("."):
+        if is_ignored_top_level_dir(child):
             continue
         if is_candidate_integration_dir(child):
             integrations.append(child)
@@ -75,7 +80,7 @@ def changed_integrations(root: Path, base_ref: str) -> list[Path]:
         if len(path.parts) < 2:
             continue
         top_dir = path.parts[0]
-        if top_dir in SKIP_DIRS or top_dir.startswith("."):
+        if is_ignored_top_level_dir(Path(top_dir)):
             continue
         candidate = root / top_dir
         if candidate.is_dir():

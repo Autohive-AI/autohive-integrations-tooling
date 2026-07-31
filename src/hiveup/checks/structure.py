@@ -33,22 +33,11 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
+from hiveup.core.discovery import is_ignored_top_level_dir
+
 # Fix Windows console encoding for unicode characters
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
-
-# Folders to skip during validation
-SKIP_FOLDERS = {
-    '.github',
-    '.git',
-    'scripts',
-    'tests',
-    'template-structure',
-    '__pycache__',
-    '.vscode',
-    '.idea',
-    'node_modules',
-}
 
 JPEG_START_OF_FRAME_MARKERS = {
     0xC0,
@@ -614,7 +603,7 @@ def get_integration_folders(root_path: Path) -> List[Path]:
     """Get all integration folders in the repository."""
     folders = []
     for item in root_path.iterdir():
-        if item.is_dir() and item.name not in SKIP_FOLDERS and not item.name.startswith('.'):
+        if item.is_dir() and not is_ignored_top_level_dir(item):
             # Check if it looks like an integration (has config.json or main py file)
             if (item / 'config.json').exists() or list(item.glob('*.py')):
                 folders.append(item)
@@ -636,7 +625,7 @@ def validate(dirs: list[str]) -> int:
         for folder_name in dirs:
             folder_path = Path(folder_name)
             if folder_path.exists() and folder_path.is_dir():
-                if folder_name not in SKIP_FOLDERS:
+                if not is_ignored_top_level_dir(folder_path):
                     folders.append(folder_path)
             else:
                 print(f"⚠️ Folder not found (renamed or removed?): {folder_name} — skipping")

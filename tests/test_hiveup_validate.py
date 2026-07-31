@@ -22,8 +22,10 @@ from hiveup.checks.structure import (  # noqa: E402
     ENTRY_POINT_IDENTIFIER_MESSAGE,
     RESERVED_ENTRY_POINT_MESSAGE,
     ROOT_ENTRY_POINT_MESSAGE,
+    get_integration_folders,
     validate as validate_structure,
 )
+from hiveup.checks.tests import get_integration_dirs  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
 from hiveup.core.results import CheckMessage, CheckResult, ValidationReport  # noqa: E402
 from hiveup.packaging import (  # noqa: E402
@@ -152,6 +154,24 @@ def test_discovery_selects_root_when_it_has_integration_config(tmp_path: Path) -
     (child / "config.json").write_text("{}\n", encoding="utf-8")
 
     assert discover_integrations(tmp_path) == [tmp_path.resolve()]
+
+
+def test_discovery_entry_points_share_ignored_directories_and_candidate_rules(
+    tmp_path: Path, monkeypatch
+) -> None:
+    ignored = tmp_path / "docs"
+    candidate = tmp_path / "candidate"
+    configured = tmp_path / "configured"
+    for directory in (ignored, candidate, configured):
+        directory.mkdir()
+    (ignored / "config.json").write_text("{}\n", encoding="utf-8")
+    (candidate / "main.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (configured / "config.json").write_text("{}\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert discover_integrations(tmp_path) == [candidate.resolve(), configured.resolve()]
+    assert get_integration_folders(tmp_path) == [candidate, configured]
+    assert get_integration_dirs([]) == [Path("configured")]
 
 
 def test_changed_discovery_includes_new_top_level_dir_without_config(tmp_path: Path) -> None:
@@ -358,6 +378,37 @@ def test_successful_legacy_check_only_reports_actual_warnings(tmp_path: Path) ->
     assert result.status == "warning"
     assert [message.message for message in result.messages] == ["⚠️ consider a larger version bump"]
     assert "✅ CHECK PASSED" in result.raw_output
+
+
+def test_failed_legacy_check_preserves_diagnostic_severity(tmp_path: Path) -> None:
+    def legacy_output() -> int:
+        print("Checking configuration")
+        print("⚠️ optional metadata is missing")
+        print("❌ action is not defined in config.json")
+        return 1
+
+    result = _legacy_check("sync", tmp_path, legacy_output)
+
+    assert result.status == "failed"
+    assert [(message.severity, message.message) for message in result.messages] == [
+        ("warning", "⚠️ optional metadata is missing"),
+        ("error", "❌ action is not defined in config.json"),
+    ]
+    assert "Checking configuration" in result.raw_output
+
+
+def test_failed_legacy_check_without_error_marker_adds_error(tmp_path: Path) -> None:
+    def legacy_output() -> int:
+        print("Unable to complete check")
+        return 2
+
+    result = _legacy_check("version", tmp_path, legacy_output)
+
+    assert result.status == "error"
+    assert [(message.severity, message.message) for message in result.messages] == [
+        ("error", "Legacy version check exited with status 2")
+    ]
+    assert result.raw_output == "Unable to complete check"
 
 
 def test_existing_integration_without_canonical_unit_tests_warns_with_base_ref(tmp_path: Path) -> None:

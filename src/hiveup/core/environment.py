@@ -74,7 +74,7 @@ def prepare_environment(integration_dir: Path, *, include_test_tools: bool = Fal
 
         try:
             temporary.rename(target)
-        except FileExistsError:
+        except OSError:
             if not _is_valid_environment(target, key):
                 raise
     except (OSError, subprocess.SubprocessError) as exc:

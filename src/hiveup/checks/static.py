@@ -297,10 +297,13 @@ def _legacy_check(check: str, path: Path, run: Callable[[], int], *, cwd: Path |
         line = line.strip()
         if not line:
             continue
-        if code == 0 and "⚠️" in line:
-            messages.append(CheckMessage("warning", line))
-        elif code != 0:
+        if "❌" in line:
             messages.append(CheckMessage("error", line))
+        elif "⚠️" in line:
+            messages.append(CheckMessage("warning", line))
+
+    if code != 0 and not any(message.severity == "error" for message in messages):
+        messages.append(CheckMessage("error", f"Legacy {check} check exited with status {code}"))
 
     if code == 0:
         status = "warning" if messages else "passed"

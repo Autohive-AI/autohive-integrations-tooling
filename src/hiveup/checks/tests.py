@@ -30,27 +30,13 @@ import sys
 import tempfile
 from pathlib import Path
 
+from hiveup.core.discovery import is_ignored_top_level_dir
 from hiveup.core.environment import EnvironmentBuildError, IntegrationEnvironment, prepare_environment
 
 # Fix Windows console encoding for unicode characters
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
 
-SKIP_FOLDERS = {
-    ".github",
-    ".git",
-    "scripts",
-    "tests",
-    "template-structure",
-    "__pycache__",
-    ".vscode",
-    ".idea",
-    "node_modules",
-    ".venv",
-    ".ruff_cache",
-    ".pytest_cache",
-    "tools",
-}
 PYTEST_PROJECT_FILES = ("conftest.py", "pyproject.toml", "pytest.ini", "tox.ini", "setup.cfg")
 
 
@@ -77,7 +63,9 @@ def get_integration_dirs(args: list[str]) -> list[Path]:
 
     # Auto-detect: all subdirectories with a config.json
     return sorted(
-        p for p in Path(".").iterdir() if p.is_dir() and p.name not in SKIP_FOLDERS and (p / "config.json").exists()
+        p
+        for p in Path(".").iterdir()
+        if p.is_dir() and not is_ignored_top_level_dir(p) and (p / "config.json").exists()
     )
 
 
