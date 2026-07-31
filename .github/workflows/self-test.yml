@@ -444,7 +444,8 @@ jobs:
               with zipfile.ZipFile(root / f"{fixture}.zip") as archive:
                   names = archive.namelist()
                   assert names == sorted(names), names
-                  assert {"config.json", "fixture.py", "icon.png", "requirements.txt"} <= set(names)
+                  assert {"config.json", "fixture.py", "icon.png"} <= set(names)
+                  assert "requirements.txt" not in names
                   assert not any(name.endswith(".pyc") for name in names)
                   assert not any(name.startswith("tests/") for name in names)
                   archives[fixture] = names
