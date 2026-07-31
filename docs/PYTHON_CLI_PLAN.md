@@ -419,12 +419,6 @@ than being required for .NET CLI parity.
 
 ## Migration verification
 
-The one-off local comparison against the unchanged .NET CLI is documented in
-[HIVEUP_SHADOW_RESULTS.md](HIVEUP_SHADOW_RESULTS.md). It exercises all 97 public
-integrations at a fixed repository commit across validation, isolated tests,
-deployment packaging, and representative reproducibility checks. The comparison
-is intentionally not retained as a permanent CI shadow job.
-
 The released-`v2` CI-to-HiveUp rollout delta is documented separately in
 [HIVEUP_CI_ROLLOUT.md](HIVEUP_CI_ROLLOUT.md). It identifies the historical-test
 policy decisions required before moving the floating Action tag.
