@@ -81,37 +81,39 @@ runs:
 
     - name: Install hiveup
       shell: bash
-      run: pip install ${{ github.action_path }} -q
+      env:
+        HIVEUP_ACTION_PATH: ${{ github.action_path }}
+      run: pip install "$HIVEUP_ACTION_PATH" -q
 
     - name: Run hiveup CI validation
       id: ci
       continue-on-error: true
       shell: bash
+      env:
+        HIVEUP_BASE_REF: ${{ inputs.base_ref }}
+        HIVEUP_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        HIVEUP_DIRECTORIES: ${{ inputs.directories }}
+        HIVEUP_RUNNER_TEMP: ${{ runner.temp }}
       run: |
         set -euo pipefail
-        if [ -z "${{ inputs.directories }}" ] && [ -z "${{ inputs.base_ref }}" ]; then
+        if [[ -z "$HIVEUP_DIRECTORIES" && -z "$HIVEUP_BASE_REF" ]]; then
           echo "::error::Either 'base_ref' or 'directories' input is required"
           exit 1
         fi
         BASE_REF_ARGS=()
-        if [ -n "${{ inputs.base_ref }}" ]; then
-          BASE_REF_ARGS=(--base-ref "${{ inputs.base_ref }}")
+        if [[ -n "$HIVEUP_BASE_REF" ]]; then
+          BASE_REF_ARGS=(--base-ref "$HIVEUP_BASE_REF")
         fi
-        COMMENT_FILE="${{ runner.temp }}/validation-comment.md"
-        COMMIT="${{ github.event.pull_request.head.sha || github.sha }}"
-        if [ -n "${{ inputs.directories }}" ]; then
-          hiveup ci "${BASE_REF_ARGS[@]}" ${{ inputs.directories }} \
-            --github-annotations \
-            --commit "$COMMIT" \
-            --comment-file "$COMMENT_FILE" \
-            --output-file "$GITHUB_OUTPUT"
-        else
-          hiveup ci "${BASE_REF_ARGS[@]}" \
-            --github-annotations \
-            --commit "$COMMIT" \
-            --comment-file "$COMMENT_FILE" \
-            --output-file "$GITHUB_OUTPUT"
+        DIR_ARGS=()
+        if [[ -n "$HIVEUP_DIRECTORIES" ]]; then
+          read -r -a DIR_ARGS <<< "$HIVEUP_DIRECTORIES"
         fi
+        COMMENT_FILE="$HIVEUP_RUNNER_TEMP/validation-comment.md"
+        hiveup ci "${BASE_REF_ARGS[@]}" "${DIR_ARGS[@]}" \
+          --github-annotations \
+          --commit "$HIVEUP_COMMIT" \
+          --comment-file "$COMMENT_FILE" \
+          --output-file "$GITHUB_OUTPUT"
 
     - name: Delete stale PR comment
       if: always() && steps.ci.outputs.directories == '' && steps.ci.outputs.comment_path == '' && inputs.post_comment == 'true'

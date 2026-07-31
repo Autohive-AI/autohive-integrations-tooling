@@ -9,6 +9,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import Mock
 
+import yaml
 from typer.testing import CliRunner
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -51,6 +52,46 @@ def test_package_identity_and_version_have_one_source_of_truth() -> None:
     assert "version" not in metadata["project"]
     assert metadata["tool"]["setuptools"]["dynamic"]["version"] == {"attr": "hiveup.__version__"}
     assert __version__ == "2.4.0a1"
+
+
+def test_action_passes_expression_inputs_via_environment_without_shell_evaluation(tmp_path: Path) -> None:
+    action = yaml.safe_load((ROOT / "action.yml").read_text(encoding="utf-8"))
+    install_step = next(step for step in action["runs"]["steps"] if step.get("name") == "Install hiveup")
+    ci_step = next(step for step in action["runs"]["steps"] if step.get("name") == "Run hiveup CI validation")
+    assert "${{ github.action_path }}" not in install_step["run"]
+    assert "${{ inputs." not in ci_step["run"]
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    captured = tmp_path / "arguments.json"
+    fake_hiveup = bin_dir / "hiveup"
+    fake_hiveup.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, sys\n"
+        "open(os.environ['CAPTURED_ARGS'], 'w').write(json.dumps(sys.argv[1:]))\n",
+        encoding="utf-8",
+    )
+    fake_hiveup.chmod(0o755)
+    injected = tmp_path / "injected"
+    environment = os.environ.copy()
+    environment.update(
+        CAPTURED_ARGS=str(captured),
+        GITHUB_OUTPUT=str(tmp_path / "github-output"),
+        HIVEUP_BASE_REF=f'main"; touch {injected}; #',
+        HIVEUP_COMMIT="abc123",
+        HIVEUP_DIRECTORIES=f"safe;touch {injected} 'quoted path' $(touch {injected}) *.py",
+        HIVEUP_RUNNER_TEMP=str(tmp_path),
+        PATH=f"{bin_dir}{os.pathsep}{environment['PATH']}",
+    )
+
+    result = subprocess.run(["bash", "-c", ci_step["run"]], env=environment, capture_output=True, text=True)
+
+    assert result.returncode == 0, result.stderr
+    assert not injected.exists()
+    arguments = json.loads(captured.read_text(encoding="utf-8"))
+    assert arguments[:4] == ["ci", "--base-ref", environment["HIVEUP_BASE_REF"], "safe;touch"]
+    assert "$(touch" in arguments
+    assert "*.py" in arguments
 
 
 def test_validate_static_checks_pass_good_integration() -> None:
