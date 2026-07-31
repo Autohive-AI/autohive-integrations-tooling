@@ -61,19 +61,31 @@ def _validate_deployment_files(directory: Path) -> None:
     if not _is_regular_file(entry_path):
         raise PackageBuildError(f"entry_point must be a regular, non-symlink file: {entry_path}")
 
-    icons = [
-        path
-        for path in directory.iterdir()
-        if path.name.casefold() in {"icon.jpeg", "icon.jpg", "icon.png"} and _is_regular_file(path)
-    ]
+    icons = _root_icons(directory)
     if not icons:
         raise PackageBuildError("A regular, non-symlink icon.png, icon.jpg, or icon.jpeg is required")
+    if len(icons) > 1:
+        raise PackageBuildError(f"Exactly one integration icon is required; found: {_icon_names(icons)}")
+    if not _is_regular_file(icons[0]):
+        raise PackageBuildError(f"Integration icon must be a regular, non-symlink file: {icons[0]}")
 
     _reject_deployment_symlinks(directory)
 
 
 def _is_regular_file(path: Path) -> bool:
     return path.is_file() and not path.is_symlink()
+
+
+def _root_icons(directory: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in directory.iterdir()
+        if path.name.casefold() in {"icon.jpeg", "icon.jpg", "icon.png"}
+    )
+
+
+def _icon_names(icons: list[Path]) -> str:
+    return ", ".join(path.name for path in icons)
 
 
 def _reject_deployment_symlinks(directory: Path) -> None:
@@ -153,6 +165,9 @@ def write_package_zip(directory: Path, package_path: Path, dependencies: Path | 
 
 def _package_files(directory: Path, package_path: Path) -> list[Path]:
     output = package_path.resolve()
+    icons = _root_icons(directory)
+    if len(icons) > 1:
+        raise PackageBuildError(f"Exactly one integration icon is required; found: {_icon_names(icons)}")
     files = []
     for path in sorted(directory.rglob("*")):
         relative = path.relative_to(directory)

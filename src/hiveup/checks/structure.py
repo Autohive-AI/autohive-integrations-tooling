@@ -234,18 +234,20 @@ class IntegrationValidator:
             self.add_error("Found 'integration.py' — integrations must not include a local integration.py file")
 
         supported_icon_names = {'icon.png', 'icon.jpg', 'icon.jpeg'}
-        icon_path = next(
-            (path for path in self.path.iterdir() if path.is_file() and path.name.lower() in supported_icon_names),
-            None,
+        icon_paths = sorted(
+            path for path in self.path.iterdir() if path.name.casefold() in supported_icon_names
         )
-        if icon_path is None:
+        if not icon_paths:
             self.add_error("Missing required file: icon.png, icon.jpg, or icon.jpeg (Integration icon)")
-        elif icon_path.is_symlink():
-            self.add_error(f"Integration icon must be a regular, non-symlink file: {icon_path.name}")
-        elif icon_path.suffix.lower() == '.png':
-            self._check_icon_png_size(icon_path)
+        elif len(icon_paths) > 1:
+            names = ", ".join(path.name for path in icon_paths)
+            self.add_error(f"Exactly one integration icon is required; found: {names}")
+        elif not icon_paths[0].is_file() or icon_paths[0].is_symlink():
+            self.add_error(f"Integration icon must be a regular, non-symlink file: {icon_paths[0].name}")
+        elif icon_paths[0].suffix.lower() == '.png':
+            self._check_icon_png_size(icon_paths[0])
         else:
-            self._check_icon_jpeg_size(icon_path)
+            self._check_icon_jpeg_size(icon_paths[0])
 
     def _check_icon_png_size(self, path: Path):
         """Validate PNG icon is exactly 512x512."""

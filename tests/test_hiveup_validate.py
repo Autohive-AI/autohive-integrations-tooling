@@ -744,17 +744,29 @@ def test_structure_rejects_symlinked_package_directories(tmp_path: Path, relativ
     assert any(relative.as_posix() in message.message for message in report.results[0].messages)
 
 
-def test_package_includes_only_supported_icon_formats(tmp_path: Path) -> None:
+def test_package_rejects_multiple_supported_icons(tmp_path: Path) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()
     for name in ("icon.png", "icon.jpg", "icon.jpeg", "icon.svg", "icon.webp"):
         (integration / name).touch()
     package = tmp_path / "demo.zip"
 
-    write_package_zip(integration, package, None)
+    with pytest.raises(PackageBuildError, match="Exactly one integration icon is required"):
+        write_package_zip(integration, package, None)
 
-    with zipfile.ZipFile(package) as archive:
-        assert set(archive.namelist()) == {"icon.png", "icon.jpg", "icon.jpeg"}
+
+def test_structure_rejects_multiple_supported_icons(tmp_path: Path) -> None:
+    integration = tmp_path / "multiple-icons"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    (integration / "icon.jpeg").write_bytes(b"not a jpeg")
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.results[0].status == "failed"
+    assert any(
+        message.message == "Exactly one integration icon is required; found: icon.jpeg, icon.png"
+        for message in report.results[0].messages
+    )
 
 
 def test_package_writes_root_layout_and_excludes_development_files(tmp_path: Path) -> None:
