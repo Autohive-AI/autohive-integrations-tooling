@@ -782,7 +782,7 @@ def test_package_writes_root_layout_and_excludes_development_files(tmp_path: Pat
 
     with zipfile.ZipFile(package) as archive:
         assert set(archive.namelist()) == {
-            *(set(included) - {"requirements.txt"}),
+            *(set(included) - {"README.md", "requirements.txt"}),
             "dependencies/example/__init__.py",
         }
 
@@ -808,6 +808,39 @@ def test_package_uses_expanded_dependencies_without_triggering_container_reinsta
     assert "requirements.txt" not in names
     assert "dependencies/example/__init__.py" in names
     assert "dependencies/example-1.0.dist-info/METADATA" in names
+
+
+def test_package_allowlist_excludes_unrelated_credentials_and_private_files(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    included = {
+        "config.json": "{}",
+        "demo.py": "VALUE = 1",
+        "icon.png": "png",
+        "assets/schema.json": "{}",
+        "fonts/font.ttf": "font",
+    }
+    excluded = {
+        ".ENV": "SECRET=1",
+        ".envrc": "export SECRET=1",
+        ".npmrc": "//registry:_authToken=secret",
+        "client-secret.pem": "private key",
+        "credentials.json": "{}",
+        "README.md": "private notes",
+        "misc/private.txt": "secret",
+        "assets/.credentials.json": "{}",
+        ".private/helper.py": "SECRET = 'value'",
+    }
+    for name, content in {**included, **excluded}.items():
+        path = integration / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    package = tmp_path / "demo.zip"
+
+    write_package_zip(integration, package, None)
+
+    with zipfile.ZipFile(package) as archive:
+        assert set(archive.namelist()) == set(included)
 
 
 def test_package_excludes_root_git_worktree_metadata(tmp_path: Path) -> None:

@@ -427,7 +427,6 @@ def test_fresh_scaffold_validates_tests_and_packages(tmp_path: Path, monkeypatch
     assert package_result.exit_code == 0, package_result.output
     with zipfile.ZipFile(package_path) as archive:
         assert {
-            "README.md",
             "__init__.py",
             "config.json",
             "dependencies/sdk_dependency.py",
