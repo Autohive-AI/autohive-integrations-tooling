@@ -158,6 +158,38 @@ def test_force_preflights_directory_conflicts_before_writing(tmp_path: Path, mon
     assert config.read_text(encoding="utf-8") == "old config"
 
 
+def test_force_rejects_symlinked_scaffold_target_without_writing_outside(tmp_path: Path, monkeypatch) -> None:
+    external = tmp_path / "external"
+    external.mkdir()
+    target = tmp_path / "sample"
+    target.symlink_to(external, target_is_directory=True)
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["create", "sample", "--force"])
+
+    assert result.exit_code == 2
+    assert "Target cannot be a symlink" in result.output
+    assert list(external.iterdir()) == []
+
+
+def test_force_rejects_symlinked_scaffold_parent_without_writing_outside(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "sample"
+    target.mkdir()
+    config = target / "config.json"
+    config.write_text("old config", encoding="utf-8")
+    external = tmp_path / "external-tests"
+    external.mkdir()
+    (target / "tests").symlink_to(external, target_is_directory=True)
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["create", "sample", "--force"])
+
+    assert result.exit_code == 2
+    assert "Cannot use symlinked scaffold directory" in result.output
+    assert config.read_text(encoding="utf-8") == "old config"
+    assert list(external.iterdir()) == []
+
+
 def test_scaffold_rolls_back_owned_files_after_write_failure(tmp_path: Path, monkeypatch) -> None:
     target = tmp_path / "sample"
     target.mkdir()

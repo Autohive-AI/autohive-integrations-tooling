@@ -287,7 +287,7 @@ hiveup auth my-integration --auth-type platform --auth-provider github --auth-sc
 hiveup auth my-integration --auth-type none
 ```
 
-`create` and `init` refuse non-empty directories by default. `--force` atomically replaces only scaffold-owned files and preserves other developer files.
+`create` and `init` refuse non-empty directories by default. `--force` uses per-file atomic replacement with rollback for scaffold-owned files, preserves other developer files, and rejects symlinked targets or scaffold paths.
 
 ## Local Testing
 

@@ -482,6 +482,9 @@ def _scaffold(
     if auth_type not in AUTH_TYPES:
         typer.echo(f"Unsupported auth type: {auth_type}", err=True)
         raise typer.Exit(2)
+    if target.is_symlink():
+        typer.echo(f"Target cannot be a symlink: {target}", err=True)
+        raise typer.Exit(2)
     if target.exists() and not target.is_dir():
         typer.echo(f"Target is not a directory: {target}", err=True)
         raise typer.Exit(2)
@@ -587,17 +590,20 @@ def _apply_auth_config(config: dict, auth_type: str, *, provider: str | None = N
 
 
 def _write_scaffold(target: Path, files: dict[Path, bytes]) -> tuple[int, int]:
-    """Atomically replace scaffold-owned files while preserving all other files."""
+    """Replace scaffold-owned files with per-file atomic writes and rollback."""
 
     for relative in files:
         destination = target / relative
-        if destination.exists() and (destination.is_dir() or destination.is_symlink()):
+        if destination.is_symlink() or (destination.exists() and destination.is_dir()):
             typer.echo(f"Cannot replace scaffold file: {destination}", err=True)
             raise typer.Exit(2)
         for parent in relative.parents:
             if parent == Path("."):
                 continue
             candidate = target / parent
+            if candidate.is_symlink():
+                typer.echo(f"Cannot use symlinked scaffold directory: {candidate}", err=True)
+                raise typer.Exit(2)
             if candidate.exists() and not candidate.is_dir():
                 typer.echo(f"Cannot create scaffold directory: {candidate}", err=True)
                 raise typer.Exit(2)
