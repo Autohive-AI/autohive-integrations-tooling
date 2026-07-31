@@ -30,6 +30,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from hiveup.core.deployment import is_excluded_development_path
 from hiveup.core.discovery import is_ignored_top_level_dir
 from hiveup.core.environment import EnvironmentBuildError, IntegrationEnvironment, prepare_environment
 
@@ -84,14 +85,9 @@ def _run_integration_tests(
     test_files = [test_file.resolve() for test_file in test_files]
     _stage_sdk_config(environment, integration_dir)
 
-    for source in integration_dir.rglob("*.py"):
+    for source in integration_dir.rglob("*"):
         relative = source.relative_to(integration_dir)
-        ignored = {"__pycache__", ".venv", "venv", "dependencies", ".hiveup", "test", "tests"}
-        if (
-            source.is_symlink()
-            and not ignored.intersection(relative.parts)
-            and not any(part.startswith(".") for part in relative.parts)
-        ):
+        if source.is_symlink() and not is_excluded_development_path(relative):
             raise EnvironmentBuildError(f"Deployment source cannot be a symlink: {relative.as_posix()}")
 
     with tempfile.TemporaryDirectory(prefix="hiveup-tests-") as temporary:

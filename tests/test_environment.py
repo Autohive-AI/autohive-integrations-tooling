@@ -298,6 +298,24 @@ def test_import_check_rejects_symlinked_helper_module(tmp_path: Path, monkeypatc
     assert report.messages[0].message == "Missing module: helper"
 
 
+def test_import_check_rejects_module_below_symlinked_package(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "selected"
+    integration.mkdir()
+    (integration / "selected.py").write_text("import vendor.helper\n", encoding="utf-8")
+    external = tmp_path / "external_pkg"
+    external.mkdir()
+    (external / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (integration / "vendor").symlink_to(external, target_is_directory=True)
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(static, "module_available", lambda *args: False)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "failed"
+    assert report.messages[0].message == "Missing module: vendor.helper"
+
+
 def test_import_check_resolves_modules_beside_test_file(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     tests_dir = integration / "tests"
@@ -454,6 +472,22 @@ def test_integration_tests_reject_symlinked_helper_module(tmp_path: Path, monkey
     monkeypatch.setattr(test_checks, "_stage_sdk_config", lambda *args: None)
 
     with pytest.raises(environment.EnvironmentBuildError, match="helper.py"):
+        test_checks._run_integration_tests(isolated, integration, [test_file])
+
+
+def test_integration_tests_reject_symlinked_package_directory(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "selected"
+    test_file = integration / "tests" / "test_selected_unit.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.touch()
+    external = tmp_path / "external_pkg"
+    external.mkdir()
+    (external / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (integration / "vendor").symlink_to(external, target_is_directory=True)
+    isolated = environment.IntegrationEnvironment(tmp_path / "cache", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(test_checks, "_stage_sdk_config", lambda *args: None)
+
+    with pytest.raises(environment.EnvironmentBuildError, match="vendor"):
         test_checks._run_integration_tests(isolated, integration, [test_file])
 
 

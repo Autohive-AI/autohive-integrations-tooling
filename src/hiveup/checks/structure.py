@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
+from hiveup.core.deployment import is_excluded_development_path
 from hiveup.core.discovery import is_ignored_top_level_dir
 
 # Fix Windows console encoding for unicode characters
@@ -186,14 +187,12 @@ class IntegrationValidator:
         return len(self.errors) == 0
 
     def _check_deployment_symlinks(self):
-        """Reject deployment source symlinks that packaging cannot include."""
-        ignored = {'__pycache__', '.venv', 'venv', 'dependencies', '.hiveup', 'test', 'tests'}
+        """Reject source symlinks that packaging cannot include."""
         for source in sorted(self.path.rglob('*')):
             relative = source.relative_to(self.path)
-            if ignored.intersection(relative.parts) or any(part.startswith('.') for part in relative.parts):
+            if is_excluded_development_path(relative):
                 continue
-            deployable = source.suffix.casefold() == '.py' or relative.parts[0].casefold() in {'assets', 'fonts'}
-            if deployable and source.is_symlink():
+            if source.is_symlink():
                 self.add_error(f"Deployment source cannot be a symlink: {relative.as_posix()}")
 
     def _check_folder_name(self):

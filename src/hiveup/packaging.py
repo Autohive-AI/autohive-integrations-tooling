@@ -10,27 +10,14 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+from hiveup.core.deployment import (
+    EXCLUDED_DEVELOPMENT_DIRECTORIES,
+    is_excluded_development_path,
+)
+
 TARGET_PLATFORM = "manylinux2014_x86_64"
 TARGET_PYTHON_VERSION = "3.13"
-EXCLUDED_DIRECTORIES = {
-    ".git",
-    ".github",
-    ".hiveup",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".tox",
-    ".venv",
-    "__pycache__",
-    "build",
-    "dependencies",
-    "dist",
-    "env",
-    "node_modules",
-    "test",
-    "tests",
-    "venv",
-}
+EXCLUDED_DIRECTORIES = EXCLUDED_DEVELOPMENT_DIRECTORIES
 EXCLUDED_FILES = {".coverage", ".git", "requirements.txt"}
 ASSET_DIRECTORIES = {"assets", "fonts"}
 SUPPORTED_ICON_SUFFIXES = {".jpeg", ".jpg", ".png"}
@@ -92,11 +79,9 @@ def _is_regular_file(path: Path) -> bool:
 def _reject_deployment_symlinks(directory: Path) -> None:
     for path in directory.rglob("*"):
         relative = path.relative_to(directory)
-        if EXCLUDED_DIRECTORIES.intersection(relative.parts[:-1]):
+        if is_excluded_development_path(relative):
             continue
-        if any(part.startswith(".") for part in relative.parts):
-            continue
-        if path.is_symlink() and _is_deployment_path(relative):
+        if path.is_symlink():
             raise PackageBuildError(f"Deployment source cannot be a symlink: {relative.as_posix()}")
 
 
@@ -171,17 +156,14 @@ def _package_files(directory: Path, package_path: Path) -> list[Path]:
     files = []
     for path in sorted(directory.rglob("*")):
         relative = path.relative_to(directory)
-        if EXCLUDED_DIRECTORIES.intersection(relative.parts[:-1]):
+        if is_excluded_development_path(relative):
             continue
         if path.is_symlink():
-            if _is_deployment_path(relative) and not any(part.startswith(".") for part in relative.parts):
-                raise PackageBuildError(f"Deployment source cannot be a symlink: {relative.as_posix()}")
-            continue
+            raise PackageBuildError(f"Deployment source cannot be a symlink: {relative.as_posix()}")
         if not path.is_file():
             continue
         if (
             path.resolve() == output
-            or any(part.startswith(".") for part in relative.parts)
             or path.name in EXCLUDED_FILES
             or path.name == ".env"
             or path.name.startswith(".env.")

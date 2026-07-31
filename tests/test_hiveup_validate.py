@@ -727,6 +727,23 @@ def test_structure_rejects_symlinked_deployment_files(tmp_path: Path, filename: 
     assert any("regular, non-symlink file" in message.message for message in report.results[0].messages)
 
 
+@pytest.mark.parametrize("relative", [Path("vendor"), Path("actions/vendor")])
+def test_structure_rejects_symlinked_package_directories(tmp_path: Path, relative: Path) -> None:
+    integration = tmp_path / "symlinked-package-directory"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    external = tmp_path / "external_pkg"
+    external.mkdir()
+    (external / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    symlink = integration / relative
+    symlink.parent.mkdir(parents=True, exist_ok=True)
+    symlink.symlink_to(external, target_is_directory=True)
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.results[0].status == "failed"
+    assert any(relative.as_posix() in message.message for message in report.results[0].messages)
+
+
 def test_package_includes_only_supported_icon_formats(tmp_path: Path) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()
@@ -852,6 +869,22 @@ def test_package_rejects_symlinked_helper_module(tmp_path: Path) -> None:
     (integration / "helper.py").symlink_to(external)
 
     with pytest.raises(PackageBuildError, match="helper.py"):
+        write_package_zip(integration, tmp_path / "demo.zip", None)
+
+
+@pytest.mark.parametrize("relative", [Path("vendor"), Path("actions/vendor")])
+def test_package_rejects_symlinked_package_directories(tmp_path: Path, relative: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "demo.py").write_text("import vendor.helper\n", encoding="utf-8")
+    external = tmp_path / "external_pkg"
+    external.mkdir()
+    (external / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    symlink = integration / relative
+    symlink.parent.mkdir(parents=True, exist_ok=True)
+    symlink.symlink_to(external, target_is_directory=True)
+
+    with pytest.raises(PackageBuildError, match=relative.as_posix()):
         write_package_zip(integration, tmp_path / "demo.zip", None)
 
 

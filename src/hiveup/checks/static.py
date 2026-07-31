@@ -20,6 +20,7 @@ from hiveup.checks.readme import check_readme
 from hiveup.checks.structure import IntegrationValidator
 from hiveup.checks.tests import find_unit_test_files, run_integration_tests
 from hiveup.checks.version import check_version_bump
+from hiveup.core.deployment import symlink_component
 from hiveup.core.environment import EnvironmentBuildError, module_available, prepare_environment
 from hiveup.core.results import CheckMessage, CheckResult
 
@@ -407,12 +408,18 @@ def _local_module_exists(module_name: str, integration_path: Path, *, source_dir
         roots.append(integration_path.parent)
     for root in roots:
         candidate = root.joinpath(*parts)
-        if _module_path_exists(candidate):
+        if _module_path_exists(candidate, integration_root=integration_path):
             return True
     return False
 
 
-def _module_path_exists(path: Path) -> bool:
+def _module_path_exists(path: Path, *, integration_root: Path | None = None) -> bool:
+    if (
+        integration_root is not None
+        and path.is_relative_to(integration_root)
+        and symlink_component(path, integration_root) is not None
+    ):
+        return False
     module_file = path.with_suffix(".py")
     package_init = path / "__init__.py"
     return (module_file.is_file() and not module_file.is_symlink()) or (
