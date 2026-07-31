@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import hiveup.cli as cli  # noqa: E402
 from hiveup.cli import _emit_github_annotations, _report_dirs, _write_github_outputs, app, run_validation  # noqa: E402
 from hiveup import __version__  # noqa: E402
+from hiveup.checks.readme import check_readme  # noqa: E402
 from hiveup.checks.static import _legacy_check  # noqa: E402
 from hiveup.checks.structure import (  # noqa: E402
     RESERVED_ENTRY_POINT_MESSAGE,
@@ -174,6 +175,60 @@ def test_changed_discovery_includes_new_top_level_dir_without_config(tmp_path: P
     subprocess.run(["git", "commit", "-q", "-m", "add integration"], cwd=tmp_path, check=True)
 
     assert changed_integrations(tmp_path, base_ref) == [candidate.resolve()]
+
+
+def test_changed_discovery_ignores_changes_made_only_on_base_branch(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "config.json").write_text("{}\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "switch", "-q", "-c", "feature"], cwd=tmp_path, check=True)
+    feature = tmp_path / "feature-integration"
+    feature.mkdir()
+    (feature / "config.json").write_text("{}\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "feature change"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "switch", "-q", "main"], cwd=tmp_path, check=True)
+    (shared / "config.json").write_text('{"base": true}\n', encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "base-only change"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "switch", "-q", "feature"], cwd=tmp_path, check=True)
+
+    assert changed_integrations(tmp_path, "main") == [feature.resolve()]
+
+
+def test_readme_check_ignores_readme_change_made_only_on_base_branch(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    (tmp_path / "README.md").write_text("base\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "switch", "-q", "-c", "feature"], cwd=tmp_path, check=True)
+    integration = tmp_path / "new-integration"
+    integration.mkdir()
+    (integration / "config.json").write_text("{}\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "add integration"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "switch", "-q", "main"], cwd=tmp_path, check=True)
+    (tmp_path / "README.md").write_text("base branch update\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "update readme on base"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "switch", "-q", "feature"], cwd=tmp_path, check=True)
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = check_readme("main", ["new-integration"])
+
+    assert exit_code == 1
+    assert "README.md was NOT updated" in capsys.readouterr().out
 
 
 def test_import_check_does_not_execute_local_package_init(tmp_path: Path) -> None:

@@ -60,7 +60,7 @@ def explicit_integrations(dirs: list[Path]) -> list[Path]:
 
 def changed_integrations(root: Path, base_ref: str) -> list[Path]:
     result = subprocess.run(
-        ["git", "-C", str(root), "diff", "--name-only", base_ref, "HEAD"],
+        ["git", "-C", str(root), "diff", "--name-only", f"{base_ref}...HEAD"],
         capture_output=True,
         text=True,
     )

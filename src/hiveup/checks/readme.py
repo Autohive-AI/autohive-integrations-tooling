@@ -40,7 +40,7 @@ def check_readme(base_ref: str, dirs: list[str]) -> int:
     Returns 0 if the check passes, 1 if it fails, 2 on git errors.
     """
     readme_diff = subprocess.run(
-        ["git", "diff", "--name-only", base_ref, "HEAD"],
+        ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
         capture_output=True,
         text=True,
     )
@@ -56,7 +56,7 @@ def check_readme(base_ref: str, dirs: list[str]) -> int:
             continue
 
         added_diff = subprocess.run(
-            ["git", "diff", "--name-only", "--diff-filter=A", base_ref, "HEAD"],
+            ["git", "diff", "--name-only", "--diff-filter=A", f"{base_ref}...HEAD"],
             capture_output=True,
             text=True,
         )
