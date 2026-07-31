@@ -637,7 +637,9 @@ def validate(dirs: list[str]) -> int:
     total_warnings = 0
 
     for folder in folders:
-        validator = IntegrationValidator(folder)
+        # The compatibility CLI has no history input, so preserve the legacy
+        # validator's permissive treatment of non-canonical test filenames.
+        validator = IntegrationValidator(folder, allow_legacy_missing_unit_tests=True)
         validator.validate()
         validator.print_results()
 

@@ -14,7 +14,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from hiveup.checks.config_sync import check_config_sync, is_new_integration
+from hiveup.checks.config_sync import check_config_sync, is_new_integration, verify_base_ref
 from hiveup.checks.fetch_pattern import check_fetch_pattern
 from hiveup.checks.readme import check_readme
 from hiveup.checks.structure import IntegrationValidator
@@ -49,9 +49,15 @@ def available_checks(*, base_ref: str | None = None, fix: bool = False) -> dict[
 def check_structure(path: Path, *, base_ref: str | None = None) -> CheckResult:
     start = time.perf_counter()
     repo_root = _git_repo_root(path) if base_ref else None
-    allow_legacy_missing_unit_tests = bool(
-        base_ref and repo_root and not is_new_integration(path, base_ref, repo_root)
-    )
+    if base_ref and (repo_root is None or not verify_base_ref(base_ref, repo_root)):
+        return _result(
+            "structure",
+            path,
+            "error",
+            [CheckMessage("error", f"base-ref '{base_ref}' not resolvable — check fetch-depth or ref name")],
+            start,
+        )
+    allow_legacy_missing_unit_tests = not base_ref or not is_new_integration(path, base_ref, repo_root)
     validator = IntegrationValidator(
         path,
         allow_legacy_missing_unit_tests=allow_legacy_missing_unit_tests,

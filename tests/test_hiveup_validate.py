@@ -17,7 +17,11 @@ import hiveup.cli as cli  # noqa: E402
 from hiveup.cli import _emit_github_annotations, _report_dirs, _write_github_outputs, app, run_validation  # noqa: E402
 from hiveup import __version__  # noqa: E402
 from hiveup.checks.static import _legacy_check  # noqa: E402
-from hiveup.checks.structure import RESERVED_ENTRY_POINT_MESSAGE, ROOT_ENTRY_POINT_MESSAGE  # noqa: E402
+from hiveup.checks.structure import (  # noqa: E402
+    RESERVED_ENTRY_POINT_MESSAGE,
+    ROOT_ENTRY_POINT_MESSAGE,
+    validate as validate_structure,
+)
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
 from hiveup.core.results import CheckMessage, CheckResult, ValidationReport  # noqa: E402
 from hiveup.packaging import (  # noqa: E402
@@ -318,6 +322,37 @@ def test_new_integration_without_canonical_unit_tests_fails_with_base_ref(tmp_pa
     assert report.exit_code() == 1
     assert report.results[0].status == "failed"
     assert any("Missing unit test file" in message.message for message in report.results[0].messages)
+
+
+def test_integration_without_canonical_unit_tests_warns_without_base_ref(tmp_path: Path) -> None:
+    integration, _ = _git_integration_without_canonical_tests(tmp_path, existing=True)
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 0
+    assert report.results[0].status == "warning"
+    assert any("Missing unit test file" in message.message for message in report.results[0].messages)
+
+
+def test_structure_reports_unresolvable_base_ref_as_processing_error(tmp_path: Path) -> None:
+    integration, _ = _git_integration_without_canonical_tests(tmp_path, existing=True)
+
+    report = run_validation([integration], base_ref="does-not-exist", only={"structure"})
+
+    assert report.exit_code() == 2
+    assert report.results[0].status == "error"
+    assert report.results[0].messages[0].message == (
+        "base-ref 'does-not-exist' not resolvable — check fetch-depth or ref name"
+    )
+
+
+def test_legacy_structure_cli_warns_for_noncanonical_unit_test_name(tmp_path: Path, capsys) -> None:
+    integration, _ = _git_integration_without_canonical_tests(tmp_path, existing=True)
+
+    exit_code = validate_structure([str(integration)])
+
+    assert exit_code == 0
+    assert "Missing unit test file: tests/test_*_unit.py" in capsys.readouterr().out
 
 
 def test_github_outputs_include_legacy_action_keys(tmp_path: Path) -> None:

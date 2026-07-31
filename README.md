@@ -316,6 +316,12 @@ hiveup check imports my-integration
 hiveup validate
 ```
 
+Without a base ref, HiveUp cannot distinguish a new integration from an
+existing one, so a missing canonical `test_*_unit.py` file is reported as a
+warning for compatibility. With a resolvable base ref it remains a warning for
+existing integrations and fails for new integrations. A supplied but
+unresolvable ref is a processing error; fetch the ref before validating.
+
 Legacy script commands remain available as compatibility interfaces while
 integrations and external workflows migrate to HiveUp.
 

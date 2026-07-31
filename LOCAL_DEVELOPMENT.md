@@ -61,6 +61,13 @@ When run with `--base-ref`, config/code input drift is still only a warning for 
 hiveup validate --base-ref origin/main my-integration
 ```
 
+The same history policy applies to canonical unit-test filenames. Without a
+base ref, a missing `test_*_unit.py` file warns because HiveUp cannot determine
+whether the integration is new. With a resolvable base ref, existing
+integrations warn and new integrations fail. An unresolvable supplied ref is a
+processing error rather than being treated as evidence that the integration is
+new.
+
 ### 3. Fix common issues
 
 ```bash

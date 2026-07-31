@@ -344,7 +344,7 @@ def test_auth_invalid_json_leaves_file_unchanged(tmp_path: Path) -> None:
     assert config_path.read_bytes() == original
 
 
-def test_structure_requires_discoverable_unit_test_name(tmp_path: Path, monkeypatch) -> None:
+def test_structure_warns_for_noncanonical_unit_test_name_without_history(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     assert CliRunner().invoke(app, ["create", "sample"]).exit_code == 0
     unit_test = tmp_path / "sample" / "tests" / "test_sample_unit.py"
@@ -352,7 +352,8 @@ def test_structure_requires_discoverable_unit_test_name(tmp_path: Path, monkeypa
 
     result = CliRunner().invoke(app, ["validate", str(tmp_path / "sample"), "--only", "structure"])
 
-    assert result.exit_code == 1
+    assert result.exit_code == 0
+    assert "passed with warnings" in result.output
     assert "Missing unit test file: tests/test_*_unit.py" in result.output
 
 

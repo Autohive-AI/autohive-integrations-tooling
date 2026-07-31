@@ -290,7 +290,7 @@ def _is_renamed_integration_config(dir_path: Path, base_ref: str, repo_root: Pat
     return False
 
 
-def _verify_base_ref(base_ref: str, repo_root: Path) -> bool:
+def verify_base_ref(base_ref: str, repo_root: Path) -> bool:
     """Return True when base_ref resolves to a commit."""
     verify = subprocess.run(
         ["git", "-C", str(repo_root), "rev-parse", "--verify", "--quiet", f"{base_ref}^{{commit}}"],
@@ -337,7 +337,7 @@ def check_config_sync(dir_path: str, *, base_ref: str | None = None) -> int:
     repo_root = None
     if base_ref:
         repo_root = _git_repo_root(path)
-        if repo_root is None or not _verify_base_ref(base_ref, repo_root):
+        if repo_root is None or not verify_base_ref(base_ref, repo_root):
             print(f"❌ base-ref '{base_ref}' not resolvable — check fetch-depth or ref name", file=sys.stderr)
             return 2
 
