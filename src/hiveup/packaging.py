@@ -32,6 +32,7 @@ class PackageBuildError(RuntimeError):
 def build_package(directory: Path, package_path: Path) -> None:
     """Install dependencies externally and write a deployable integration archive."""
 
+    _validate_package_output(directory, package_path)
     _validate_deployment_files(directory)
     requirements = directory / "requirements.txt"
     if not _is_regular_file(requirements):
@@ -74,6 +75,21 @@ def _validate_deployment_files(directory: Path) -> None:
 
 def _is_regular_file(path: Path) -> bool:
     return path.is_file() and not path.is_symlink()
+
+
+def _validate_package_output(directory: Path, package_path: Path) -> None:
+    if package_path.suffix.casefold() != ".zip":
+        raise PackageBuildError(f"Package output must use a .zip extension: {package_path}")
+
+    output = package_path.resolve()
+    protected = [directory / "requirements.txt"]
+    protected.extend(
+        path
+        for path in directory.rglob("*")
+        if path.is_file() and not path.is_symlink() and _is_deployment_source(path.relative_to(directory))
+    )
+    if any(path.resolve() == output for path in protected):
+        raise PackageBuildError(f"Package output cannot overwrite integration source: {package_path}")
 
 
 def _root_icons(directory: Path) -> list[Path]:
@@ -131,6 +147,7 @@ def install_dependencies(requirements: Path, target: Path) -> None:
 def write_package_zip(directory: Path, package_path: Path, dependencies: Path | None) -> None:
     """Write an integration and staged dependencies atomically to a deployment ZIP root."""
 
+    _validate_package_output(directory, package_path)
     package_path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         dir=package_path.parent,

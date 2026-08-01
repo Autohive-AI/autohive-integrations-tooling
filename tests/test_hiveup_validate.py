@@ -1076,6 +1076,39 @@ def test_package_rejects_missing_entry_point_when_validation_is_skipped(tmp_path
     assert "entry_point must be a regular, non-symlink file" in result.output
 
 
+@pytest.mark.parametrize("filename", ["config.json", "requirements.txt", "icon.png", "demo.py"])
+def test_package_output_cannot_overwrite_integration_source(
+    tmp_path: Path, monkeypatch, filename: str
+) -> None:
+    integration = _integration_with_entry_point(tmp_path / "protected-package-output", "demo.py")
+    original = (integration / filename).read_bytes()
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *args: None)
+
+    result = CliRunner().invoke(
+        app,
+        ["package", str(integration), "--skip-validate", "--output", str(integration / filename)],
+    )
+
+    assert result.exit_code == 2
+    assert "Package output must use a .zip extension" in result.output
+    assert (integration / filename).read_bytes() == original
+
+
+def test_package_allows_zip_output_inside_integration(tmp_path: Path, monkeypatch) -> None:
+    integration = _integration_with_entry_point(tmp_path / "internal-package-output", "demo.py")
+    package = integration / "release.zip"
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *args: None)
+
+    result = CliRunner().invoke(
+        app,
+        ["package", str(integration), "--skip-validate", "--output", str(package)],
+    )
+
+    assert result.exit_code == 0
+    with zipfile.ZipFile(package) as archive:
+        assert "release.zip" not in archive.namelist()
+
+
 @pytest.mark.parametrize("filename", ["config.json", "demo.py", "icon.png"])
 def test_build_package_rejects_symlinked_deployment_files(
     tmp_path: Path, monkeypatch, filename: str
