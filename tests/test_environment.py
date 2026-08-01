@@ -316,6 +316,56 @@ def test_import_check_rejects_module_below_symlinked_package(tmp_path: Path, mon
     assert report.messages[0].message == "Missing module: vendor.helper"
 
 
+def test_import_check_allows_nested_package_named_build(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "selected"
+    package = integration / "pkg" / "build"
+    package.mkdir(parents=True)
+    (integration / "selected.py").write_text("import pkg.build.helper\n", encoding="utf-8")
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(static, "module_available", lambda *args: False)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "passed"
+
+
+def test_import_check_rejects_top_level_package_named_build(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "selected"
+    package = integration / "build"
+    package.mkdir(parents=True)
+    (integration / "selected.py").write_text("import build.helper\n", encoding="utf-8")
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(static, "module_available", lambda *args: False)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "failed"
+    assert report.messages[0].message == "Missing module: build.helper"
+
+
+def test_import_check_rejects_test_module_imported_by_deployment_source(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "selected"
+    tests = integration / "tests"
+    tests.mkdir(parents=True)
+    (integration / "selected.py").write_text("import tests.helper\n", encoding="utf-8")
+    (tests / "__init__.py").write_text("", encoding="utf-8")
+    (tests / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(static, "module_available", lambda *args: False)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "failed"
+    assert report.messages[0].message == "Missing module: tests.helper"
+
+
 def test_import_check_resolves_modules_beside_test_file(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     tests_dir = integration / "tests"
@@ -489,6 +539,30 @@ def test_integration_tests_reject_symlinked_package_directory(tmp_path: Path, mo
 
     with pytest.raises(environment.EnvironmentBuildError, match="vendor"):
         test_checks._run_integration_tests(isolated, integration, [test_file])
+
+
+def test_integration_tests_stage_nested_build_package_but_not_root_build(
+    tmp_path: Path, monkeypatch
+) -> None:
+    integration = tmp_path / "selected"
+    test_file = integration / "tests" / "test_selected_unit.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.touch()
+    (integration / "pkg" / "build").mkdir(parents=True)
+    (integration / "pkg" / "build" / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (integration / "build").mkdir()
+    (integration / "build" / "excluded.py").write_text("VALUE = 2\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "cache", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(test_checks, "_stage_sdk_config", lambda *args: None)
+
+    def inspect_stage(selected, staged, tests):
+        assert (staged / "pkg" / "build" / "helper.py").is_file()
+        assert not (staged / "build").exists()
+        return 0, ""
+
+    monkeypatch.setattr(test_checks, "_execute_tests", inspect_stage)
+
+    assert test_checks._run_integration_tests(isolated, integration, [test_file]) == (0, "")
 
 
 def test_test_check_reports_isolated_environment_failure(tmp_path: Path, monkeypatch) -> None:

@@ -20,7 +20,7 @@ from hiveup.checks.readme import check_readme
 from hiveup.checks.structure import IntegrationValidator
 from hiveup.checks.tests import find_unit_test_files, run_integration_tests
 from hiveup.checks.version import check_version_bump
-from hiveup.core.deployment import symlink_component
+from hiveup.core.deployment import is_deployment_source, symlink_component
 from hiveup.core.environment import EnvironmentBuildError, module_available, prepare_environment
 from hiveup.core.results import CheckMessage, CheckResult
 
@@ -404,27 +404,47 @@ def _is_import_available(
 def _local_module_exists(module_name: str, integration_path: Path, *, source_dir: Path) -> bool:
     parts = module_name.split(".")
     roots = [source_dir, integration_path]
+    source_relative = source_dir.relative_to(integration_path) if source_dir.is_relative_to(integration_path) else None
+    allow_test_source = bool(
+        source_relative is not None
+        and source_relative.parts
+        and source_relative.parts[0] in {"test", "tests"}
+    )
     if parts[0] == integration_path.name:
         roots.append(integration_path.parent)
     for root in roots:
         candidate = root.joinpath(*parts)
-        if _module_path_exists(candidate, integration_root=integration_path):
+        if _module_path_exists(
+            candidate,
+            integration_root=integration_path,
+            allow_test_source=allow_test_source,
+        ):
             return True
     return False
 
 
-def _module_path_exists(path: Path, *, integration_root: Path | None = None) -> bool:
+def _module_path_exists(
+    path: Path,
+    *,
+    integration_root: Path | None = None,
+    allow_test_source: bool = False,
+) -> bool:
     if (
         integration_root is not None
         and path.is_relative_to(integration_root)
         and symlink_component(path, integration_root) is not None
     ):
         return False
-    module_file = path.with_suffix(".py")
-    package_init = path / "__init__.py"
-    return (module_file.is_file() and not module_file.is_symlink()) or (
-        path.is_dir() and not path.is_symlink() and package_init.is_file() and not package_init.is_symlink()
-    )
+    candidates = (path.with_suffix(".py"), path / "__init__.py")
+    for candidate in candidates:
+        if not candidate.is_file() or candidate.is_symlink():
+            continue
+        if integration_root is None or not candidate.is_relative_to(integration_root):
+            return True
+        relative = candidate.relative_to(integration_root)
+        if (allow_test_source and relative.parts[0] in {"test", "tests"}) or is_deployment_source(relative):
+            return True
+    return False
 
 
 def _is_relative_import_available(pyfile: Path, level: int, module: str, names: list[str]) -> bool:
@@ -441,7 +461,13 @@ def _is_relative_import_available(pyfile: Path, level: int, module: str, names: 
 
 def _python_files(path: Path) -> list[Path]:
     return [
-        pyfile for pyfile in sorted(path.rglob("*.py")) if not pyfile.is_symlink() and not _is_ignored(pyfile)
+        pyfile
+        for pyfile in sorted(path.rglob("*.py"))
+        if not pyfile.is_symlink()
+        and (
+            pyfile.relative_to(path).parts[0] in {"test", "tests"}
+            or is_deployment_source(pyfile.relative_to(path))
+        )
     ]
 
 

@@ -11,16 +11,13 @@ import zipfile
 from pathlib import Path
 
 from hiveup.core.deployment import (
-    EXCLUDED_DEVELOPMENT_DIRECTORIES,
+    is_deployment_source,
     is_excluded_development_path,
 )
 
 TARGET_PLATFORM = "manylinux2014_x86_64"
 TARGET_PYTHON_VERSION = "3.13"
-EXCLUDED_DIRECTORIES = EXCLUDED_DEVELOPMENT_DIRECTORIES
 EXCLUDED_FILES = {".coverage", ".git", "requirements.txt"}
-ASSET_DIRECTORIES = {"assets", "fonts"}
-SUPPORTED_ICON_SUFFIXES = {".jpeg", ".jpg", ".png"}
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 ZIP_FILE_MODE = 0o100644
 
@@ -86,7 +83,7 @@ def _validate_package_output(directory: Path, package_path: Path) -> None:
     protected.extend(
         path
         for path in directory.rglob("*")
-        if path.is_file() and not path.is_symlink() and _is_deployment_source(path.relative_to(directory))
+        if path.is_file() and not path.is_symlink() and is_deployment_source(path.relative_to(directory))
     )
     if any(path.resolve() == output for path in protected):
         raise PackageBuildError(f"Package output cannot overwrite integration source: {package_path}")
@@ -202,30 +199,10 @@ def _package_files(directory: Path, package_path: Path) -> list[Path]:
             or path.suffix.lower() in {".pyc", ".zip"}
         ):
             continue
-        if not _is_deployment_source(relative):
+        if not is_deployment_source(relative):
             continue
         files.append(path)
     return files
-
-
-def _is_deployment_source(relative: Path) -> bool:
-    if relative.suffix.casefold() == ".py":
-        return True
-    if len(relative.parts) == 1:
-        return relative.name == "config.json" or (
-            relative.stem.casefold() == "icon" and relative.suffix.casefold() in SUPPORTED_ICON_SUFFIXES
-        )
-    return relative.parts[0].casefold() in ASSET_DIRECTORIES and not any(
-        part.startswith(".") for part in relative.parts
-    )
-
-
-def _is_deployment_path(relative: Path) -> bool:
-    return _is_deployment_source(relative) or (
-        len(relative.parts) == 1 and relative.name.casefold() in ASSET_DIRECTORIES
-    )
-
-
 def _write_file(archive: zipfile.ZipFile, path: Path, archive_name: str) -> None:
     info = zipfile.ZipInfo(archive_name, date_time=ZIP_TIMESTAMP)
     info.compress_type = zipfile.ZIP_DEFLATED

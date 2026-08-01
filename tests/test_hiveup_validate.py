@@ -816,6 +816,27 @@ def test_package_writes_root_layout_and_excludes_development_files(tmp_path: Pat
         }
 
 
+def test_package_keeps_nested_package_and_asset_directories_named_build(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    included = {
+        "demo.py": "from pkg.build.helper import VALUE\n",
+        "pkg/__init__.py": "",
+        "pkg/build/__init__.py": "",
+        "pkg/build/helper.py": "VALUE = 1\n",
+        "assets/build/schema.json": "{}",
+    }
+    for name, content in included.items():
+        path = integration / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    package = tmp_path / "demo.zip"
+    write_package_zip(integration, package, None)
+
+    with zipfile.ZipFile(package) as archive:
+        assert set(archive.namelist()) == set(included)
+
+
 def test_package_uses_expanded_dependencies_without_triggering_container_reinstall(tmp_path: Path) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()
