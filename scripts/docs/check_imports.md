@@ -122,7 +122,14 @@ The `--verify-names` flag imports modules to check for name existence. This mean
 
 ## Integration with CI
 
-This script is called by [`check_code.py`](check_code.md) during the import check step — imported directly as a function rather than via subprocess. It is in turn called by the `validate-integration.yml` workflow. It runs after dependencies from `requirements.txt` are installed, ensuring that declared dependencies are actually available.
+`action.yml` installs HiveUp and invokes `hiveup ci`. HiveUp's `imports` check belongs to the code result group and runs in an isolated environment containing the integration's declared dependencies. When directories are not supplied, HiveUp discovers changed integrations from the supplied base ref.
+
+The canonical HiveUp check is stricter than this standalone compatibility
+script's current-environment lookup. Local deployment imports must resolve to
+files accepted by the package source policy. Test-only modules cannot satisfy
+production imports, sibling integrations are not visible, symlinked source is
+rejected, and relative imports may not escape the selected integration. Imports
+within `test/` or `tests/` may still resolve test helpers inside that tree.
 
 ```python
 # Called internally by check_code.py:
@@ -130,27 +137,19 @@ from check_imports import check_imports
 check_imports(str(entry_file))
 ```
 
-See the [CI pipeline overview](#ci-pipeline-overview) below for how all scripts fit together.
+See the [CI pipeline overview](#ci-pipeline-overview) below for the current flow.
 
 ## CI Pipeline Overview
 
 ```mermaid
 flowchart LR
-    A[validate-integration.yml] --> B[get_changed_dirs.py]
-    A --> C[validate_integration.py]
-    A --> D[check_code.py]
-    A --> E[check_readme.py]
-    D --> F[check_imports.py]
-    G[self-test.yml] --> C
-    G --> D
-    G --> F
+    A[validate-integration.yml] --> B[action.yml]
+    B --> C[Install HiveUp]
+    C --> D[hiveup ci]
+    D --> E[Discover changed integrations from base ref]
+    E --> F[Five result groups]
 ```
 
-| Step | Script | Purpose |
-|------|--------|---------|
-| 1 | [`get_changed_dirs.py`](get_changed_dirs.md) | Detect which integration dirs changed |
-| 2 | [`validate_integration.py`](validate_integration.md) | Validate folder structure and config |
-| 3 | [`check_code.py`](check_code.md) | Syntax, imports, and JSON checks |
-| 4 | [`check_readme.py`](check_readme.md) | Ensure README is updated for new integrations |
+The `imports` check is part of the code group; the other output groups are structure, tests, README, and version.
 
 The `self-test.yml` workflow also exercises `check_imports.py`, `validate_integration.py`, and `check_code.py` against test examples in `tests/examples/` as a regression guard.

@@ -52,7 +52,7 @@ python scripts/validate_integration.py $(python scripts/get_changed_dirs.py orig
 
 ## Validations Performed
 
-The validator runs 8 checks in sequence for each integration directory:
+The validator runs 9 checks in sequence for each integration directory:
 
 ### 1. Folder Name (`_check_folder_name`)
 
@@ -79,7 +79,7 @@ Checks that all mandatory files exist in the integration directory:
 | `config.json` | Error | Integration configuration |
 | `requirements.txt` | Error | Python dependencies |
 | `README.md` | Error | Integration documentation |
-| `icon.png` or `icon.svg` | Error | Integration icon — must be exactly 512x512 pixels |
+| `icon.png`, `icon.jpg`, or `icon.jpeg` | Error | Exactly one regular, non-symlink integration icon — must be exactly 512x512 pixels |
 | `__init__.py` | Warning | Python package init — optional for modular integrations with an `actions/` subdirectory (adding it causes circular imports) |
 
 ### 3. config.json Validation (`_check_config_json`)
@@ -156,9 +156,16 @@ Allowed patterns:
 | `tests/` directory exists | Error | Test directory required |
 | `tests/__init__.py` exists | Error | Test package init |
 | `tests/context.py` or `tests/conftest.py` exists | Error | Test import/fixture setup (either one satisfies this check) |
-| `tests/test_*.py` exists | Error | At least one test file |
+| `tests/test_*_unit.py` exists | Error | At least one discoverable unit test file |
 
-### 7. Main Python File (`_check_main_python_file`)
+### 7. Deployment Symlinks (`_check_deployment_symlinks`)
+
+Rejects source and runtime-asset symlinks that deployment packaging cannot
+include. Symlinks inside explicitly excluded development directories are
+ignored. This keeps validation, isolated tests, and deployment archives aligned
+without dereferencing content from outside the integration.
+
+### 8. Main Python File (`_check_main_python_file`)
 
 Inspects all `.py` files in the integration directory (not just the entry point) for expected patterns. This supports modular integrations where action handlers are split across multiple files.
 
@@ -170,7 +177,7 @@ Inspects all `.py` files in the integration directory (not just the entry point)
 
 > **Note:** Action decorator matching (config ↔ code) is handled by `check_config_sync.py`, which uses AST parsing for more accurate bidirectional validation.
 
-### 8. Unused Scopes Detection (`_check_unused_scopes`)
+### 9. Unused Scopes Detection (`_check_unused_scopes`)
 
 For integrations using platform (OAuth2) authentication, the validator uses a heuristic to detect scopes that may not be needed:
 
@@ -192,14 +199,15 @@ flowchart TD
     E --> F[Check __init__.py minimality]
     F --> G[Check requirements.txt]
     G --> H[Check tests/ folder]
-    H --> I[Check main Python file]
-    I --> J[Check for unused scopes]
-    J --> K[Print results]
-    K --> B
-    B --> L[Print summary]
-    L --> M{Any errors?}
-    M -->|Yes| N[Exit 1]
-    M -->|No| O[Exit 0]
+    H --> I[Reject deployment symlinks]
+    I --> J[Check main Python file]
+    J --> K[Check for unused scopes]
+    K --> L[Print results]
+    L --> B
+    B --> M[Print summary]
+    M --> N{Any errors?}
+    N -->|Yes| O[Exit 1]
+    N -->|No| P[Exit 0]
 ```
 
 ## Auto-Discovery
@@ -221,7 +229,7 @@ Integration: my-integration
 ============================================================
 
 Errors (2):
-  ❌ Missing required file: icon.png or icon.svg (Integration icon)
+  ❌ Missing integration icon: icon.png, icon.jpg, or icon.jpeg
   ❌ requirements.txt must include 'autohive-integrations-sdk'
 
 Warnings (1):
@@ -250,12 +258,6 @@ Total warnings: 1
 
 ## Integration with CI
 
-Called by the `validate-integration.yml` workflow (on pull requests) as the **Structure Check** step:
-
-```yaml
-- name: Structure Check
-  if: steps.detect.outputs.dirs != ''
-  run: python scripts/validate_integration.py ${{ steps.detect.outputs.dirs }}
-```
+`action.yml` installs HiveUp and invokes `hiveup ci`. HiveUp's `structure` check owns the structure result group. When directories are not supplied, HiveUp discovers changed integrations from the supplied base ref before running the five result groups.
 
 The script is also exercised by the `self-test.yml` workflow, which runs it against the test examples in `tests/examples/` as a regression guard whenever `scripts/` or `tests/` change.

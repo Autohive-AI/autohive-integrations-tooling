@@ -104,14 +104,4 @@ The following directories are excluded from the output because they are infrastr
 
 ## Integration with CI
 
-This script is called in the `validate-integration.yml` workflow (on pull requests) to determine which integrations need validation:
-
-```yaml
-- name: Get changed integration folders
-  id: changed
-  run: |
-    DIRS=$(python scripts/get_changed_dirs.py "origin/${{ github.base_ref }}")
-    echo "dirs=$DIRS" >> $GITHUB_OUTPUT
-```
-
-The output is stored as a GitHub Actions step output and used by subsequent steps to conditionally run validation only on changed integrations.
+`action.yml` installs HiveUp and invokes `hiveup ci`. Unless explicit directories are supplied, HiveUp performs changed-integration discovery against `base_ref` and writes the resulting directory list to the Action output. If the list is empty, all five result groups are skipped. This script preserves the legacy direct discovery interface.

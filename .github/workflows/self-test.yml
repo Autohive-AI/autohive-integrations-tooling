@@ -2,15 +2,24 @@ name: Self Test
 
 on:
   push:
+    branches: [master, main]
     paths:
+      - 'action.yml'
+      - 'pyproject.toml'
+      - 'requirements-dev.txt'
       - 'scripts/**'
+      - 'src/hiveup/**'
       - 'tests/**'
       - '.github/workflows/self-test.yml'
 
   pull_request:
     branches: [master, main]
     paths:
+      - 'action.yml'
+      - 'pyproject.toml'
+      - 'requirements-dev.txt'
       - 'scripts/**'
+      - 'src/hiveup/**'
       - 'tests/**'
       - '.github/workflows/self-test.yml'
 
@@ -29,6 +38,9 @@ jobs:
 
       - name: Install dev tools
         run: pip install -r requirements-dev.txt -q
+
+      - name: Check HiveUp source formatting
+        run: ruff format --check src
 
       - name: Test validate_integration.py — good integrations pass
         run: |
@@ -207,8 +219,8 @@ jobs:
           fi
           echo "✅ Invalid base ref correctly returns exit code 2"
 
-      - name: Test check_config_sync.py — focused pytest regressions
-        run: pytest tests/test_check_config_sync.py
+      - name: Run repository test suite
+        run: pytest -q
 
       - name: Test check_code.py — input drift warns for existing integrations
         run: |
@@ -302,3 +314,445 @@ jobs:
             exit 1
           fi
           echo "✅ Missing argument correctly rejected"
+
+  test-package:
+    runs-on: ubuntu-latest
+    name: Test HiveUp distribution
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install build tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Build wheel and source distribution
+        run: python -m build
+
+      - name: Check distribution metadata
+        run: |
+          set -euo pipefail
+          python -m twine check dist/*
+
+          mapfile -t WHEELS < <(compgen -G 'dist/hiveup-*.whl')
+          mapfile -t SDISTS < <(compgen -G 'dist/hiveup-*.tar.gz')
+          [ "${#WHEELS[@]}" -eq 1 ]
+          [ "${#SDISTS[@]}" -eq 1 ]
+          [ "${WHEELS[0]}" = 'dist/hiveup-2.4.0a1-py3-none-any.whl' ]
+          [ "${SDISTS[0]}" = 'dist/hiveup-2.4.0a1.tar.gz' ]
+
+      - name: Test installed wheel outside source checkout
+        run: |
+          set -euo pipefail
+          WHEEL=$(realpath dist/hiveup-*.whl)
+          ENV_DIR=$(mktemp -d)
+          WORK_DIR=$(mktemp -d)
+          python -m venv "$ENV_DIR"
+          "$ENV_DIR/bin/python" -m pip install "$WHEEL"
+
+          cd "$WORK_DIR"
+          [ "$("$ENV_DIR/bin/hiveup" --version)" = 'hiveup 2.4.0a1' ]
+          "$ENV_DIR/bin/hiveup" --help
+          if "$ENV_DIR/bin/hiveup" run >run-output.txt 2>&1; then
+            echo 'The deferred hiveup run command was unexpectedly installed'
+            exit 1
+          fi
+          grep -Fq "No such command 'run'" run-output.txt
+
+          "$ENV_DIR/bin/python" - <<'PY'
+          from importlib.resources import files
+          from importlib.metadata import metadata, version
+
+          assert metadata("hiveup")["Name"] == "hiveup"
+          assert version("hiveup") == "2.4.0a1"
+          assert files("hiveup").joinpath("data/ruff.toml").is_file()
+          PY
+
+          "$ENV_DIR/bin/hiveup" create wheel-smoke --auth-type none
+          "$ENV_DIR/bin/hiveup" validate wheel-smoke
+          "$ENV_DIR/bin/hiveup" test wheel-smoke
+          "$ENV_DIR/bin/hiveup" auth wheel-smoke --auth-type custom
+          "$ENV_DIR/bin/hiveup" auth wheel-smoke --auth-type none
+          "$ENV_DIR/bin/hiveup" package wheel-smoke
+          "$ENV_DIR/bin/hiveup" doctor wheel-smoke
+          [ -f wheel-smoke-1.0.0.zip ]
+
+      - name: Upload local-install artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hiveup-2.4.0a1
+          path: dist/*
+          if-no-files-found: error
+
+  test-deployment-packaging:
+    runs-on: ubuntu-latest
+    name: Test HiveUp deployment packaging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install HiveUp
+        run: python -m pip install -e . -q
+
+      - name: Create representative integrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          for fixture in no-dependencies pure-python native-wheel; do
+            mkdir -p "$RUNNER_TEMP/$fixture"
+            cp tests/examples/good-integration/icon.png "$RUNNER_TEMP/$fixture/icon.png"
+            printf 'fixture = object()\n' > "$RUNNER_TEMP/$fixture/fixture.py"
+            cat > "$RUNNER_TEMP/$fixture/config.json" <<'JSON'
+          {
+            "name": "fixture",
+            "version": "1.0.0",
+            "entry_point": "fixture.py"
+          }
+          JSON
+          done
+          : > "$RUNNER_TEMP/no-dependencies/requirements.txt"
+          printf 'idna==3.10\n' > "$RUNNER_TEMP/pure-python/requirements.txt"
+          printf 'multidict==6.6.3\n' > "$RUNNER_TEMP/native-wheel/requirements.txt"
+
+      - name: Package deployment fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          for fixture in no-dependencies pure-python native-wheel; do
+            hiveup package "$RUNNER_TEMP/$fixture" \
+              --skip-validate \
+              --output "$RUNNER_TEMP/$fixture.zip"
+          done
+
+      - name: Verify deployment archives
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import zipfile
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          archives = {}
+          for fixture in ("no-dependencies", "pure-python", "native-wheel"):
+              with zipfile.ZipFile(root / f"{fixture}.zip") as archive:
+                  names = archive.namelist()
+                  assert names == sorted(names), names
+                  assert {"config.json", "fixture.py", "icon.png"} <= set(names)
+                  assert "requirements.txt" not in names
+                  assert not any(name.endswith(".pyc") for name in names)
+                  assert not any(name.startswith("tests/") for name in names)
+                  archives[fixture] = names
+
+          assert not any(name.startswith("dependencies/") for name in archives["no-dependencies"])
+          assert any(name.startswith("dependencies/idna/") for name in archives["pure-python"])
+          assert not any(name.endswith(".so") for name in archives["pure-python"])
+          assert any(
+              name.startswith("dependencies/multidict/")
+              and name.endswith(".cpython-313-x86_64-linux-gnu.so")
+              for name in archives["native-wheel"]
+          )
+          PY
+
+  test-action-fixtures:
+    runs-on: ubuntu-latest
+    name: Test Action — ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: good integration
+            directory: tests/examples/good-integration
+            integration: good-integration
+            outcome: success
+            structure: success
+            code: success
+          - name: modular integration
+            directory: tests/examples/modular-integration
+            integration: modular-integration
+            outcome: success
+            structure: success
+            code: success
+          - name: long-lines integration
+            directory: tests/examples/long-lines-integration
+            integration: long-lines-integration
+            outcome: success
+            structure: success
+            code: success
+          - name: sample API
+            directory: tests/sample-api
+            integration: sample-api
+            outcome: success
+            structure: success
+            code: success
+          - name: bad icon
+            directory: tests/examples/bad-icon
+            integration: bad-icon
+            outcome: failure
+            structure: failure
+            code: success
+            failure_text: 512x512
+          - name: invalid integration
+            directory: tests/examples/Bad-Integration
+            integration: Bad-Integration
+            outcome: failure
+            structure: failure
+            code: failure
+            failure_text: invalid syntax
+          - name: config mismatch
+            directory: tests/examples/config-mismatch
+            integration: config-mismatch
+            outcome: failure
+            structure: failure
+            code: failure
+            failure_text: missing_in_code
+          - name: input drift fixture
+            directory: tests/examples/input-drift
+            integration: input-drift
+            outcome: failure
+            structure: failure
+            code: failure
+            failure_text: requirements.txt
+          - name: legacy Netlify fixture
+            directory: tests/examples/netlify
+            integration: netlify
+            outcome: failure
+            structure: success
+            code: failure
+            failure_text: '[netlify] lint: failed'
+          - name: deprecated SDK fixture
+            directory: tests/examples/sdk-deprecated-pin
+            integration: sdk-deprecated-pin
+            outcome: failure
+            structure: success
+            code: failure
+            failure_text: '[sdk-deprecated-pin] format: failed'
+          - name: old fetch pattern
+            directory: tests/examples/sdk-v2-old-fetch-pattern
+            integration: sdk-v2-old-fetch-pattern
+            outcome: failure
+            structure: success
+            code: failure
+            failure_text: response.data
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run local composite Action
+        id: validate
+        continue-on-error: true
+        uses: ./
+        with:
+          directories: ${{ matrix.directory }}
+          post_comment: 'false'
+
+      - name: Verify Action result and outputs
+        if: always()
+        shell: bash
+        env:
+          ACTUAL_OUTCOME: ${{ steps.validate.outcome }}
+          EXPECTED_OUTCOME: ${{ matrix.outcome }}
+          EXPECTED_INTEGRATION: ${{ matrix.integration }}
+          EXPECTED_DIRECTORY: ${{ matrix.directory }}
+          EXPECTED_STRUCTURE: ${{ matrix.structure }}
+          EXPECTED_CODE: ${{ matrix.code }}
+          EXPECTED_FAILURE_TEXT: ${{ matrix.failure_text }}
+          DIRECTORIES: ${{ steps.validate.outputs.directories }}
+          STRUCTURE_RESULT: ${{ steps.validate.outputs.structure_result }}
+          CODE_RESULT: ${{ steps.validate.outputs.code_result }}
+          TESTS_RESULT: ${{ steps.validate.outputs.tests_result }}
+          README_RESULT: ${{ steps.validate.outputs.readme_result }}
+          VERSION_RESULT: ${{ steps.validate.outputs.version_result }}
+          STRUCTURE_OUTPUT: ${{ steps.validate.outputs.structure_output }}
+          CODE_OUTPUT: ${{ steps.validate.outputs.code_output }}
+          TESTS_OUTPUT: ${{ steps.validate.outputs.tests_output }}
+          COMMENT_PATH: ${{ steps.validate.outputs.comment_path }}
+        run: |
+          set -euo pipefail
+
+          [ "$ACTUAL_OUTCOME" = "$EXPECTED_OUTCOME" ] || {
+            echo "Expected Action outcome '$EXPECTED_OUTCOME', got '$ACTUAL_OUTCOME'"
+            exit 1
+          }
+          [ "$DIRECTORIES" = "$EXPECTED_DIRECTORY" ] || {
+            echo "Expected directories output '$EXPECTED_DIRECTORY', got '$DIRECTORIES'"
+            exit 1
+          }
+          [ "$STRUCTURE_RESULT" = "$EXPECTED_STRUCTURE" ] || {
+            echo "Expected structure result '$EXPECTED_STRUCTURE', got '$STRUCTURE_RESULT'"
+            exit 1
+          }
+          [ "$CODE_RESULT" = "$EXPECTED_CODE" ] || {
+            echo "Expected code result '$EXPECTED_CODE', got '$CODE_RESULT'"
+            exit 1
+          }
+          [ "$TESTS_RESULT" = success ]
+          [ "$README_RESULT" = skipped ]
+          [ "$VERSION_RESULT" = skipped ]
+          [ -f "$COMMENT_PATH" ]
+          grep -Fq "[$EXPECTED_INTEGRATION]" "$COMMENT_PATH"
+
+          if [ -n "$EXPECTED_FAILURE_TEXT" ]; then
+            grep -Fq "$EXPECTED_FAILURE_TEXT" \
+              <<< "$STRUCTURE_OUTPUT"$'\n'"$CODE_OUTPUT"$'\n'"$TESTS_OUTPUT"
+          fi
+
+  test-action-changed-discovery:
+    runs-on: ubuntu-latest
+    name: Test Action — changed-directory discovery
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Commit a new valid integration fixture
+        id: fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.email test@example.com
+          git config user.name Test
+          echo "base_ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          cp -R tests/examples/good-integration action-fixture
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          config_path = Path("action-fixture/config.json")
+          config = json.loads(config_path.read_text(encoding="utf-8"))
+          config["name"] = "action-fixture"
+          config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+          PY
+          printf '\n- `action-fixture` — composite Action test fixture\n' >> README.md
+          git add action-fixture README.md
+          git commit -m "test: add action discovery fixture"
+
+      - name: Run local composite Action with a base ref
+        id: validate
+        uses: ./
+        with:
+          base_ref: ${{ steps.fixture.outputs.base_ref }}
+          post_comment: 'false'
+
+      - name: Verify discovered directory and outputs
+        shell: bash
+        env:
+          DIRECTORIES: ${{ steps.validate.outputs.directories }}
+          STRUCTURE_RESULT: ${{ steps.validate.outputs.structure_result }}
+          CODE_RESULT: ${{ steps.validate.outputs.code_result }}
+          TESTS_RESULT: ${{ steps.validate.outputs.tests_result }}
+          README_RESULT: ${{ steps.validate.outputs.readme_result }}
+          VERSION_RESULT: ${{ steps.validate.outputs.version_result }}
+          COMMENT_PATH: ${{ steps.validate.outputs.comment_path }}
+        run: |
+          set -euo pipefail
+          [ "$DIRECTORIES" = action-fixture ]
+          [ "$STRUCTURE_RESULT" = success ]
+          [ "$CODE_RESULT" = success ]
+          [ "$TESTS_RESULT" = success ]
+          [ "$README_RESULT" = success ]
+          [ "$VERSION_RESULT" = success ]
+          [ -f "$COMMENT_PATH" ]
+          grep -Fq '[action-fixture]' "$COMMENT_PATH"
+
+  test-action-comment-lifecycle:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'test-comment-lifecycle')
+    runs-on: ubuntu-latest
+    name: Test Action — sticky comment lifecycle
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      COMMENT_HEADER: hiveup-action-self-test-${{ github.run_id }}
+      COMMENT_MARKER: '<!-- Sticky Pull Request Commenthiveup-action-self-test-${{ github.run_id }} -->'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create sticky comment
+        uses: ./
+        with:
+          directories: tests/examples/good-integration
+          post_comment: 'true'
+          comment_header: ${{ env.COMMENT_HEADER }}
+
+      - name: Verify sticky comment creation
+        id: created
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          COMMENTS=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" | jq -s 'add')
+          COMMENT_COUNT=$(jq --arg marker "$COMMENT_MARKER" '[.[] | select(.body | contains($marker))] | length' <<< "$COMMENTS")
+          [ "$COMMENT_COUNT" -eq 1 ]
+          COMMENT_ID=$(jq -r --arg marker "$COMMENT_MARKER" '.[] | select(.body | contains($marker)) | .id' <<< "$COMMENTS")
+          echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
+          COMMENT_BODY=$(gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" --jq .body)
+          grep -Fq '[good-integration]' <<< "$COMMENT_BODY"
+          grep -Fq '| Tests | ✅ Passed |' <<< "$COMMENT_BODY"
+          grep -Fq '[good-integration] tests: passed' <<< "$COMMENT_BODY"
+
+      - name: Replace sticky comment
+        uses: ./
+        with:
+          directories: tests/examples/modular-integration
+          post_comment: 'true'
+          comment_header: ${{ env.COMMENT_HEADER }}
+
+      - name: Verify sticky comment replacement
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CREATED_COMMENT_ID: ${{ steps.created.outputs.comment_id }}
+        run: |
+          set -euo pipefail
+          COMMENTS=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" | jq -s 'add')
+          COMMENT_COUNT=$(jq --arg marker "$COMMENT_MARKER" '[.[] | select(.body | contains($marker))] | length' <<< "$COMMENTS")
+          [ "$COMMENT_COUNT" -eq 1 ]
+          COMMENT_ID=$(jq -r --arg marker "$COMMENT_MARKER" '.[] | select(.body | contains($marker)) | .id' <<< "$COMMENTS")
+          [ "$COMMENT_ID" = "$CREATED_COMMENT_ID" ]
+          COMMENT_BODY=$(gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" --jq .body)
+          grep -Fq '[modular-integration]' <<< "$COMMENT_BODY"
+          grep -Fq '| Tests | ✅ Passed |' <<< "$COMMENT_BODY"
+          grep -Fq '[modular-integration] tests: passed' <<< "$COMMENT_BODY"
+          if grep -Fq '[good-integration]' <<< "$COMMENT_BODY"; then
+            echo 'Sticky comment retained stale validation output'
+            exit 1
+          fi
+
+      - name: Delete sticky comment through empty discovery
+        uses: ./
+        with:
+          base_ref: HEAD
+          post_comment: 'true'
+          comment_header: ${{ env.COMMENT_HEADER }}
+
+      - name: Verify sticky comment deletion
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          COMMENTS=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" | jq -s 'add')
+          COMMENT_COUNT=$(jq --arg marker "$COMMENT_MARKER" '[.[] | select(.body | contains($marker))] | length' <<< "$COMMENTS")
+          [ "$COMMENT_COUNT" -eq 0 ]
+
+      - name: Clean up lifecycle test comment
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: ${{ env.COMMENT_HEADER }}
+          delete: true

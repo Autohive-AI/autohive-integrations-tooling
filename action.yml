@@ -22,41 +22,45 @@ inputs:
     description: Post a sticky PR comment with results (requires pull-requests write permission)
     required: false
     default: 'true'
+  comment_header:
+    description: Header used to identify the sticky PR comment
+    required: false
+    default: validation-results
 
 outputs:
   directories:
     description: Space-separated list of integration directories that were validated
-    value: ${{ steps.detect.outputs.dirs }}
+    value: ${{ steps.ci.outputs.directories }}
   structure_result:
-    description: "'success' or 'failure'"
-    value: ${{ steps.structure.outcome }}
+    description: "'success', 'failure', or 'skipped'"
+    value: ${{ steps.ci.outputs.structure_result }}
   code_result:
-    description: "'success' or 'failure'"
-    value: ${{ steps.code.outcome }}
+    description: "'success', 'failure', or 'skipped'"
+    value: ${{ steps.ci.outputs.code_result }}
   readme_result:
-    description: "'success' or 'failure'"
-    value: ${{ steps.readme.outcome }}
+    description: "'success', 'failure', or 'skipped'"
+    value: ${{ steps.ci.outputs.readme_result }}
   version_result:
-    description: "'success' or 'failure'"
-    value: ${{ steps.version.outcome }}
+    description: "'success', 'failure', or 'skipped'"
+    value: ${{ steps.ci.outputs.version_result }}
   tests_result:
-    description: "'success' or 'failure'"
-    value: ${{ steps.tests.outcome }}
+    description: "'success', 'failure', or 'skipped'"
+    value: ${{ steps.ci.outputs.tests_result }}
   structure_output:
     description: Full output of the structure check
-    value: ${{ steps.structure.outputs.output }}
+    value: ${{ steps.ci.outputs.structure_output }}
   code_output:
     description: Full output of the code check
-    value: ${{ steps.code.outputs.output }}
+    value: ${{ steps.ci.outputs.code_output }}
   readme_output:
     description: Full output of the README check
-    value: ${{ steps.readme.outputs.output }}
+    value: ${{ steps.ci.outputs.readme_output }}
   version_output:
     description: Full output of the version check
-    value: ${{ steps.version.outputs.output }}
+    value: ${{ steps.ci.outputs.version_output }}
   tests_output:
     description: Full output of the test runner
-    value: ${{ steps.tests.outputs.output }}
+    value: ${{ steps.ci.outputs.tests_output }}
   comment_path:
     description: >
       Path to a file containing the rendered Markdown PR comment body.
@@ -65,7 +69,7 @@ outputs:
       separate workflow (e.g. workflow_run) — typically required for
       pull requests opened from forks, where the pull_request event
       runs with a read-only GITHUB_TOKEN.
-    value: ${{ steps.render.outputs.path }}
+    value: ${{ steps.ci.outputs.comment_path }}
 
 runs:
   using: composite
@@ -75,167 +79,57 @@ runs:
       with:
         python-version: ${{ inputs.python_version }}
 
-    - name: Install dev tools
+    - name: Install hiveup
       shell: bash
-      run: pip install -r ${{ github.action_path }}/requirements-dev.txt -q
+      env:
+        HIVEUP_ACTION_PATH: ${{ github.action_path }}
+      run: pip install "$HIVEUP_ACTION_PATH" -q
 
-    - name: Detect changed directories
-      id: detect
+    - name: Run hiveup CI validation
+      id: ci
+      continue-on-error: true
       shell: bash
+      env:
+        HIVEUP_BASE_REF: ${{ inputs.base_ref }}
+        HIVEUP_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        HIVEUP_DIRECTORIES: ${{ inputs.directories }}
+        HIVEUP_RUNNER_TEMP: ${{ runner.temp }}
       run: |
-        if [ -n "${{ inputs.directories }}" ]; then
-          echo "dirs=${{ inputs.directories }}" >> $GITHUB_OUTPUT
-        elif [ -n "${{ inputs.base_ref }}" ]; then
-          DIRS=$(python ${{ github.action_path }}/scripts/get_changed_dirs.py "${{ inputs.base_ref }}")
-          echo "dirs=$DIRS" >> $GITHUB_OUTPUT
-        else
+        set -euo pipefail
+        if [[ -z "$HIVEUP_DIRECTORIES" && -z "$HIVEUP_BASE_REF" ]]; then
           echo "::error::Either 'base_ref' or 'directories' input is required"
           exit 1
         fi
-        MSG=$(git log -1 --format=%s ${{ github.event.pull_request.head.sha }})
-        echo "commit_msg=$MSG" >> $GITHUB_OUTPUT
-
-    - name: Structure Check
-      id: structure
-      if: steps.detect.outputs.dirs != ''
-      continue-on-error: true
-      shell: bash
-      run: |
-        set +e
-        OUTPUT=$(python ${{ github.action_path }}/scripts/validate_integration.py ${{ steps.detect.outputs.dirs }} 2>&1)
-        EXIT_CODE=$?
-        echo "$OUTPUT"
-        echo 'output<<EOF' >> $GITHUB_OUTPUT
-        echo "$OUTPUT" >> $GITHUB_OUTPUT
-        echo 'EOF' >> $GITHUB_OUTPUT
-        if echo "$OUTPUT" | grep -q "⚠️"; then
-          echo "has_warnings=true" >> $GITHUB_OUTPUT
-        fi
-        exit $EXIT_CODE
-
-    - name: Code Check
-      id: code
-      if: steps.detect.outputs.dirs != ''
-      continue-on-error: true
-      shell: bash
-      run: |
-        set +e
         BASE_REF_ARGS=()
-        if [ -n "${{ inputs.base_ref }}" ]; then
-          BASE_REF_ARGS=(--base-ref "${{ inputs.base_ref }}")
+        if [[ -n "$HIVEUP_BASE_REF" ]]; then
+          BASE_REF_ARGS=(--base-ref "$HIVEUP_BASE_REF")
         fi
-        OUTPUT=$(python ${{ github.action_path }}/scripts/check_code.py "${BASE_REF_ARGS[@]}" ${{ steps.detect.outputs.dirs }} 2>&1)
-        EXIT_CODE=$?
-        echo "$OUTPUT"
-        echo 'output<<EOF' >> $GITHUB_OUTPUT
-        echo "$OUTPUT" >> $GITHUB_OUTPUT
-        echo 'EOF' >> $GITHUB_OUTPUT
-        if echo "$OUTPUT" | grep -q "⚠️"; then
-          echo "has_warnings=true" >> $GITHUB_OUTPUT
+        DIR_ARGS=()
+        if [[ -n "$HIVEUP_DIRECTORIES" ]]; then
+          read -r -a DIR_ARGS <<< "$HIVEUP_DIRECTORIES"
         fi
-        exit $EXIT_CODE
-
-    - name: Tests
-      id: tests
-      if: steps.detect.outputs.dirs != ''
-      continue-on-error: true
-      shell: bash
-      run: |
-        set +e
-        OUTPUT=$(python ${{ github.action_path }}/scripts/run_tests.py ${{ steps.detect.outputs.dirs }} 2>&1)
-        EXIT_CODE=$?
-        echo "$OUTPUT"
-        echo 'output<<EOF' >> $GITHUB_OUTPUT
-        echo "$OUTPUT" >> $GITHUB_OUTPUT
-        echo 'EOF' >> $GITHUB_OUTPUT
-        if echo "$OUTPUT" | grep -q "⚠️"; then
-          echo "has_warnings=true" >> $GITHUB_OUTPUT
-        fi
-        exit $EXIT_CODE
-
-    - name: README Check
-      id: readme
-      if: steps.detect.outputs.dirs != ''
-      continue-on-error: true
-      shell: bash
-      run: |
-        set +e
-        OUTPUT=$(python ${{ github.action_path }}/scripts/check_readme.py "${{ inputs.base_ref }}" ${{ steps.detect.outputs.dirs }} 2>&1)
-        EXIT_CODE=$?
-        echo "$OUTPUT"
-        echo 'output<<EOF' >> $GITHUB_OUTPUT
-        echo "$OUTPUT" >> $GITHUB_OUTPUT
-        echo 'EOF' >> $GITHUB_OUTPUT
-        if echo "$OUTPUT" | grep -q "⚠️"; then
-          echo "has_warnings=true" >> $GITHUB_OUTPUT
-        fi
-        exit $EXIT_CODE
-
-    - name: Version Check
-      id: version
-      if: steps.detect.outputs.dirs != '' && inputs.base_ref != ''
-      continue-on-error: true
-      shell: bash
-      run: |
-        set +e
-        OUTPUT=$(python ${{ github.action_path }}/scripts/check_version_bump.py "${{ inputs.base_ref }}" ${{ steps.detect.outputs.dirs }} 2>&1)
-        EXIT_CODE=$?
-        echo "$OUTPUT"
-        echo 'output<<EOF' >> $GITHUB_OUTPUT
-        echo "$OUTPUT" >> $GITHUB_OUTPUT
-        echo 'EOF' >> $GITHUB_OUTPUT
-        if echo "$OUTPUT" | grep -q "⚠️"; then
-          echo "has_warnings=true" >> $GITHUB_OUTPUT
-        fi
-        exit $EXIT_CODE
-
-    - name: Render comment markdown
-      id: render
-      if: always() && steps.detect.outputs.dirs != ''
-      shell: bash
-      env:
-        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        SERVER_URL: ${{ github.server_url }}
-        REPOSITORY: ${{ github.repository }}
-        COMMIT_MSG: ${{ steps.detect.outputs.commit_msg }}
-        UPDATED_AT: ${{ github.event.pull_request.updated_at }}
-        DIRS: ${{ steps.detect.outputs.dirs }}
-        STRUCTURE_OUTCOME: ${{ steps.structure.outcome }}
-        STRUCTURE_WARN: ${{ steps.structure.outputs.has_warnings }}
-        STRUCTURE_OUTPUT: ${{ steps.structure.outputs.output }}
-        CODE_OUTCOME: ${{ steps.code.outcome }}
-        CODE_WARN: ${{ steps.code.outputs.has_warnings }}
-        CODE_OUTPUT: ${{ steps.code.outputs.output }}
-        TESTS_OUTCOME: ${{ steps.tests.outcome }}
-        TESTS_WARN: ${{ steps.tests.outputs.has_warnings }}
-        TESTS_OUTPUT: ${{ steps.tests.outputs.output }}
-        README_OUTCOME: ${{ steps.readme.outcome }}
-        README_WARN: ${{ steps.readme.outputs.has_warnings }}
-        README_OUTPUT: ${{ steps.readme.outputs.output }}
-        VERSION_OUTCOME: ${{ steps.version.outcome }}
-        VERSION_WARN: ${{ steps.version.outputs.has_warnings }}
-        VERSION_OUTPUT: ${{ steps.version.outputs.output }}
-      run: |
-        set -euo pipefail
-        OUT="${{ runner.temp }}/validation-comment.md"
-        python "${{ github.action_path }}/scripts/render_comment.py" > "$OUT"
-        echo "path=$OUT" >> "$GITHUB_OUTPUT"
+        COMMENT_FILE="$HIVEUP_RUNNER_TEMP/validation-comment.md"
+        hiveup ci "${BASE_REF_ARGS[@]}" "${DIR_ARGS[@]}" \
+          --github-annotations \
+          --commit "$HIVEUP_COMMIT" \
+          --comment-file "$COMMENT_FILE" \
+          --output-file "$GITHUB_OUTPUT"
 
     - name: Delete stale PR comment
-      if: always() && steps.detect.outputs.dirs == '' && inputs.post_comment == 'true'
+      if: always() && steps.ci.outputs.directories == '' && steps.ci.outputs.comment_path == '' && inputs.post_comment == 'true'
       uses: marocchino/sticky-pull-request-comment@v2
       with:
-        header: validation-results
+        header: ${{ inputs.comment_header }}
         delete: true
 
     - name: Post PR comment
-      if: always() && steps.detect.outputs.dirs != '' && inputs.post_comment == 'true'
+      if: always() && steps.ci.outputs.comment_path != '' && inputs.post_comment == 'true'
       uses: marocchino/sticky-pull-request-comment@v2
       with:
-        header: validation-results
-        path: ${{ steps.render.outputs.path }}
+        header: ${{ inputs.comment_header }}
+        path: ${{ steps.ci.outputs.comment_path }}
 
     - name: Fail if any check failed
-      if: always() && (steps.structure.outcome == 'failure' || steps.code.outcome == 'failure' || steps.tests.outcome == 'failure' || steps.readme.outcome == 'failure' || steps.version.outcome == 'failure')
+      if: always() && steps.ci.outcome == 'failure'
       shell: bash
       run: exit 1

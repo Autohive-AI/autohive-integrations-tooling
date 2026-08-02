@@ -224,12 +224,4 @@ The recommendation is advisory — bumping at a lower level than recommended pro
 
 ## Integration with CI
 
-Called by the composite action in `action.yml`, **only during pull requests** when `base_ref` is provided:
-
-```yaml
-- name: Version Check
-  if: steps.detect.outputs.dirs != '' && inputs.base_ref != ''
-  run: python scripts/check_version_bump.py "${{ inputs.base_ref }}" ${{ steps.detect.outputs.dirs }}
-```
-
-This check is skipped when `base_ref` is not provided (e.g., when directories are specified manually without a base ref) since there is no base version to compare against.
+`action.yml` installs HiveUp and invokes `hiveup ci`. HiveUp's `version` check owns the version result group and compares each integration with the supplied base ref. When directories are not supplied, HiveUp also discovers changed integrations from that ref. The check is skipped when no base ref is provided because there is no base version to compare against.

@@ -4,7 +4,7 @@ Discovers and runs unit tests for integration directories, installing each integ
 
 ## Overview
 
-Each integration pins its own SDK version in `requirements.txt`. The test runner installs dependencies and runs pytest **per-integration** to ensure each integration is tested against its own pinned SDK version.
+Each integration pins its own SDK version in `requirements.txt`. The test runner prepares a cached, isolated environment and runs pytest **per integration** so each integration is tested against its own SDK and dependency pins.
 
 Integrations without `test_*_unit.py` files are skipped with a warning — they do not cause a failure.
 
@@ -68,9 +68,10 @@ flowchart TD
 2. For each directory, check for `test_*_unit.py` files in `tests/`
 3. Skip directories without unit tests (warn but don't fail)
 4. For each testable integration:
-   a. Install the integration's `requirements.txt` (includes its pinned SDK version)
-   b. Run pytest with `--import-mode=importlib`, `-m unit`, coverage enabled
-   c. Record pass or failure
+   a. Prepare or reuse an external environment from the integration's `requirements.txt`
+   b. Stage the deployment source allowlist plus the integration's `test/` or `tests/` tree
+   c. Run pytest with `--import-mode=importlib`, `-m unit`, coverage enabled
+   d. Record pass or failure
 5. Print summary of passed/failed integrations
 6. Exit 0 if all passed, 1 if any failed
 
@@ -81,7 +82,15 @@ Different integrations may pin different SDK versions. For example:
 - `bitly/requirements.txt` → `autohive-integrations-sdk~=1.0.2`
 - `notion/requirements.txt` → `autohive-integrations-sdk~=2.0.1`
 
-The test runner handles this by installing dependencies and running pytest separately for each integration. The last `pip install` overwrites the previous SDK version, which is why pytest must run immediately after each install.
+The test runner handles this with an external cached environment keyed by the
+integration path, requirements, Python interpreter, and test tooling. It never
+installs integration dependencies into HiveUp's own environment, and one
+integration cannot overwrite another integration's SDK version.
+
+The temporary test workspace contains the same production files accepted by
+deployment packaging, plus the complete root `test/` or `tests/` tree for test
+modules and fixtures. Unrelated root files and assets that packaging excludes
+(`*.zip`, `*.pyc`, and nested `requirements.txt`) are unavailable during tests.
 
 ### Test Discovery
 
@@ -144,12 +153,6 @@ See the integrations repo's `CONTRIBUTING.md` for full details on running both t
 
 ## Integration with CI
 
-Called by the composite action in `action.yml`:
-
-```yaml
-- name: Tests
-  if: steps.detect.outputs.dirs != ''
-  run: python scripts/run_tests.py ${{ steps.detect.outputs.dirs }}
-```
+`action.yml` installs HiveUp and invokes `hiveup ci`. HiveUp's `tests` check owns the tests result group and runs unit tests with isolated per-integration dependencies. When directories are not supplied, HiveUp discovers changed integrations from the supplied base ref; integration tests remain excluded from CI.
 
 The test infrastructure (`pyproject.toml`, `conftest.py`, `requirements-test.txt`) lives in the integrations repo — see its `CONTRIBUTING.md` for how to write and run tests locally.

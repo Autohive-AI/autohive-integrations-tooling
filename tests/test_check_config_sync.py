@@ -4,9 +4,9 @@ import sys
 from pathlib import Path
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from check_config_sync import check_config_sync, extract_actions_from_code  # noqa: E402
+from hiveup.checks.config_sync import check_config_sync, extract_actions_from_code  # noqa: E402
 
 
 def _write_entry_point(tmp_path: Path, source: str) -> Path:

@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hiveup"
+dynamic = ["version"]
+description = "Developer CLI for Autohive integrations"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+dependencies = [
+  "autohive-integrations-sdk~=2.0",
+  "bandit",
+  "pip-audit",
+  "pytest>=9.0",
+  "pytest-asyncio>=0.23",
+  "pytest-cov>=4.0",
+  "ruff",
+  "typer>=0.12",
+  "rich>=13.0",
+]
+
+[project.scripts]
+hiveup = "hiveup.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hiveup = ["data/ruff.toml"]
+
+[tool.setuptools.dynamic]
+version = { attr = "hiveup.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["examples", "sample-api"]

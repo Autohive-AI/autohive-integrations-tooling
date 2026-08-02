@@ -118,12 +118,4 @@ The `--diff-filter=A` flag is important: it only shows **A**dded files, not modi
 
 ## Integration with CI
 
-Called by the `validate-integration.yml` workflow, **only during pull requests**:
-
-```yaml
-- name: README Check
-  if: steps.detect.outputs.dirs != ''
-  run: python scripts/check_readme.py "origin/${{ github.base_ref }}" ${{ steps.detect.outputs.dirs }}
-```
-
-This check is skipped on direct pushes since there is no meaningful base ref to compare against for README changes.
+`action.yml` installs HiveUp and invokes `hiveup ci`. HiveUp's `readme` check owns the README result group and uses the supplied base ref to identify new integrations and repository README changes. When directories are not supplied, HiveUp also discovers changed integrations from that base ref. The check is skipped when no meaningful base ref is available.

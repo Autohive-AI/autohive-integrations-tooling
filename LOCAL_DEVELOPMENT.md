@@ -10,6 +10,7 @@ uv venv --python 3.13
 source .venv/bin/activate   # Linux/macOS
 # .venv\Scripts\activate    # Windows
 uv pip install -r requirements-dev.txt
+uv pip install -e .
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup instructions and project conventions.
@@ -21,29 +22,29 @@ When building an integration, run the checks in this order. This matches what CI
 ### 1. Validate structure and config
 
 ```bash
-python scripts/validate_integration.py my-integration
+hiveup check structure my-integration
 ```
 
 Run this **first** — it catches structural problems before you waste time on code quality checks. It validates:
 
 - Folder name is lowercase
-- All required files exist (`config.json`, `requirements.txt`, `README.md`, `icon.png`/`icon.svg`; `__init__.py` is required for single-file/package-style integrations and optional for modular integrations with `actions/`)
+- All required files exist (`config.json`, `requirements.txt`, `README.md`, and a PNG/JPG/JPEG icon; `__init__.py` is required for single-file/package-style integrations and optional for modular integrations with `actions/`)
 - `config.json` has the required fields and valid schema
 - `__init__.py` is minimal (only import + `__all__`)
 - `requirements.txt` includes `autohive-integrations-sdk~=2.0.1` or later in the SDK 2.x line
-- `tests/` folder has `__init__.py`, `context.py` or `conftest.py`, and at least one `test_*.py`
+- `tests/` folder has `__init__.py`, `context.py` or `conftest.py`, and at least one `test_*_unit.py`
 - Icon is exactly 512x512 pixels
 - OAuth scopes are actually used (heuristic)
 
 ### 2. Run all code quality checks
 
 ```bash
-python scripts/check_code.py my-integration
+hiveup validate my-integration
 ```
 
 This is the comprehensive check — it runs 10 steps in sequence:
 
-1. Installs your `requirements.txt` dependencies
+1. Prepares an isolated environment for your `requirements.txt` dependencies
 2. Checks Python syntax (`py_compile`)
 3. Verifies all imports resolve (`check_imports`)
 4. Validates all JSON files parse correctly
@@ -57,22 +58,33 @@ This is the comprehensive check — it runs 10 steps in sequence:
 When run with `--base-ref`, config/code input drift is still only a warning for integrations that already existed at that ref, but it fails for brand-new integrations. The base ref must be fetched locally:
 
 ```bash
-python scripts/check_code.py --base-ref origin/main my-integration
+hiveup validate --base-ref origin/main my-integration
 ```
+
+The same history policy applies to canonical unit-test filenames. Without a
+base ref, a missing `test_*_unit.py` file warns because HiveUp cannot determine
+whether the integration is new. With a resolvable base ref, existing
+integrations warn and new integrations fail. An unresolvable supplied ref is a
+processing error rather than being treated as evidence that the integration is
+new.
 
 ### 3. Fix common issues
 
 ```bash
-# Auto-fix lint issues
-ruff check --fix --config /path/to/autohive-integrations-tooling/ruff.toml my-integration
+# Apply the supported lint and format fixes, then validate again
+hiveup validate --fix my-integration
+```
 
-# Auto-format code
+For advanced standalone Ruff use:
+
+```bash
+ruff check --fix --config /path/to/autohive-integrations-tooling/ruff.toml my-integration
 ruff format --config /path/to/autohive-integrations-tooling/ruff.toml my-integration
 ```
 
 > **Note:** Point `--config` to `ruff.toml` in this tooling repo. If you're working inside the tooling repo, use `--config ruff.toml`. If your integration lives in a separate repo, use the full path to the tooling repo's `ruff.toml`.
 
-Then re-run `check_code.py` to confirm everything passes.
+Then re-run `hiveup validate` to confirm everything passes.
 
 ## Running Individual Tools
 
@@ -91,29 +103,28 @@ python scripts/check_imports.py --verify-names my-integration/my_integration.py
 ### Check config-code sync only
 
 ```bash
-python scripts/check_config_sync.py my-integration
+hiveup check sync my-integration
 
 # Fail input drift when this is a brand-new integration compared with the base ref
-python scripts/check_config_sync.py --base-ref origin/main my-integration
+hiveup check sync --base-ref origin/main my-integration
 ```
 
 Useful when you've added or renamed actions and want to verify `config.json` matches your `@action` decorators and `inputs` access patterns. Action mismatches always fail. Input drift warns for existing integrations, and fails for new integrations when `--base-ref` is provided. Renamed integration directories are treated as existing when git rename detection can match their `config.json` to the previous path.
 
 ### Check multiple integrations
 
-All scripts accept multiple directories:
+HiveUp validation commands accept multiple directories:
 
 ```bash
-python scripts/validate_integration.py integration-a integration-b
-python scripts/check_code.py integration-a integration-b
-python scripts/check_config_sync.py integration-a integration-b
+hiveup validate integration-a integration-b
+hiveup check sync integration-a integration-b
 ```
 
 ### Auto-discover all integrations
 
 ```bash
 # Validates every integration folder at the repo root
-python scripts/validate_integration.py
+hiveup validate
 ```
 
 ### Check what CI would check on your branch
@@ -122,26 +133,21 @@ python scripts/validate_integration.py
 # See which integration dirs changed compared to main
 python scripts/get_changed_dirs.py origin/main
 
-# Run the full CI pipeline locally against those dirs
-DIRS=$(python scripts/get_changed_dirs.py origin/main)
-python scripts/validate_integration.py $DIRS
-python scripts/check_code.py --base-ref origin/main $DIRS
-python scripts/check_readme.py origin/main $DIRS
-python scripts/check_version_bump.py origin/main $DIRS
+# Run the canonical changed-integration profile locally
+hiveup validate --changed --base-ref origin/main
 ```
 
 ## Typical Iteration Cycle
 
 ```
 1. Edit code
-2. ruff format --config path/to/ruff.toml my-integration   (auto-format)
-3. ruff check --fix --config path/to/ruff.toml my-integration  (auto-fix lint)
-4. python scripts/check_code.py my-integration            (full check)
-5. Fix any remaining issues
-6. Repeat from 1
+2. hiveup validate --fix my-integration   (auto-fix lint and formatting)
+3. hiveup validate my-integration         (full check)
+4. Fix any remaining issues
+5. Repeat from 1
 ```
 
-Once everything passes, run `validate_integration.py` for a final structure check before pushing.
+Once everything passes, run `hiveup validate` for a final check before pushing.
 
 ## Running Tests
 
@@ -150,8 +156,8 @@ Unit tests and integration tests are run separately. See the integrations repo's
 ### Unit tests (CI + local)
 
 ```bash
-# Via the tooling runner (installs deps per-integration, runs with coverage)
-python scripts/run_tests.py my-integration
+# Via HiveUp (installs deps per-integration, runs with coverage)
+hiveup test my-integration
 
 # Or directly via pytest (from the integrations repo root)
 pytest my-integration/
@@ -171,18 +177,17 @@ They are excluded from auto-discovery by two mechanisms:
 
 ## What CI Runs on Your PR
 
-The `validate-integration.yml` workflow uses the composite action defined in `action.yml` to run these checks on every PR:
+The `validate-integration.yml` workflow uses `action.yml`, which installs HiveUp and invokes `hiveup ci`. HiveUp discovers changed integrations from the base ref and reports five groups:
 
-| Step | Script | What It Does |
-|------|--------|-------------|
-| 1 | `get_changed_dirs.py` | Detects which integration folders changed |
-| 2 | `validate_integration.py` | Structure and config validation |
-| 3 | `check_code.py` | Syntax, imports, JSON, lint, format, security, deps, config sync, fetch pattern checks |
-| 4 | `run_tests.py` | Installs each integration's deps, runs `test_*_unit.py` files (unit tests only) |
-| 5 | `check_readme.py` | Checks that the main README.md was updated for new integrations |
-| 6 | `check_version_bump.py` | Checks that config.json version was incremented, recommends bump level |
+| Result group | HiveUp checks | What It Does |
+|--------------|---------------|--------------|
+| Structure | `structure` | Structure and config validation |
+| Code | `syntax`, `imports`, `json`, `lint`, `format`, `security`, `audit`, `sync`, `fetch` | Compilation, imports, JSON, Ruff, security, dependencies, config sync, and fetch patterns |
+| Tests | `tests` | Installs isolated dependencies and runs unit tests |
+| README | `readme` | Checks that the repository README was updated for new integrations |
+| Version | `version` | Checks that config.json version increased and recommends a bump level |
 
-If no integration directories changed (only `scripts/`, `tests/`, etc.), steps 2–6 are skipped.
+If no integration directories changed (only tooling or test infrastructure changed), all five groups are skipped.
 
 Results are posted as a sticky PR comment showing ✅ Passed, ⚠️ Passed with warnings, or ❌ Failed for each check.
 

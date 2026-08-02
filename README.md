@@ -41,15 +41,12 @@ flowchart TB
 
     subgraph wf1["validate-integration.yml"]
         ACTION["action.yml (composite action)"]
-        ACTION --> GCD[get_changed_dirs.py]
-        GCD -->|dirs| COND{dirs empty?}
+        ACTION --> INSTALL["Install HiveUp"]
+        INSTALL --> CI["hiveup ci"]
+        CI -->|discover changed dirs from base ref| COND{dirs empty?}
         COND -->|Yes| SKIP[Skip all checks]
-        COND -->|No| VI[validate_integration.py]
-        VI --> CC[check_code.py]
-        CC --> RT[run_tests.py]
-        RT --> CR[check_readme.py]
-        CR --> VB[check_version_bump.py]
-        VB --> CMT_POST[Post PR comment]
+        COND -->|No| GROUPS["Five result groups:<br/>structure · code · tests · readme · version"]
+        GROUPS --> CMT_POST[Post PR comment]
     end
 
     subgraph wf2["self-test.yml"]
@@ -73,16 +70,17 @@ flowchart TB
     EXT -.-> ACTION
 ```
 
-**What each step checks:**
+**What each HiveUp result group owns:**
 
-| Step | Script | Checks |
-|------|--------|--------|
-| Detect changes | `get_changed_dirs.py` | `git diff` → extract top-level dirs, filter out `.github`, `scripts`, `tests` |
-| Structure check | `validate_integration.py` | Folder name, required files, config.json schema, `__init__.py`, requirements.txt, tests/, icon size, unused scopes |
-| Code check | `check_code.py` | pip install, py_compile, check_imports, JSON validity, ruff check, ruff format, bandit, pip-audit, check_config_sync, check_fetch_pattern |
-| Tests | `run_tests.py` | Installs each integration's dependencies, then discovers and runs `test_*_unit.py` files with pytest per-integration. Warns (does not fail) if no unit tests exist |
-| README check | `check_readme.py` | New integration files added → was README.md also updated? |
-| Version check | `check_version_bump.py` | Version in config.json incremented? Recommends major/minor/patch based on config and code changes |
+| Result group | HiveUp checks | Checks |
+|--------------|---------------|--------|
+| Structure | `structure` | Folder name, required files, config.json schema, `__init__.py`, requirements.txt, tests/, icon size, unused scopes ([legacy script details](scripts/docs/validate_integration.md)) |
+| Code | `syntax`, `imports`, `json`, `lint`, `format`, `security`, `audit`, `sync`, `fetch` | Isolated dependency and import validation, compilation, JSON validity, Ruff, Bandit, pip-audit, config sync, and fetch-response patterns ([legacy code-check details](scripts/docs/check_code.md)) |
+| Tests | `tests` | Runs each integration's `test_*_unit.py` files with pytest and isolated dependencies; warns if none exist ([legacy runner details](scripts/docs/run_tests.md)) |
+| README | `readme` | For a new integration, checks that the repository README was updated ([legacy check details](scripts/docs/check_readme.md)) |
+| Version | `version` | Checks that config.json version increased and recommends a bump level ([legacy check details](scripts/docs/check_version_bump.md)) |
+
+When directories are not supplied, `hiveup ci` discovers changed integration directories from `base_ref`; the legacy discovery behavior is documented [here](scripts/docs/get_changed_dirs.md).
 
 ## Usage as GitHub Action
 
@@ -121,6 +119,7 @@ jobs:
 | `directories` | No* | — | Space-separated list of directories to validate (skips auto-detection) |
 | `python_version` | No | `3.13` | Python version to use |
 | `post_comment` | No | `true` | Post a sticky PR comment with results |
+| `comment_header` | No | `validation-results` | Header used to identify the sticky PR comment |
 
 \* Either `base_ref` or `directories` must be provided.
 
@@ -129,11 +128,11 @@ jobs:
 | Output | Description |
 |--------|-------------|
 | `directories` | Space-separated list of validated directories |
-| `structure_result` | `success` or `failure` |
-| `code_result` | `success` or `failure` |
-| `tests_result` | `success` or `failure` |
-| `readme_result` | `success` or `failure` |
-| `version_result` | `success` or `failure` |
+| `structure_result` | `success`, `failure`, or `skipped` |
+| `code_result` | `success`, `failure`, or `skipped` |
+| `tests_result` | `success`, `failure`, or `skipped` |
+| `readme_result` | `success`, `failure`, or `skipped` |
+| `version_result` | `success`, `failure`, or `skipped` |
 | `structure_output` | Full output of the structure check |
 | `code_output` | Full output of the code check |
 | `tests_output` | Full output of the test runner |
@@ -156,9 +155,100 @@ For example, `2.1.0` means "the second tooling release for SDK v2" — it does n
 | `2.0.0` | Initial tooling release for SDK v2 |
 | `2.1.0` | New checks or features (still SDK v2) |
 | `2.1.1` | Bug-fix to the tooling (still SDK v2) |
+| `2.4.0a1` | First Python HiveUp rewrite prerelease after tooling `2.3.0` |
 | `3.0.0` | Tooling targeting SDK v3 |
 
-## Setup
+The Python distribution, import package, and executable are all named `hiveup`.
+`src/hiveup/__init__.py` is the single package-version source; build metadata
+reads the version from there.
+
+## Install HiveUp from a local build
+
+HiveUp is currently distributed as a local prerelease build. It is **not
+published to PyPI**. PyPI Trusted Publishing is deferred to
+[issue #50](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/50).
+
+Build the wheel and source distribution:
+
+```bash
+git clone https://github.com/Autohive-AI/autohive-integrations-tooling.git
+cd autohive-integrations-tooling
+
+uv python install 3.13
+uv venv --python 3.13
+source .venv/bin/activate   # Linux/macOS
+# .venv\Scripts\activate    # Windows
+uv pip install -r requirements-dev.txt
+python -m build
+python -m twine check dist/*
+```
+
+Install the resulting wheel as an isolated command-line tool:
+
+```bash
+uv tool install --force ./dist/hiveup-2.4.0a1-py3-none-any.whl
+hiveup --version
+```
+
+`pipx` is also supported:
+
+```bash
+pipx install --force ./dist/hiveup-2.4.0a1-py3-none-any.whl
+```
+
+Rebuild and repeat the `--force` installation to upgrade a local prerelease.
+To remove it:
+
+```bash
+uv tool uninstall hiveup
+# or: pipx uninstall hiveup
+```
+
+Pull-request CI builds both `hiveup-2.4.0a1-py3-none-any.whl` and
+`hiveup-2.4.0a1.tar.gz`, verifies their metadata, installs the wheel outside the
+source checkout, exercises the supported CLI lifecycle, and uploads them as a
+GitHub Actions artifact. It does not publish either file.
+
+### Compatibility
+
+| Component | Supported contract |
+|-----------|--------------------|
+| Python running HiveUp | Python 3.13+ |
+| Integration SDK | SDK 2.x (`autohive-integrations-sdk~=2.0`) |
+| Deployment dependencies | CPython 3.13 wheels for `manylinux2014_x86_64` |
+| Integration icons | Exactly one regular, non-symlink PNG, JPG, or JPEG; exactly 512×512 |
+| Integration entry point | Root-level `.py` file with a valid, non-keyword identifier stem and `<module> = Integration.load(...)` |
+| Reserved runtime file | `main.py` may not be an integration entry point |
+
+### Migrating from the .NET HiveUp tool
+
+The Python rewrite preserves the established command name and parity surface:
+
+| .NET command | Python command |
+|--------------|----------------|
+| `hiveup create` | `hiveup create` |
+| `hiveup init` | `hiveup init` |
+| `hiveup validate` | `hiveup validate` |
+| `hiveup auth` | `hiveup auth` |
+| `hiveup package` | `hiveup package` |
+| `hiveup list-templates` | Removed; the Python rewrite currently has one SDK-aligned scaffold |
+
+The Python CLI also provides focused `check`, isolated `test`, CI, and `doctor`
+commands. Local action execution is not part of .NET parity and is tracked in
+[issue #49](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/49).
+
+After installing the local wheel, the old global .NET tool can be removed when
+the developer is ready:
+
+```bash
+dotnet tool uninstall --global Autohive.Integrations.Cli
+```
+
+Legacy validation entry points under `scripts/` remain available as compatibility
+paths, but new local workflows should use `hiveup validate`, `hiveup check`, and
+`hiveup test` directly.
+
+## Repository development setup
 
 ```bash
 uv python install 3.13
@@ -166,26 +256,84 @@ uv venv --python 3.13
 source .venv/bin/activate   # Linux/macOS
 # .venv\Scripts\activate    # Windows
 uv pip install -r requirements-dev.txt
+uv pip install -e .
 ```
+
+## HiveUp scaffolding (prerelease)
+
+Create a public integration, or initialize the current directory:
+
+```bash
+hiveup create my-integration
+mkdir my-integration && cd my-integration
+hiveup init --name "My Integration"
+```
+
+Custom auth generates an editable API-key starter schema. Platform auth requires an explicit provider; scopes are optional:
+
+```bash
+hiveup create my-integration --auth-type custom
+hiveup create my-integration \
+  --auth-type platform \
+  --auth-provider github \
+  --auth-scopes repo,read:user
+```
+
+Authentication edits are always explicit. Existing compatible custom schemas and platform metadata are preserved:
+
+```bash
+hiveup auth my-integration --auth-type custom
+hiveup auth my-integration --auth-type platform --auth-provider github --auth-scopes repo
+hiveup auth my-integration --auth-type none
+```
+
+`create` and `init` refuse non-empty directories by default. `--force` uses per-file atomic replacement with rollback for scaffold-owned files, preserves other developer files, and rejects symlinked targets or scaffold paths.
+
+`hiveup package` produces a root-layout deployment ZIP containing Python source,
+`config.json`, the single validated icon, deliberate runtime files under
+`assets/` or `fonts/`, and generated `dependencies/`. It uses
+`requirements.txt` to stage dependencies but does not ship it. Hidden files,
+tests, development directories, symlinks, bytecode, nested requirements files,
+and ZIP files are excluded. Package outputs must use a `.zip` extension and may
+not overwrite integration source; default output names are built only from
+filename-safe `config.name` and `config.version` values. Use `--output` to select
+another destination explicitly.
 
 ## Local Testing
 
 ```bash
 # Validate structure and config
-python scripts/validate_integration.py my-integration
+hiveup check structure my-integration
 
 # Run code quality checks (syntax, imports, JSON, lint, format, security, deps, config sync, fetch pattern)
-python scripts/check_code.py my-integration
+hiveup validate my-integration
+
+# Machine-readable output, or apply supported Ruff lint/format fixes
+hiveup validate --json my-integration
+hiveup validate --fix my-integration
+
+# Select checks by name
+hiveup validate --skip tests,audit my-integration
+hiveup validate --only structure,sync my-integration
 
 # In PR/CI mode, pass a base ref so config/input drift fails for brand-new integrations
-python scripts/check_code.py --base-ref origin/main my-integration
+hiveup validate --base-ref origin/main my-integration
 
-# Check all imports in a file
-python scripts/check_imports.py my-integration/main.py
+# Check integration imports only
+hiveup check imports my-integration
 
 # Validate all integrations (auto-discovers at repo root)
-python scripts/validate_integration.py
+hiveup validate
 ```
+
+Without a base ref, HiveUp cannot distinguish a new integration from an
+existing one, so a missing canonical `test_*_unit.py` file is reported as a
+warning for compatibility. With a resolvable base ref it remains a warning for
+existing integrations and fails for new integrations. A supplied but
+unresolvable ref is a processing error; fetch the ref before validating.
+
+Legacy script commands remain available as compatibility interfaces while
+integrations and external workflows migrate to HiveUp.
 
 ### Running unit tests
 
@@ -193,13 +341,13 @@ The test runner discovers `test_*_unit.py` files and runs them with pytest and c
 
 ```bash
 # Run unit tests for specific integrations
-python scripts/run_tests.py my-integration
+hiveup test my-integration
 
 # Run unit tests for multiple integrations
-python scripts/run_tests.py hackernews bitly notion
+hiveup test hackernews bitly notion
 
 # Run unit tests for all integrations (auto-discovers)
-python scripts/run_tests.py
+hiveup test
 ```
 
 Integrations without `test_*_unit.py` files are skipped with a warning.
@@ -207,6 +355,18 @@ Integrations without `test_*_unit.py` files are skipped with a warning.
 > **Note:** This script only runs unit tests. Integration tests (`test_*_integration.py`) require real API credentials and are run locally by developers — never in CI. See the integrations repo's `CONTRIBUTING.md` for details.
 
 The test infrastructure (`pyproject.toml`, `conftest.py`, `requirements-test.txt`) lives in the integrations repo — see its `CONTRIBUTING.md` for how to write and run tests locally.
+
+### Dependency isolation and caching
+
+HiveUp resolves imports and runs unit tests in a separate virtual environment for each integration and dependency profile. An integration pinned to an older SDK or dependency version therefore cannot change the packages used by HiveUp or another integration. The isolated test workspace mirrors deployed runtime files, then adds the integration's `test/` or `tests/` tree for test code and fixtures. Production tests therefore cannot pass by reading an undeclared root file that packaging would omit.
+
+Prepared environments are reused until the integration path, `requirements.txt` contents, Python interpreter/version, or required test tooling changes. HiveUp prefers `uv` for environment creation and package installation when it is available, and otherwise falls back to the standard-library `venv` module and pip. Cache entries unused for 30 days are removed automatically.
+
+The cache is stored outside integration directories:
+
+- Linux/macOS: `${XDG_CACHE_HOME:-~/.cache}/hiveup/envs`
+- Windows: `%LOCALAPPDATA%\hiveup\envs`
+- Override for local development and CI: set `HIVEUP_CACHE_DIR` (environments are stored in its `envs` subdirectory)
 
 ## Integration Requirements
 
@@ -218,8 +378,8 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 - `__init__.py` - Package init (minimal, optional for modular integrations with `actions/`)
 - `requirements.txt` - Dependencies (must include `autohive-integrations-sdk~=2.0.1` or later in the SDK 2.x line)
 - `README.md` - Documentation
-- `icon.png` or `icon.svg` - Integration icon (512x512 pixels)
-- `tests/` - Test folder with `__init__.py`, `context.py` or `conftest.py`, and `test_*.py`
+- `icon.png`, `icon.jpg`, or `icon.jpeg` - Integration icon (512x512 pixels)
+- `tests/` - Test folder with `__init__.py`, `context.py` or `conftest.py`, and `test_*_unit.py`
 
 ## Integrations
 
