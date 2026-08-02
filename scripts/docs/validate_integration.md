@@ -158,7 +158,14 @@ Allowed patterns:
 | `tests/context.py` or `tests/conftest.py` exists | Error | Test import/fixture setup (either one satisfies this check) |
 | `tests/test_*_unit.py` exists | Error | At least one discoverable unit test file |
 
-### 7. Main Python File (`_check_main_python_file`)
+### 7. Deployment Symlinks (`_check_deployment_symlinks`)
+
+Rejects source and runtime-asset symlinks that deployment packaging cannot
+include. Symlinks inside explicitly excluded development directories are
+ignored. This keeps validation, isolated tests, and deployment archives aligned
+without dereferencing content from outside the integration.
+
+### 8. Main Python File (`_check_main_python_file`)
 
 Inspects all `.py` files in the integration directory (not just the entry point) for expected patterns. This supports modular integrations where action handlers are split across multiple files.
 
@@ -169,13 +176,6 @@ Inspects all `.py` files in the integration directory (not just the entry point)
 | `Integration.load(...)` called | Warning | Standard loading pattern, with or without an explicit config path |
 
 > **Note:** Action decorator matching (config ↔ code) is handled by `check_config_sync.py`, which uses AST parsing for more accurate bidirectional validation.
-
-### 8. Deployment Symlinks (`_check_deployment_symlinks`)
-
-Rejects source and runtime-asset symlinks that deployment packaging cannot
-include. Symlinks inside explicitly excluded development directories are
-ignored. This keeps validation, isolated tests, and deployment archives aligned
-without dereferencing content from outside the integration.
 
 ### 9. Unused Scopes Detection (`_check_unused_scopes`)
 
@@ -199,8 +199,8 @@ flowchart TD
     E --> F[Check __init__.py minimality]
     F --> G[Check requirements.txt]
     G --> H[Check tests/ folder]
-    H --> I[Check main Python file]
-    I --> J[Reject deployment symlinks]
+    H --> I[Reject deployment symlinks]
+    I --> J[Check main Python file]
     J --> K[Check for unused scopes]
     K --> L[Print results]
     L --> B
