@@ -30,7 +30,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from hiveup.core.deployment import is_excluded_development_path
+from hiveup.core.deployment import is_deployment_source, is_excluded_development_path
 from hiveup.core.discovery import is_ignored_top_level_dir
 from hiveup.core.environment import EnvironmentBuildError, IntegrationEnvironment, prepare_environment
 
@@ -97,25 +97,27 @@ def _run_integration_tests(
             if source.is_file():
                 shutil.copyfile(source, temporary_root / filename)
         test_root = temporary_root / integration_dir.name
-        shutil.copytree(
-            integration_dir,
-            test_root,
-            ignore=lambda path, names: _test_stage_ignored(path, names, integration_dir),
-        )
+        _stage_test_workspace(integration_dir, test_root)
         if not integration_dir.name.isidentifier() and (test_root / "__init__.py").is_file():
             (test_root / "__init__.py").unlink()
         staged_tests = [test_root / test_file.relative_to(integration_dir) for test_file in test_files]
         return _execute_tests(environment, test_root, staged_tests)
 
 
-def _test_stage_ignored(path: str, names: list[str], integration_dir: Path) -> set[str]:
-    parent = Path(path).relative_to(integration_dir)
-    ignored = set()
-    for name in names:
-        relative = parent / name
-        if relative.parts[0] not in {"test", "tests"} and is_excluded_development_path(relative):
-            ignored.add(name)
-    return ignored
+def _stage_test_workspace(integration_dir: Path, test_root: Path) -> None:
+    test_root.mkdir()
+    for source in integration_dir.rglob("*"):
+        relative = source.relative_to(integration_dir)
+        if relative.parts[0] in {"test", "tests"}:
+            if source.is_file():
+                destination = test_root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, destination)
+            continue
+        if source.is_file() and not source.is_symlink() and is_deployment_source(relative):
+            destination = test_root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
 
 
 def _execute_tests(

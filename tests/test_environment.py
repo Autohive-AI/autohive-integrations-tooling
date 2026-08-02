@@ -565,6 +565,40 @@ def test_integration_tests_stage_nested_build_package_but_not_root_build(
     assert test_checks._run_integration_tests(isolated, integration, [test_file]) == (0, "")
 
 
+def test_integration_tests_stage_only_deployment_sources_and_test_fixtures(
+    tmp_path: Path, monkeypatch
+) -> None:
+    integration = tmp_path / "selected"
+    test_file = integration / "tests" / "test_selected_unit.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.touch()
+    (integration / "tests" / "fixtures").mkdir()
+    (integration / "tests" / "fixtures" / "data.json").write_text("{}\n", encoding="utf-8")
+    (integration / "selected.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (integration / "config.json").write_text("{}\n", encoding="utf-8")
+    (integration / "assets").mkdir()
+    (integration / "assets" / "schema.json").write_text("{}\n", encoding="utf-8")
+    (integration / "data.json").write_text("{}\n", encoding="utf-8")
+    (integration / "credentials.json").write_text("{}\n", encoding="utf-8")
+    (integration / "private.pem").write_text("secret\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "cache", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(test_checks, "_stage_sdk_config", lambda *args: None)
+
+    def inspect_stage(selected, staged, tests):
+        assert (staged / "selected.py").is_file()
+        assert (staged / "config.json").is_file()
+        assert (staged / "assets" / "schema.json").is_file()
+        assert (staged / "tests" / "fixtures" / "data.json").is_file()
+        assert not (staged / "data.json").exists()
+        assert not (staged / "credentials.json").exists()
+        assert not (staged / "private.pem").exists()
+        return 0, ""
+
+    monkeypatch.setattr(test_checks, "_execute_tests", inspect_stage)
+
+    assert test_checks._run_integration_tests(isolated, integration, [test_file]) == (0, "")
+
+
 def test_test_check_reports_isolated_environment_failure(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     tests_dir = integration / "tests"
