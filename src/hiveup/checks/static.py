@@ -75,6 +75,7 @@ def check_structure(path: Path, *, base_ref: str | None = None) -> CheckResult:
 def check_syntax(path: Path) -> CheckResult:
     start = time.perf_counter()
     messages: list[CheckMessage] = []
+    processing_error = False
     for pyfile in _python_files(path):
         try:
             compile(pyfile.read_bytes(), str(pyfile), "exec", dont_inherit=True)
@@ -87,7 +88,18 @@ def check_syntax(path: Path) -> CheckResult:
                     fix_hint="Run: python -m py_compile <file.py>",
                 )
             )
-    return _result("syntax", path, _status_from_messages(messages), messages, start)
+        except OSError as exc:
+            processing_error = True
+            messages.append(
+                CheckMessage(
+                    "error",
+                    f"Could not read Python source: {exc}",
+                    file=_relative(pyfile),
+                    fix_hint="Check that the file exists and is readable.",
+                )
+            )
+    status = "error" if processing_error else _status_from_messages(messages)
+    return _result("syntax", path, status, messages, start)
 
 
 def check_imports_all(path: Path) -> CheckResult:

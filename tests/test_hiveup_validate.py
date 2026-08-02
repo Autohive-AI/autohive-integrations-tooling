@@ -144,6 +144,27 @@ def test_syntax_check_honors_python_encoding_cookie(tmp_path: Path) -> None:
     assert not list(integration.rglob("*.pyc"))
 
 
+def test_syntax_check_reports_unreadable_source_as_processing_error(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    locked = integration / "locked.py"
+    locked.touch()
+    read_bytes = Path.read_bytes
+
+    def deny_locked_file(path: Path) -> bytes:
+        if path == locked:
+            raise PermissionError(13, "Permission denied", str(path))
+        return read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", deny_locked_file)
+
+    report = check_syntax(integration)
+
+    assert report.status == "error"
+    assert report.messages[0].file is not None and report.messages[0].file.endswith("locked.py")
+    assert "Could not read Python source: [Errno 13] Permission denied" in report.messages[0].message
+
+
 def test_validate_reports_config_sync_failures() -> None:
     report = run_validation([EXAMPLES / "config-mismatch"], only={"sync"})
 
