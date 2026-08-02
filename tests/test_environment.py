@@ -401,6 +401,29 @@ def test_import_check_allows_relative_import_within_test_source(tmp_path: Path, 
     assert report.status == "passed"
 
 
+@pytest.mark.parametrize("sibling_kind", ["module", "package"])
+def test_import_check_rejects_relative_import_outside_integration(
+    tmp_path: Path, monkeypatch, sibling_kind: str
+) -> None:
+    integration = tmp_path / "selected"
+    integration.mkdir()
+    (integration / "selected.py").write_text("from ..shared import VALUE\n", encoding="utf-8")
+    if sibling_kind == "module":
+        (tmp_path / "shared.py").write_text("VALUE = 1\n", encoding="utf-8")
+    else:
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        (shared / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(static, "module_available", lambda *args: False)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "failed"
+    assert report.messages[0].message == "Missing module: ..shared"
+
+
 def test_import_check_resolves_modules_beside_test_file(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     tests_dir = integration / "tests"

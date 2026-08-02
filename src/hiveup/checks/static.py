@@ -466,24 +466,24 @@ def _is_relative_import_available(
     base = pyfile.parent
     for _ in range(level - 1):
         base = base.parent
+    if not base.is_relative_to(integration_path):
+        return False
 
     allow_test_source = _allows_test_source(pyfile, integration_path)
     if module:
         target = base.joinpath(*module.split("."))
+        if not target.is_relative_to(integration_path):
+            return False
         return _module_path_exists(
             target,
             integration_root=integration_path,
             allow_test_source=allow_test_source,
         )
 
-    return all(
-        _module_path_exists(
-            base / name,
-            integration_root=integration_path,
-            allow_test_source=allow_test_source,
-        )
-        for name in names
-        if name != "*"
+    targets = [base / name for name in names if name != "*"]
+    return all(target.is_relative_to(integration_path) for target in targets) and all(
+        _module_path_exists(target, integration_root=integration_path, allow_test_source=allow_test_source)
+        for target in targets
     )
 
 
