@@ -7,7 +7,6 @@ import ast
 import io
 import importlib.resources
 import json
-import py_compile
 import subprocess
 import sys
 import time
@@ -78,12 +77,12 @@ def check_syntax(path: Path) -> CheckResult:
     messages: list[CheckMessage] = []
     for pyfile in _python_files(path):
         try:
-            py_compile.compile(str(pyfile), doraise=True)
-        except py_compile.PyCompileError as exc:
+            compile(pyfile.read_bytes(), str(pyfile), "exec", dont_inherit=True)
+        except SyntaxError as exc:
             messages.append(
                 CheckMessage(
                     "error",
-                    exc.msg,
+                    str(exc),
                     file=_relative(pyfile),
                     fix_hint="Run: python -m py_compile <file.py>",
                 )

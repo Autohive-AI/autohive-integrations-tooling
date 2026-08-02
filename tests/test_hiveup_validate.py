@@ -19,7 +19,7 @@ import hiveup.cli as cli  # noqa: E402
 from hiveup.cli import _emit_github_annotations, _report_dirs, _write_github_outputs, app, run_validation  # noqa: E402
 from hiveup import __version__  # noqa: E402
 from hiveup.checks.readme import check_readme  # noqa: E402
-from hiveup.checks.static import _legacy_check  # noqa: E402
+from hiveup.checks.static import _legacy_check, check_syntax  # noqa: E402
 from hiveup.checks.structure import (  # noqa: E402
     ENTRY_POINT_IDENTIFIER_MESSAGE,
     RESERVED_ENTRY_POINT_MESSAGE,
@@ -109,6 +109,29 @@ def test_validate_static_checks_pass_good_integration() -> None:
         ("sync", "passed"),
         ("fetch", "passed"),
     }
+
+
+def test_syntax_check_does_not_write_bytecode(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    report = check_syntax(integration)
+
+    assert report.status == "passed"
+    assert not (integration / "__pycache__").exists()
+    assert not list(integration.rglob("*.pyc"))
+
+
+def test_syntax_check_honors_python_encoding_cookie(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    integration.mkdir()
+    (integration / "demo.py").write_bytes(b"# -*- coding: latin-1 -*-\nVALUE = 'caf\xe9'\n")
+
+    report = check_syntax(integration)
+
+    assert report.status == "passed"
+    assert not list(integration.rglob("*.pyc"))
 
 
 def test_validate_reports_config_sync_failures() -> None:
