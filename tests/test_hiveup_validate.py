@@ -1099,6 +1099,30 @@ def test_structure_entry_point_export_check_does_not_execute_code(tmp_path: Path
     assert not marker.exists()
 
 
+def test_package_reports_malformed_config_when_validation_is_skipped(tmp_path: Path) -> None:
+    integration = _integration_with_entry_point(tmp_path / "malformed-config", "demo.py")
+    (integration / "config.json").write_text("{", encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 2
+    assert "Could not read config.json:" in result.output
+    assert result.exception is not None
+    assert not isinstance(result.exception, json.JSONDecodeError)
+
+
+@pytest.mark.parametrize("config", [[], None, "text"])
+def test_package_rejects_non_object_config_when_validation_is_skipped(tmp_path: Path, config: object) -> None:
+    integration = _integration_with_entry_point(tmp_path / "non-object-config", "demo.py")
+    (integration / "config.json").write_text(json.dumps(config), encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 2
+    assert "config.json must contain a JSON object" in result.output
+    assert not isinstance(result.exception, AttributeError)
+
+
 def test_package_rejects_reserved_entry_point_when_validation_is_skipped(tmp_path: Path) -> None:
     integration = _integration_with_entry_point(tmp_path / "reserved-package", "main.py")
 

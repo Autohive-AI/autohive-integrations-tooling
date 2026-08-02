@@ -267,7 +267,14 @@ def package(
     if not config_path.is_file():
         typer.echo(f"config.json not found: {config_path}", err=True)
         raise typer.Exit(2)
-    config = json.loads(config_path.read_text(encoding="utf-8"))
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, UnicodeError) as exc:
+        typer.echo(f"Could not read config.json: {exc}", err=True)
+        raise typer.Exit(2)
+    if not isinstance(config, dict):
+        typer.echo("config.json must contain a JSON object", err=True)
+        raise typer.Exit(2)
     if is_reserved_entry_point(config.get("entry_point")):
         typer.echo(RESERVED_ENTRY_POINT_MESSAGE, err=True)
         raise typer.Exit(2)
