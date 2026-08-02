@@ -634,6 +634,34 @@ def test_integration_tests_stage_only_deployment_sources_and_test_fixtures(
     assert test_checks._run_integration_tests(isolated, integration, [test_file]) == (0, "")
 
 
+def test_integration_tests_omit_asset_files_excluded_from_deployment(
+    tmp_path: Path, monkeypatch
+) -> None:
+    integration = tmp_path / "selected"
+    test_file = integration / "tests" / "test_selected_unit.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.touch()
+    assets = integration / "assets"
+    assets.mkdir()
+    (assets / "schema.json").write_text("{}\n", encoding="utf-8")
+    (assets / "runtime.zip").write_bytes(b"archive")
+    (assets / "cache.pyc").write_bytes(b"bytecode")
+    (assets / "requirements.txt").write_text("secret-package\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "cache", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(test_checks, "_stage_sdk_config", lambda *args: None)
+
+    def inspect_stage(selected, staged, tests):
+        assert (staged / "assets" / "schema.json").is_file()
+        assert not (staged / "assets" / "runtime.zip").exists()
+        assert not (staged / "assets" / "cache.pyc").exists()
+        assert not (staged / "assets" / "requirements.txt").exists()
+        return 0, ""
+
+    monkeypatch.setattr(test_checks, "_execute_tests", inspect_stage)
+
+    assert test_checks._run_integration_tests(isolated, integration, [test_file]) == (0, "")
+
+
 def test_test_check_reports_isolated_environment_failure(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     tests_dir = integration / "tests"

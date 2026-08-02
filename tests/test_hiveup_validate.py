@@ -837,6 +837,22 @@ def test_package_keeps_nested_package_and_asset_directories_named_build(tmp_path
         assert set(archive.namelist()) == set(included)
 
 
+def test_package_omits_excluded_files_below_asset_directories(tmp_path: Path) -> None:
+    integration = tmp_path / "demo"
+    assets = integration / "assets"
+    assets.mkdir(parents=True)
+    (assets / "schema.json").write_text("{}\n", encoding="utf-8")
+    (assets / "runtime.zip").write_bytes(b"archive")
+    (assets / "cache.pyc").write_bytes(b"bytecode")
+    (assets / "requirements.txt").write_text("secret-package\n", encoding="utf-8")
+    package = tmp_path / "demo.zip"
+
+    write_package_zip(integration, package, None)
+
+    with zipfile.ZipFile(package) as archive:
+        assert archive.namelist() == ["assets/schema.json"]
+
+
 def test_package_uses_expanded_dependencies_without_triggering_container_reinstall(tmp_path: Path) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()

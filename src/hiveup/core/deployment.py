@@ -42,6 +42,8 @@ def is_deployment_source(relative: Path) -> bool:
     """Return whether a relative regular file belongs in a deployment archive."""
     if is_excluded_development_path(relative):
         return False
+    if relative.name == "requirements.txt" or relative.suffix.casefold() in {".pyc", ".zip"}:
+        return False
     if relative.suffix.casefold() == ".py":
         return True
     if len(relative.parts) == 1:

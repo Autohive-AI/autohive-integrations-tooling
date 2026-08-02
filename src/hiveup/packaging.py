@@ -17,7 +17,6 @@ from hiveup.core.deployment import (
 
 TARGET_PLATFORM = "manylinux2014_x86_64"
 TARGET_PYTHON_VERSION = "3.13"
-EXCLUDED_FILES = {".coverage", ".git", "requirements.txt"}
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 ZIP_FILE_MODE = 0o100644
 
@@ -191,13 +190,7 @@ def _package_files(directory: Path, package_path: Path) -> list[Path]:
             raise PackageBuildError(f"Deployment source cannot be a symlink: {relative.as_posix()}")
         if not path.is_file():
             continue
-        if (
-            path.resolve() == output
-            or path.name in EXCLUDED_FILES
-            or path.name == ".env"
-            or path.name.startswith(".env.")
-            or path.suffix.lower() in {".pyc", ".zip"}
-        ):
+        if path.resolve() == output:
             continue
         if not is_deployment_source(relative):
             continue
