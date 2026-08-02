@@ -365,7 +365,13 @@ def _check_file_imports(
             if node.level > 0:
                 module = node.module or ""
                 names = [alias.name for alias in node.names]
-                if not _is_relative_import_available(pyfile, node.level, module, names):
+                if not _is_relative_import_available(
+                    pyfile,
+                    node.level,
+                    module,
+                    names,
+                    integration_path=integration_path,
+                ):
                     label = "." * node.level + module
                     messages.append(_missing_import_message(label, pyfile, node.lineno))
             elif node.module and not _is_import_available(
@@ -404,12 +410,7 @@ def _is_import_available(
 def _local_module_exists(module_name: str, integration_path: Path, *, source_dir: Path) -> bool:
     parts = module_name.split(".")
     roots = [source_dir, integration_path]
-    source_relative = source_dir.relative_to(integration_path) if source_dir.is_relative_to(integration_path) else None
-    allow_test_source = bool(
-        source_relative is not None
-        and source_relative.parts
-        and source_relative.parts[0] in {"test", "tests"}
-    )
+    allow_test_source = _allows_test_source(source_dir, integration_path)
     if parts[0] == integration_path.name:
         roots.append(integration_path.parent)
     for root in roots:
@@ -421,6 +422,13 @@ def _local_module_exists(module_name: str, integration_path: Path, *, source_dir
         ):
             return True
     return False
+
+
+def _allows_test_source(path: Path, integration_root: Path) -> bool:
+    if not path.is_relative_to(integration_root):
+        return False
+    relative = path.relative_to(integration_root)
+    return bool(relative.parts and relative.parts[0] in {"test", "tests"})
 
 
 def _module_path_exists(
@@ -447,16 +455,36 @@ def _module_path_exists(
     return False
 
 
-def _is_relative_import_available(pyfile: Path, level: int, module: str, names: list[str]) -> bool:
+def _is_relative_import_available(
+    pyfile: Path,
+    level: int,
+    module: str,
+    names: list[str],
+    *,
+    integration_path: Path,
+) -> bool:
     base = pyfile.parent
     for _ in range(level - 1):
         base = base.parent
 
+    allow_test_source = _allows_test_source(pyfile, integration_path)
     if module:
         target = base.joinpath(*module.split("."))
-        return _module_path_exists(target)
+        return _module_path_exists(
+            target,
+            integration_root=integration_path,
+            allow_test_source=allow_test_source,
+        )
 
-    return all(_module_path_exists(base / name) for name in names if name != "*")
+    return all(
+        _module_path_exists(
+            base / name,
+            integration_root=integration_path,
+            allow_test_source=allow_test_source,
+        )
+        for name in names
+        if name != "*"
+    )
 
 
 def _python_files(path: Path) -> list[Path]:

@@ -366,6 +366,41 @@ def test_import_check_rejects_test_module_imported_by_deployment_source(tmp_path
     assert report.messages[0].message == "Missing module: tests.helper"
 
 
+def test_import_check_rejects_relative_test_import_from_deployment_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    integration = tmp_path / "selected"
+    tests = integration / "tests"
+    tests.mkdir(parents=True)
+    (integration / "__init__.py").write_text("from .tests import helper\n", encoding="utf-8")
+    (tests / "__init__.py").write_text("", encoding="utf-8")
+    (tests / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(static, "module_available", lambda *args: False)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "failed"
+    assert report.messages[0].message == "Missing module: .tests"
+
+
+def test_import_check_allows_relative_import_within_test_source(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "selected"
+    tests = integration / "tests"
+    tests.mkdir(parents=True)
+    (tests / "__init__.py").write_text("", encoding="utf-8")
+    (tests / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (tests / "test_selected_unit.py").write_text("from . import helper\n", encoding="utf-8")
+    isolated = environment.IntegrationEnvironment(tmp_path / "env", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
+    monkeypatch.setattr(static, "module_available", lambda *args: False)
+
+    report = static.check_imports_all(integration)
+
+    assert report.status == "passed"
+
+
 def test_import_check_resolves_modules_beside_test_file(tmp_path: Path, monkeypatch) -> None:
     integration = tmp_path / "demo"
     tests_dir = integration / "tests"
