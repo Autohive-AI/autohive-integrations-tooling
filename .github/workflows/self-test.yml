@@ -702,6 +702,8 @@ jobs:
           echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
           COMMENT_BODY=$(gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" --jq .body)
           grep -Fq '[good-integration]' <<< "$COMMENT_BODY"
+          grep -Fq '| Tests | ✅ Passed |' <<< "$COMMENT_BODY"
+          grep -Fq '[good-integration] tests: passed' <<< "$COMMENT_BODY"
 
       - name: Replace sticky comment
         uses: ./
@@ -724,6 +726,8 @@ jobs:
           [ "$COMMENT_ID" = "$CREATED_COMMENT_ID" ]
           COMMENT_BODY=$(gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" --jq .body)
           grep -Fq '[modular-integration]' <<< "$COMMENT_BODY"
+          grep -Fq '| Tests | ✅ Passed |' <<< "$COMMENT_BODY"
+          grep -Fq '[modular-integration] tests: passed' <<< "$COMMENT_BODY"
           if grep -Fq '[good-integration]' <<< "$COMMENT_BODY"; then
             echo 'Sticky comment retained stale validation output'
             exit 1
