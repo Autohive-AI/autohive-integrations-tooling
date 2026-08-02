@@ -124,6 +124,13 @@ The `--verify-names` flag imports modules to check for name existence. This mean
 
 `action.yml` installs HiveUp and invokes `hiveup ci`. HiveUp's `imports` check belongs to the code result group and runs in an isolated environment containing the integration's declared dependencies. When directories are not supplied, HiveUp discovers changed integrations from the supplied base ref.
 
+The canonical HiveUp check is stricter than this standalone compatibility
+script's current-environment lookup. Local deployment imports must resolve to
+files accepted by the package source policy. Test-only modules cannot satisfy
+production imports, sibling integrations are not visible, symlinked source is
+rejected, and relative imports may not escape the selected integration. Imports
+within `test/` or `tests/` may still resolve test helpers inside that tree.
+
 ```python
 # Called internally by check_code.py:
 from check_imports import check_imports

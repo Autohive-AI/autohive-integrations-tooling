@@ -1,10 +1,17 @@
-# HiveUp CI rollout comparison
+# HiveUp CI rollout comparison (historical snapshot)
 
 ## Purpose
 
 This one-off local comparison measures the rollout delta between the released
 `v2` integration CI tooling and Python HiveUp. It covers every public integration
 without adding permanent shadow CI.
+
+The fixed-input comparison below is retained as historical rollout evidence.
+It is not the current all-public verification result. The final PR implementation
+was subsequently run against 98 public integrations: 73 completed validation
+without blocking findings, 25 retained established integration findings, all 98
+completed the test command successfully, and no processing errors or timeouts
+occurred.
 
 ## Fixed inputs
 
@@ -73,9 +80,10 @@ current unit-test runner never imports it, while HiveUp scans the file
 statically. The live test itself is skipped without `HUMANITIX_API_KEY`, and
 Humanitix's 40 unit tests pass in HiveUp.
 
-This is the one remaining rollout policy decision: either exclude opt-in live
-integration tests from HiveUp's static import scan, or regard their undeclared
-dependencies as blocking. No public integration changes are included here.
+The final policy keeps unresolved imports in checked test source blocking. The
+Humanitix result is therefore an established integration finding rather than an
+unresolved tooling-policy decision. No public integration changes are included
+in this historical comparison.
 
 ### Newly passing with HiveUp (0)
 
@@ -92,10 +100,10 @@ HiveUp now also resolves modules beside the importing source file. The fix is
 covered by a regression test. Installed-wheel verification confirms that NZBN
 passes imports, all 42 unit tests, and full `hiveup ci`.
 
-The final installed-wheel rerun covered all 97 integrations after the
+This historical installed-wheel rerun covered all 97 integrations after the
 compatibility policy was implemented: 72 passed, 25 failed, and no command
-timed out. The current floating scripts passed 73 and failed 24. Humanitix is
-the only behavioral mismatch requiring a policy decision before rollout.
+timed out. The current floating scripts passed 73 and failed 24. Humanitix was
+the only behavioral mismatch in that fixed snapshot.
 
 ## Rollout policy decisions
 
@@ -113,13 +121,12 @@ The rollout policies are:
    historical config/code drift are candidates for warning-first rollout or
    separate remediation PRs.
 
-## Recommendation
+## Historical recommendation status
 
-Do not move the floating `v2` tag to the HiveUp implementation until the
-Humanitix live-test import policy is decided. Apart from Humanitix, the fixed
-snapshot has no newly blocked integration: 24 fail both implementations and 72
-pass both. New integrations are intentionally held to the canonical unit-test
-requirement.
+The Humanitix import policy referenced by the original recommendation has been
+decided: checked test source must declare resolvable imports. The final
+all-public verification result is recorded at the top of this document. New
+integrations remain intentionally held to the canonical unit-test requirement.
 
 No integration source changes or legacy tooling changes are part of this
 comparison.

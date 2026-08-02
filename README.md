@@ -216,7 +216,7 @@ GitHub Actions artifact. It does not publish either file.
 | Python running HiveUp | Python 3.13+ |
 | Integration SDK | SDK 2.x (`autohive-integrations-sdk~=2.0`) |
 | Deployment dependencies | CPython 3.13 wheels for `manylinux2014_x86_64` |
-| Integration icons | PNG, JPG, or JPEG; exactly 512×512 |
+| Integration icons | Exactly one regular, non-symlink PNG, JPG, or JPEG; exactly 512×512 |
 | Integration entry point | Root-level `.py` file with a valid, non-keyword identifier stem and `<module> = Integration.load(...)` |
 | Reserved runtime file | `main.py` may not be an integration entry point |
 
@@ -289,6 +289,16 @@ hiveup auth my-integration --auth-type none
 
 `create` and `init` refuse non-empty directories by default. `--force` uses per-file atomic replacement with rollback for scaffold-owned files, preserves other developer files, and rejects symlinked targets or scaffold paths.
 
+`hiveup package` produces a root-layout deployment ZIP containing Python source,
+`config.json`, the single validated icon, deliberate runtime files under
+`assets/` or `fonts/`, and generated `dependencies/`. It uses
+`requirements.txt` to stage dependencies but does not ship it. Hidden files,
+tests, development directories, symlinks, bytecode, nested requirements files,
+and ZIP files are excluded. Package outputs must use a `.zip` extension and may
+not overwrite integration source; default output names are built only from
+filename-safe `config.name` and `config.version` values. Use `--output` to select
+another destination explicitly.
+
 ## Local Testing
 
 ```bash
@@ -348,7 +358,7 @@ The test infrastructure (`pyproject.toml`, `conftest.py`, `requirements-test.txt
 
 ### Dependency isolation and caching
 
-HiveUp resolves imports and runs unit tests in a separate virtual environment for each integration and dependency profile. An integration pinned to an older SDK or dependency version therefore cannot change the packages used by HiveUp or another integration.
+HiveUp resolves imports and runs unit tests in a separate virtual environment for each integration and dependency profile. An integration pinned to an older SDK or dependency version therefore cannot change the packages used by HiveUp or another integration. The isolated test workspace mirrors deployed runtime files, then adds the integration's `test/` or `tests/` tree for test code and fixtures. Production tests therefore cannot pass by reading an undeclared root file that packaging would omit.
 
 Prepared environments are reused until the integration path, `requirements.txt` contents, Python interpreter/version, or required test tooling changes. HiveUp prefers `uv` for environment creation and package installation when it is available, and otherwise falls back to the standard-library `venv` module and pip. Cache entries unused for 30 days are removed automatically.
 

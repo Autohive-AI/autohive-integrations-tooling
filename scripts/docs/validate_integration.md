@@ -52,7 +52,7 @@ python scripts/validate_integration.py $(python scripts/get_changed_dirs.py orig
 
 ## Validations Performed
 
-The validator runs 8 checks in sequence for each integration directory:
+The validator runs 9 checks in sequence for each integration directory:
 
 ### 1. Folder Name (`_check_folder_name`)
 
@@ -79,7 +79,7 @@ Checks that all mandatory files exist in the integration directory:
 | `config.json` | Error | Integration configuration |
 | `requirements.txt` | Error | Python dependencies |
 | `README.md` | Error | Integration documentation |
-| `icon.png`, `icon.jpg`, or `icon.jpeg` | Error | Integration icon — must be exactly 512x512 pixels |
+| `icon.png`, `icon.jpg`, or `icon.jpeg` | Error | Exactly one regular, non-symlink integration icon — must be exactly 512x512 pixels |
 | `__init__.py` | Warning | Python package init — optional for modular integrations with an `actions/` subdirectory (adding it causes circular imports) |
 
 ### 3. config.json Validation (`_check_config_json`)
@@ -170,7 +170,14 @@ Inspects all `.py` files in the integration directory (not just the entry point)
 
 > **Note:** Action decorator matching (config ↔ code) is handled by `check_config_sync.py`, which uses AST parsing for more accurate bidirectional validation.
 
-### 8. Unused Scopes Detection (`_check_unused_scopes`)
+### 8. Deployment Symlinks (`_check_deployment_symlinks`)
+
+Rejects source and runtime-asset symlinks that deployment packaging cannot
+include. Symlinks inside explicitly excluded development directories are
+ignored. This keeps validation, isolated tests, and deployment archives aligned
+without dereferencing content from outside the integration.
+
+### 9. Unused Scopes Detection (`_check_unused_scopes`)
 
 For integrations using platform (OAuth2) authentication, the validator uses a heuristic to detect scopes that may not be needed:
 
@@ -193,13 +200,14 @@ flowchart TD
     F --> G[Check requirements.txt]
     G --> H[Check tests/ folder]
     H --> I[Check main Python file]
-    I --> J[Check for unused scopes]
-    J --> K[Print results]
-    K --> B
-    B --> L[Print summary]
-    L --> M{Any errors?}
-    M -->|Yes| N[Exit 1]
-    M -->|No| O[Exit 0]
+    I --> J[Reject deployment symlinks]
+    J --> K[Check for unused scopes]
+    K --> L[Print results]
+    L --> B
+    B --> M[Print summary]
+    M --> N{Any errors?}
+    N -->|Yes| O[Exit 1]
+    N -->|No| P[Exit 0]
 ```
 
 ## Auto-Discovery
