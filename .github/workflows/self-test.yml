@@ -219,8 +219,8 @@ jobs:
           fi
           echo "✅ Invalid base ref correctly returns exit code 2"
 
-      - name: Test check_config_sync.py — focused pytest regressions
-        run: pytest tests/test_check_config_sync.py
+      - name: Run repository test suite
+        run: pytest -q
 
       - name: Test check_code.py — input drift warns for existing integrations
         run: |
