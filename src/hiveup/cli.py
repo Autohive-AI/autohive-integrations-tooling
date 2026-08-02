@@ -529,10 +529,9 @@ def _scaffold(
         Path("requirements.txt"): b"autohive-integrations-sdk~=2.0.1\n",
         Path("README.md"): _readme_source(display_name, auth_type).encode(),
         Path(".gitignore"): (
-            b".coverage\n.env\n.hiveup/\n.pytest_cache/\n.ruff_cache/\n.venv/\n"
-            b"__pycache__/\ndependencies/\n*.zip\n"
+            b".coverage\n.env\n.hiveup/\n.pytest_cache/\n.ruff_cache/\n.venv/\n__pycache__/\ndependencies/\n*.zip\n"
         ),
-        Path("__init__.py"): f"from .{module} import {module}\n\n__all__ = [\"{module}\"]\n".encode(),
+        Path("__init__.py"): f'from .{module} import {module}\n\n__all__ = ["{module}"]\n'.encode(),
         Path(f"{module}.py"): _module_source(module).encode(),
         Path("icon.png"): _png_bytes(),
         Path("tests/__init__.py"): b"",
@@ -664,7 +663,7 @@ def _atomic_write(path: Path, content: bytes) -> None:
 
 
 def _module_source(module: str) -> str:
-    return f'''from pathlib import Path
+    return f"""from pathlib import Path
 from typing import Any
 
 from autohive_integrations_sdk import ActionHandler, ActionResult, ExecutionContext, Integration
@@ -676,7 +675,7 @@ from autohive_integrations_sdk import ActionHandler, ActionResult, ExecutionCont
 class GetDataAction(ActionHandler):
     async def execute(self, inputs: dict[str, Any], context: ExecutionContext) -> ActionResult:
         return ActionResult(data={{"message": "hello from {module}"}}, cost_usd=0.0)
-'''
+"""
 
 
 def _conftest_source() -> str:
@@ -702,7 +701,7 @@ def mock_context():
 
 
 def _test_source(module: str) -> str:
-    return f'''import pytest
+    return f"""import pytest
 
 from {module} import {module}
 
@@ -713,19 +712,17 @@ async def test_get_data(mock_context):
     result = await {module}.execute_action("get_data", {{}}, mock_context)
 
     assert result.result.data["message"] == "hello from {module}"
-'''
+"""
 
 
 def _readme_source(display_name: str, auth_type: str) -> str:
     auth = {
         "none": "This integration uses a public API and does not require authentication.",
         "platform": (
-            "This integration uses platform-managed OAuth. "
-            "Configure the provider and required scopes in `config.json`."
+            "This integration uses platform-managed OAuth. Configure the provider and required scopes in `config.json`."
         ),
         "custom": (
-            "This integration uses custom API-key authentication. "
-            "Configure the required fields in `config.json`."
+            "This integration uses custom API-key authentication. Configure the required fields in `config.json`."
         ),
     }[auth_type]
     return f"""# {display_name}

@@ -208,7 +208,7 @@ def print_table(rows: list[tuple[str, str, str, str, str]], failed_outputs: dict
     """Print a formatted results table."""
     col_widths = [
         max(len(r[0]) for r in rows) + 2,
-        8,   # Tests
+        8,  # Tests
         10,  # Coverage
         14,  # Status
     ]
@@ -225,12 +225,7 @@ def print_table(rows: list[tuple[str, str, str, str, str]], failed_outputs: dict
     print(header)
     print(divider)
     for name, tests, coverage, status, _ in rows:
-        print(
-            f"{name:<{col_widths[0]}}"
-            f"{tests:>{col_widths[1]}}"
-            f"{coverage:>{col_widths[2]}}"
-            f"{status:>{col_widths[3]}}"
-        )
+        print(f"{name:<{col_widths[0]}}{tests:>{col_widths[1]}}{coverage:>{col_widths[2]}}{status:>{col_widths[3]}}")
     print(divider)
 
     # Total row

@@ -491,10 +491,7 @@ def _python_files(path: Path) -> list[Path]:
         pyfile
         for pyfile in sorted(path.rglob("*.py"))
         if not pyfile.is_symlink()
-        and (
-            pyfile.relative_to(path).parts[0] in {"test", "tests"}
-            or is_deployment_source(pyfile.relative_to(path))
-        )
+        and (pyfile.relative_to(path).parts[0] in {"test", "tests"} or is_deployment_source(pyfile.relative_to(path)))
     ]
 
 

@@ -39,6 +39,9 @@ jobs:
       - name: Install dev tools
         run: pip install -r requirements-dev.txt -q
 
+      - name: Check HiveUp source formatting
+        run: ruff format --check src
+
       - name: Test validate_integration.py — good integrations pass
         run: |
           python scripts/validate_integration.py tests/examples/good-integration

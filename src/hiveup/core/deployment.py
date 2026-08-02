@@ -48,8 +48,7 @@ def is_deployment_source(relative: Path) -> bool:
         return True
     if len(relative.parts) == 1:
         return relative.name == "config.json" or (
-            relative.stem.casefold() == "icon"
-            and relative.suffix.casefold() in SUPPORTED_ICON_SUFFIXES
+            relative.stem.casefold() == "icon" and relative.suffix.casefold() in SUPPORTED_ICON_SUFFIXES
         )
     return relative.parts[0].casefold() in ASSET_DIRECTORIES
 

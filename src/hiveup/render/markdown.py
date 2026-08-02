@@ -49,14 +49,7 @@ def render_markdown(report: ValidationReport, *, commit: str = "", commit_msg: s
     if commit or dirs:
         header += "\n"
 
-    return (
-        header
-        + "| Check | Result |\n"
-        + "|-------|--------|\n"
-        + "\n".join(rows)
-        + "\n\n"
-        + "\n".join(sections)
-    )
+    return header + "| Check | Result |\n" + "|-------|--------|\n" + "\n".join(rows) + "\n\n" + "\n".join(sections)
 
 
 def _group_results(report: ValidationReport, group: str) -> Iterable[CheckResult]:

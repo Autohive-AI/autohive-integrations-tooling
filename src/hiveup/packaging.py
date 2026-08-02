@@ -89,11 +89,7 @@ def _validate_package_output(directory: Path, package_path: Path) -> None:
 
 
 def _root_icons(directory: Path) -> list[Path]:
-    return sorted(
-        path
-        for path in directory.iterdir()
-        if path.name.casefold() in {"icon.jpeg", "icon.jpg", "icon.png"}
-    )
+    return sorted(path for path in directory.iterdir() if path.name.casefold() in {"icon.jpeg", "icon.jpg", "icon.png"})
 
 
 def _icon_names(icons: list[Path]) -> str:
@@ -160,8 +156,7 @@ def write_package_zip(directory: Path, package_path: Path, dependencies: Path | 
             compresslevel=9,
         ) as archive:
             package_files = [
-                (path.relative_to(directory).as_posix(), path)
-                for path in _package_files(directory, temporary_path)
+                (path.relative_to(directory).as_posix(), path) for path in _package_files(directory, temporary_path)
             ]
             if dependencies:
                 for path in dependencies.rglob("*"):
@@ -196,6 +191,8 @@ def _package_files(directory: Path, package_path: Path) -> list[Path]:
             continue
         files.append(path)
     return files
+
+
 def _write_file(archive: zipfile.ZipFile, path: Path, archive_name: str) -> None:
     info = zipfile.ZipInfo(archive_name, date_time=ZIP_TIMESTAMP)
     info.compress_type = zipfile.ZIP_DEFLATED

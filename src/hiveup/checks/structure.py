@@ -37,8 +37,8 @@ from hiveup.core.deployment import is_excluded_development_path
 from hiveup.core.discovery import is_ignored_top_level_dir
 
 # Fix Windows console encoding for unicode characters
-if sys.platform == 'win32':
-    sys.stdout.reconfigure(encoding='utf-8')
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
 
 JPEG_START_OF_FRAME_MARKERS = {
     0xC0,
@@ -60,8 +60,7 @@ RESERVED_ENTRY_POINT_MESSAGE = (
 )
 ROOT_ENTRY_POINT_MESSAGE = "entry_point must be a Python file at the integration root"
 ENTRY_POINT_IDENTIFIER_MESSAGE = (
-    "entry_point filename stem must be a valid, non-keyword Python identifier; "
-    "rename the file and update config.json"
+    "entry_point filename stem must be a valid, non-keyword Python identifier; rename the file and update config.json"
 )
 
 
@@ -70,7 +69,7 @@ def is_reserved_entry_point(entry_point: object) -> bool:
 
     if not isinstance(entry_point, str):
         return False
-    return entry_point.replace('\\', '/').rsplit('/', 1)[-1].casefold() == 'main.py'
+    return entry_point.replace("\\", "/").rsplit("/", 1)[-1].casefold() == "main.py"
 
 
 def is_root_python_entry_point(entry_point: object) -> bool:
@@ -78,8 +77,8 @@ def is_root_python_entry_point(entry_point: object) -> bool:
 
     if not isinstance(entry_point, str) or not entry_point:
         return False
-    normalized = entry_point.replace('\\', '/')
-    return '/' not in normalized and normalized.casefold().endswith('.py')
+    normalized = entry_point.replace("\\", "/")
+    return "/" not in normalized and normalized.casefold().endswith(".py")
 
 
 def has_valid_entry_point_identifier(entry_point: object) -> bool:
@@ -92,7 +91,7 @@ def has_valid_entry_point_identifier(entry_point: object) -> bool:
 
 
 def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
-    if not data.startswith(b'\xff\xd8'):
+    if not data.startswith(b"\xff\xd8"):
         raise ValueError("not a valid JPEG file")
 
     offset = 2
@@ -111,13 +110,13 @@ def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
         if offset + 2 > len(data):
             break
 
-        segment_length = struct.unpack('>H', data[offset : offset + 2])[0]
+        segment_length = struct.unpack(">H", data[offset : offset + 2])[0]
         if segment_length < 2 or offset + segment_length > len(data):
             raise ValueError("not a valid JPEG file")
         if marker in JPEG_START_OF_FRAME_MARKERS:
             if segment_length < 7:
                 raise ValueError("not a valid JPEG file")
-            height, width = struct.unpack('>HH', data[offset + 3 : offset + 7])
+            height, width = struct.unpack(">HH", data[offset + 3 : offset + 7])
             return width, height
         offset += segment_length
 
@@ -129,14 +128,14 @@ def _is_integration_load(
     integration_names: set[str],
     sdk_module_names: set[str],
 ) -> bool:
-    if not isinstance(value, ast.Call) or not isinstance(value.func, ast.Attribute) or value.func.attr != 'load':
+    if not isinstance(value, ast.Call) or not isinstance(value.func, ast.Attribute) or value.func.attr != "load":
         return False
     owner = value.func.value
     if isinstance(owner, ast.Name):
         return owner.id in integration_names
     return (
         isinstance(owner, ast.Attribute)
-        and owner.attr == 'Integration'
+        and owner.attr == "Integration"
         and isinstance(owner.value, ast.Name)
         and owner.value.id in sdk_module_names
     )
@@ -144,6 +143,7 @@ def _is_integration_load(
 
 class ValidationError:
     """Represents a validation error."""
+
     def __init__(self, message: str, severity: str = "error"):
         self.message = message
         self.severity = severity  # "error" or "warning"
@@ -188,7 +188,7 @@ class IntegrationValidator:
 
     def _check_deployment_symlinks(self):
         """Reject source symlinks that packaging cannot include."""
-        for source in sorted(self.path.rglob('*')):
+        for source in sorted(self.path.rglob("*")):
             relative = source.relative_to(self.path)
             if is_excluded_development_path(relative):
                 continue
@@ -201,18 +201,18 @@ class IntegrationValidator:
             self.add_error(f"Folder name must be lowercase: '{self.name}' should be '{self.name.lower()}'")
 
         # Check for spaces or invalid characters
-        if ' ' in self.name:
+        if " " in self.name:
             self.add_error(f"Folder name cannot contain spaces: '{self.name}'")
 
-        if not re.match(r'^[a-z][a-z0-9-]*$', self.name):
+        if not re.match(r"^[a-z][a-z0-9-]*$", self.name):
             self.add_warning(f"Folder name should only contain lowercase letters, numbers, and hyphens: '{self.name}'")
 
     def _check_required_files(self):
         """Check that all required files exist."""
         required_files = [
-            ('config.json', 'Integration configuration file'),
-            ('requirements.txt', 'Python dependencies file'),
-            ('README.md', 'Integration documentation'),
+            ("config.json", "Integration configuration file"),
+            ("requirements.txt", "Python dependencies file"),
+            ("README.md", "Integration documentation"),
         ]
 
         for filename, description in required_files:
@@ -225,18 +225,18 @@ class IntegrationValidator:
         # __init__.py is optional for modular integrations (those with an actions/
         # subdirectory) because adding it causes circular imports when action files
         # use absolute imports like 'from <integration> import <instance>'.
-        has_actions_dir = (self.path / 'actions').is_dir()
-        if not (self.path / '__init__.py').exists() and not has_actions_dir:
-            self.add_warning("Missing __init__.py (required for package-style integrations, optional for modular integrations with actions/)")
+        has_actions_dir = (self.path / "actions").is_dir()
+        if not (self.path / "__init__.py").exists() and not has_actions_dir:
+            self.add_warning(
+                "Missing __init__.py (required for package-style integrations, optional for modular integrations with actions/)"
+            )
 
         # Check for forbidden files
-        if (self.path / 'integration.py').exists():
+        if (self.path / "integration.py").exists():
             self.add_error("Found 'integration.py' — integrations must not include a local integration.py file")
 
-        supported_icon_names = {'icon.png', 'icon.jpg', 'icon.jpeg'}
-        icon_paths = sorted(
-            path for path in self.path.iterdir() if path.name.casefold() in supported_icon_names
-        )
+        supported_icon_names = {"icon.png", "icon.jpg", "icon.jpeg"}
+        icon_paths = sorted(path for path in self.path.iterdir() if path.name.casefold() in supported_icon_names)
         if not icon_paths:
             self.add_error("Missing required file: icon.png, icon.jpg, or icon.jpeg (Integration icon)")
         elif len(icon_paths) > 1:
@@ -244,7 +244,7 @@ class IntegrationValidator:
             self.add_error(f"Exactly one integration icon is required; found: {names}")
         elif not icon_paths[0].is_file() or icon_paths[0].is_symlink():
             self.add_error(f"Integration icon must be a regular, non-symlink file: {icon_paths[0].name}")
-        elif icon_paths[0].suffix.lower() == '.png':
+        elif icon_paths[0].suffix.lower() == ".png":
             self._check_icon_png_size(icon_paths[0])
         else:
             self._check_icon_jpeg_size(icon_paths[0])
@@ -253,10 +253,10 @@ class IntegrationValidator:
         """Validate PNG icon is exactly 512x512."""
         try:
             data = path.read_bytes()
-            if data[:8] != b'\x89PNG\r\n\x1a\n':
+            if data[:8] != b"\x89PNG\r\n\x1a\n":
                 self.add_error("icon.png is not a valid PNG file")
                 return
-            width, height = struct.unpack('>II', data[16:24])
+            width, height = struct.unpack(">II", data[16:24])
             if width != 512 or height != 512:
                 self.add_error(f"icon.png must be 512x512 pixels (found {width}x{height})")
         except Exception as e:
@@ -273,30 +273,30 @@ class IntegrationValidator:
 
     def _check_config_json(self):
         """Validate config.json structure."""
-        config_path = self.path / 'config.json'
+        config_path = self.path / "config.json"
         if not config_path.exists():
             return  # Already reported in required files check
 
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 self.config = json.load(f)
         except json.JSONDecodeError as e:
             self.add_error(f"config.json is not valid JSON: {e}")
             return
 
         # Check required top-level fields
-        required_fields = ['name', 'version', 'description', 'entry_point', 'actions']
+        required_fields = ["name", "version", "description", "entry_point", "actions"]
         for field in required_fields:
             if field not in self.config:
                 self.add_error(f"config.json missing required field: '{field}'")
 
         # Check display_name is present and non-empty
-        if 'display_name' not in self.config or not self.config['display_name'].strip():
+        if "display_name" not in self.config or not self.config["display_name"].strip():
             self.add_warning("config.json missing recommended field: 'display_name'")
 
         # Check entry_point exists
-        if 'entry_point' in self.config:
-            entry_point = self.config['entry_point']
+        if "entry_point" in self.config:
+            entry_point = self.config["entry_point"]
             if is_reserved_entry_point(entry_point):
                 self.add_error(RESERVED_ENTRY_POINT_MESSAGE)
             if not is_root_python_entry_point(entry_point):
@@ -309,9 +309,9 @@ class IntegrationValidator:
                 self.add_error(f"entry_point must be a regular, non-symlink file: {entry_point}")
 
         # Check version format
-        if 'version' in self.config:
-            version = self.config['version']
-            if not re.match(r'^\d+\.\d+\.\d+$', version):
+        if "version" in self.config:
+            version = self.config["version"]
+            if not re.match(r"^\d+\.\d+\.\d+$", version):
                 self.add_warning(f"Version should follow semantic versioning (x.y.z): '{version}'")
 
         # Check auth configuration
@@ -322,22 +322,22 @@ class IntegrationValidator:
 
     def _validate_auth_config(self):
         """Validate auth configuration in config.json."""
-        if 'auth' not in self.config:
+        if "auth" not in self.config:
             return  # No auth is valid for public APIs
 
-        auth = self.config['auth']
-        auth_type = auth.get('type')
+        auth = self.config["auth"]
+        auth_type = auth.get("type")
 
-        if auth_type == 'platform':
-            if 'provider' not in auth:
+        if auth_type == "platform":
+            if "provider" not in auth:
                 self.add_error("Platform auth requires 'provider' field")
-            if 'scopes' in auth and not isinstance(auth['scopes'], list):
+            if "scopes" in auth and not isinstance(auth["scopes"], list):
                 self.add_error("auth.scopes must be an array")
 
-        elif auth_type == 'custom':
-            if 'fields' not in auth:
+        elif auth_type == "custom":
+            if "fields" not in auth:
                 self.add_error("Custom auth requires 'fields' configuration")
-            elif 'properties' not in auth.get('fields', {}):
+            elif "properties" not in auth.get("fields", {}):
                 self.add_error("Custom auth fields must have 'properties' defined")
 
         elif auth_type is not None:
@@ -345,10 +345,10 @@ class IntegrationValidator:
 
     def _validate_actions_config(self):
         """Validate actions configuration in config.json."""
-        if 'actions' not in self.config:
+        if "actions" not in self.config:
             return
 
-        actions = self.config['actions']
+        actions = self.config["actions"]
         if not isinstance(actions, dict):
             self.add_error("'actions' must be an object")
             return
@@ -362,36 +362,35 @@ class IntegrationValidator:
                 self.add_warning(f"Action name should be snake_case: '{action_name}'")
 
             # Check required action fields
-            if 'display_name' not in action_config:
+            if "display_name" not in action_config:
                 self.add_warning(f"Action '{action_name}' missing 'display_name'")
 
-            if 'description' not in action_config:
+            if "description" not in action_config:
                 self.add_warning(f"Action '{action_name}' missing 'description'")
 
             # Check schemas
-            if 'input_schema' not in action_config:
+            if "input_schema" not in action_config:
                 self.add_warning(f"Action '{action_name}' missing 'input_schema'")
 
-            if 'output_schema' not in action_config:
+            if "output_schema" not in action_config:
                 self.add_warning(f"Action '{action_name}' missing 'output_schema'")
 
     def _check_init_py(self):
         """Check that __init__.py is minimal."""
-        init_path = self.path / '__init__.py'
+        init_path = self.path / "__init__.py"
         if not init_path.exists():
             return
 
-        with open(init_path, 'r', encoding='utf-8') as f:
+        with open(init_path, "r", encoding="utf-8") as f:
             content = f.read()
 
         # Remove comments and empty lines for analysis
-        lines = [line.strip() for line in content.split('\n')
-                 if line.strip() and not line.strip().startswith('#')]
+        lines = [line.strip() for line in content.split("\n") if line.strip() and not line.strip().startswith("#")]
 
         # Should only have import and __all__
         allowed_patterns = [
-            r'^from\s+\.\w+\s+import\s+\w+',  # from .module import name
-            r'^__all__\s*=',  # __all__ = [...]
+            r"^from\s+\.\w+\s+import\s+\w+",  # from .module import name
+            r"^__all__\s*=",  # __all__ = [...]
         ]
 
         for line in lines:
@@ -403,34 +402,31 @@ class IntegrationValidator:
     # Minimum supported SDK versions per major release line.
     # Integrations pinning older versions will receive a deprecation warning.
     _MIN_SDK_VERSIONS = {
-        1: (1, 1, 1),   # 1.x line: minimum 1.1.1
-        2: (2, 0, 1),   # 2.x line: minimum 2.0.1
+        1: (1, 1, 1),  # 1.x line: minimum 1.1.1
+        2: (2, 0, 1),  # 2.x line: minimum 2.0.1
     }
 
     def _check_requirements_txt(self):
         """Check requirements.txt has SDK dependency with a supported version pin."""
-        req_path = self.path / 'requirements.txt'
+        req_path = self.path / "requirements.txt"
         if not req_path.exists():
             return
 
-        with open(req_path, 'r', encoding='utf-8') as f:
+        with open(req_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        if 'autohive-integrations-sdk' not in content:
+        if "autohive-integrations-sdk" not in content:
             self.add_error("requirements.txt must include 'autohive-integrations-sdk'")
             return
 
         # Extract version pin — accept ~= or == operators
-        match = re.search(r'autohive-integrations-sdk\s*(~=|==)\s*(\d+\.\d+(?:\.\d+)?)', content)
+        match = re.search(r"autohive-integrations-sdk\s*(~=|==)\s*(\d+\.\d+(?:\.\d+)?)", content)
         if not match:
-            self.add_warning(
-                "requirements.txt should pin SDK version "
-                "(e.g., autohive-integrations-sdk~=2.0.1)"
-            )
+            self.add_warning("requirements.txt should pin SDK version (e.g., autohive-integrations-sdk~=2.0.1)")
             return
 
         operator, version_str = match.group(1), match.group(2)
-        parts = tuple(int(p) for p in version_str.split('.'))
+        parts = tuple(int(p) for p in version_str.split("."))
         # Normalise to 3-part tuple
         while len(parts) < 3:
             parts = (*parts, 0)
@@ -443,7 +439,7 @@ class IntegrationValidator:
                 f"expected major version {', '.join(str(v) for v in sorted(self._MIN_SDK_VERSIONS))}"
             )
         elif parts < min_version:
-            min_str = '.'.join(str(v) for v in min_version)
+            min_str = ".".join(str(v) for v in min_version)
             self.add_warning(
                 f"SDK version {version_str} is deprecated — "
                 f"upgrade to autohive-integrations-sdk{operator}{min_str} or later"
@@ -451,7 +447,7 @@ class IntegrationValidator:
 
     def _check_tests_folder(self):
         """Check tests folder structure."""
-        tests_path = self.path / 'tests'
+        tests_path = self.path / "tests"
 
         if not tests_path.exists():
             self.add_error("Missing 'tests/' folder")
@@ -462,15 +458,15 @@ class IntegrationValidator:
             return
 
         # Check required test files
-        if not (tests_path / '__init__.py').exists():
+        if not (tests_path / "__init__.py").exists():
             self.add_error("Missing tests/__init__.py (Test package init — can be empty)")
 
         # Accept either context.py (legacy import setup) or conftest.py (pytest fixture setup)
-        if not (tests_path / 'context.py').exists() and not (tests_path / 'conftest.py').exists():
+        if not (tests_path / "context.py").exists() and not (tests_path / "conftest.py").exists():
             self.add_error("Missing tests/context.py or tests/conftest.py (test import/fixture setup)")
 
         # Unit-test execution discovers only files with the _unit.py suffix.
-        test_files = list(tests_path.glob('test_*_unit.py'))
+        test_files = list(tests_path.glob("test_*_unit.py"))
         if not test_files:
             message = "Missing unit test file: tests/test_*_unit.py"
             if self.allow_legacy_missing_unit_tests:
@@ -480,10 +476,10 @@ class IntegrationValidator:
 
     def _check_main_python_file(self):
         """Check main Python file and integration modules for required patterns."""
-        if 'entry_point' not in self.config:
+        if "entry_point" not in self.config:
             return
 
-        entry_point = self.config['entry_point']
+        entry_point = self.config["entry_point"]
         if not is_root_python_entry_point(entry_point) or not has_valid_entry_point_identifier(entry_point):
             return  # Already reported by the config check.
         main_file = self.path / entry_point
@@ -495,13 +491,13 @@ class IntegrationValidator:
         # Collect content from all .py files in the integration directory
         all_content = ""
         for pyfile in sorted(self.path.rglob("*.py")):
-            with open(pyfile, 'r', encoding='utf-8') as f:
+            with open(pyfile, "r", encoding="utf-8") as f:
                 all_content += f.read() + "\n"
 
         # Check for required imports across all Python files
         required_imports = [
-            ('Integration', 'from autohive_integrations_sdk'),
-            ('ActionHandler', 'from autohive_integrations_sdk'),
+            ("Integration", "from autohive_integrations_sdk"),
+            ("ActionHandler", "from autohive_integrations_sdk"),
         ]
 
         for item, source in required_imports:
@@ -509,38 +505,33 @@ class IntegrationValidator:
                 self.add_warning(f"Integration may be missing import: {item} ({source})")
 
         # Check for Integration.load(...) across all Python files.
-        if 'Integration.load' not in all_content:
+        if "Integration.load" not in all_content:
             self.add_warning("Integration should use 'Integration.load(...)' to load the integration")
 
     def _check_entry_point_export(self, main_file: Path):
         """Check the runtime wrapper's expected integration export without importing code."""
         try:
-            tree = ast.parse(main_file.read_text(encoding='utf-8'), filename=str(main_file))
+            tree = ast.parse(main_file.read_text(encoding="utf-8"), filename=str(main_file))
         except (OSError, SyntaxError):
             return  # Reported by the syntax or file checks.
 
-        integration_names = {'Integration'}
-        sdk_module_names = {'autohive_integrations_sdk'}
+        integration_names = {"Integration"}
+        sdk_module_names = {"autohive_integrations_sdk"}
         for node in tree.body:
-            if isinstance(node, ast.ImportFrom) and node.module == 'autohive_integrations_sdk':
+            if isinstance(node, ast.ImportFrom) and node.module == "autohive_integrations_sdk":
                 integration_names.update(
-                    alias.asname or alias.name
-                    for alias in node.names
-                    if alias.name == 'Integration'
+                    alias.asname or alias.name for alias in node.names if alias.name == "Integration"
                 )
             elif isinstance(node, ast.Import):
                 sdk_module_names.update(
-                    alias.asname or alias.name
-                    for alias in node.names
-                    if alias.name == 'autohive_integrations_sdk'
+                    alias.asname or alias.name for alias in node.names if alias.name == "autohive_integrations_sdk"
                 )
 
         expected_name = main_file.stem
         for node in tree.body:
             if isinstance(node, ast.Assign):
                 defines_expected_name = any(
-                    isinstance(target, ast.Name) and target.id == expected_name
-                    for target in node.targets
+                    isinstance(target, ast.Name) and target.id == expected_name for target in node.targets
                 )
                 value = node.value
             elif isinstance(node, ast.AnnAssign):
@@ -552,21 +543,20 @@ class IntegrationValidator:
                 return
 
         self.add_error(
-            f"entry point {main_file.name} must define "
-            f"'{expected_name} = Integration.load(...)' at module scope"
+            f"entry point {main_file.name} must define '{expected_name} = Integration.load(...)' at module scope"
         )
 
     def _check_unused_scopes(self):
         """Check for potentially unused scopes."""
-        if 'auth' not in self.config:
+        if "auth" not in self.config:
             return
 
-        auth = self.config['auth']
-        if auth.get('type') != 'platform' or 'scopes' not in auth:
+        auth = self.config["auth"]
+        if auth.get("type") != "platform" or "scopes" not in auth:
             return
 
-        scopes = auth['scopes']
-        actions = self.config.get('actions', {})
+        scopes = auth["scopes"]
+        actions = self.config.get("actions", {})
 
         # This is a basic heuristic check - we look for scope keywords in action names/descriptions
         # A more thorough check would require understanding the API documentation
@@ -574,7 +564,7 @@ class IntegrationValidator:
         scope_keywords = {}
         for scope in scopes:
             # Extract keywords from scope (e.g., "read:sites" -> ["read", "sites"])
-            keywords = re.split(r'[:\._-]', scope.lower())
+            keywords = re.split(r"[:\._-]", scope.lower())
             scope_keywords[scope] = keywords
 
         # Get action keywords
@@ -589,7 +579,7 @@ class IntegrationValidator:
         potentially_unused = []
         for scope, keywords in scope_keywords.items():
             # Check if any meaningful keyword from the scope appears in action text
-            meaningful_keywords = [k for k in keywords if len(k) > 3 and k not in ['read', 'write', 'admin', 'api']]
+            meaningful_keywords = [k for k in keywords if len(k) > 3 and k not in ["read", "write", "admin", "api"]]
             if meaningful_keywords:
                 found = any(keyword in action_text for keyword in meaningful_keywords)
                 if not found:
@@ -600,9 +590,9 @@ class IntegrationValidator:
 
     def print_results(self):
         """Print validation results."""
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Integration: {self.name}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         if not self.errors and not self.warnings:
             print("✅ All checks passed!")
@@ -625,7 +615,7 @@ def get_integration_folders(root_path: Path) -> List[Path]:
     for item in root_path.iterdir():
         if item.is_dir() and not is_ignored_top_level_dir(item):
             # Check if it looks like an integration (has config.json or main py file)
-            if (item / 'config.json').exists() or list(item.glob('*.py')):
+            if (item / "config.json").exists() or list(item.glob("*.py")):
                 folders.append(item)
     return sorted(folders)
 
@@ -672,9 +662,9 @@ def validate(dirs: list[str]) -> int:
         total_warnings += len(validator.warnings)
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("SUMMARY")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Integrations validated: {len(folders)}")
     print(f"Total errors: {total_errors}")
     print(f"Total warnings: {total_warnings}")
@@ -718,5 +708,5 @@ Examples:
     return validate(args.dirs)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

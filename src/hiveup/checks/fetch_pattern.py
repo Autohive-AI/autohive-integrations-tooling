@@ -124,15 +124,8 @@ def check_direct_usage(tree: ast.AST, fetch_vars: dict[str, int]) -> list[str]:
 
     for node in ast.walk(tree):
         # response["key"]
-        if (
-            isinstance(node, ast.Subscript)
-            and isinstance(node.value, ast.Name)
-            and node.value.id in var_names
-        ):
-            errors.append(
-                f'Line {node.lineno}: {node.value.id}["..."] — '
-                f"use {node.value.id}.data[\"...\"] with SDK 2.x"
-            )
+        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id in var_names:
+            errors.append(f'Line {node.lineno}: {node.value.id}["..."] — use {node.value.id}.data["..."] with SDK 2.x')
 
         # response.get("key")
         if (
