@@ -281,7 +281,9 @@ def test_import_check_allows_selected_integration_package_import(tmp_path: Path,
     assert report.status == "passed"
 
 
-def test_import_check_rejects_symlinked_helper_module(tmp_path: Path, monkeypatch) -> None:
+def test_import_check_rejects_symlinked_helper_module(
+    tmp_path: Path, monkeypatch, require_symlink_support
+) -> None:
     integration = tmp_path / "selected"
     integration.mkdir()
     (integration / "selected.py").write_text("import helper\n", encoding="utf-8")
@@ -298,7 +300,9 @@ def test_import_check_rejects_symlinked_helper_module(tmp_path: Path, monkeypatc
     assert report.messages[0].message == "Missing module: helper"
 
 
-def test_import_check_rejects_module_below_symlinked_package(tmp_path: Path, monkeypatch) -> None:
+def test_import_check_rejects_module_below_symlinked_package(
+    tmp_path: Path, monkeypatch, require_symlink_support
+) -> None:
     integration = tmp_path / "selected"
     integration.mkdir()
     (integration / "selected.py").write_text("import vendor.helper\n", encoding="utf-8")
@@ -568,7 +572,9 @@ def test_integration_tests_stage_resolved_relative_paths(tmp_path: Path, monkeyp
     assert staged_tests == [staged_integration / "tests" / test_file.name]
 
 
-def test_integration_tests_reject_symlinked_helper_module(tmp_path: Path, monkeypatch) -> None:
+def test_integration_tests_reject_symlinked_helper_module(
+    tmp_path: Path, monkeypatch, require_symlink_support
+) -> None:
     integration = tmp_path / "selected"
     test_file = integration / "tests" / "test_selected_unit.py"
     test_file.parent.mkdir(parents=True)
@@ -583,7 +589,9 @@ def test_integration_tests_reject_symlinked_helper_module(tmp_path: Path, monkey
         test_checks._run_integration_tests(isolated, integration, [test_file])
 
 
-def test_integration_tests_reject_symlinked_package_directory(tmp_path: Path, monkeypatch) -> None:
+def test_integration_tests_reject_symlinked_package_directory(
+    tmp_path: Path, monkeypatch, require_symlink_support
+) -> None:
     integration = tmp_path / "selected"
     test_file = integration / "tests" / "test_selected_unit.py"
     test_file.parent.mkdir(parents=True)

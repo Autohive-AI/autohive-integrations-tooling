@@ -85,7 +85,17 @@ def test_action_passes_expression_inputs_via_environment_without_shell_evaluatio
         PATH=f"{bin_dir}{os.pathsep}{environment['PATH']}",
     )
 
-    result = subprocess.run(["bash", "-c", ci_step["run"]], env=environment, capture_output=True, text=True)
+    bash = os.environ.get("HIVEUP_TEST_BASH") or shutil.which("bash")
+    if bash is None:
+        pytest.skip("Bash is not available")
+    try:
+        probe = subprocess.run([bash, "-c", "exit 0"], capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as exc:
+        pytest.skip(f"Bash is not usable: {exc}")
+    if probe.returncode != 0:
+        pytest.skip("Bash is not usable")
+
+    result = subprocess.run([bash, "-c", ci_step["run"]], env=environment, capture_output=True, text=True)
 
     assert result.returncode == 0, result.stderr
     assert not injected.exists()
@@ -735,7 +745,9 @@ def test_structure_rejects_invalid_jpeg_icon(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("filename", ["config.json", "good_integration.py", "icon.png"])
-def test_structure_rejects_symlinked_deployment_files(tmp_path: Path, filename: str) -> None:
+def test_structure_rejects_symlinked_deployment_files(
+    tmp_path: Path, filename: str, require_symlink_support
+) -> None:
     integration = tmp_path / "symlinked-deployment-file"
     shutil.copytree(EXAMPLES / "good-integration", integration)
     deployment_file = integration / filename
@@ -751,7 +763,9 @@ def test_structure_rejects_symlinked_deployment_files(tmp_path: Path, filename: 
 
 
 @pytest.mark.parametrize("relative", [Path("vendor"), Path("actions/vendor")])
-def test_structure_rejects_symlinked_package_directories(tmp_path: Path, relative: Path) -> None:
+def test_structure_rejects_symlinked_package_directories(
+    tmp_path: Path, relative: Path, require_symlink_support
+) -> None:
     integration = tmp_path / "symlinked-package-directory"
     shutil.copytree(EXAMPLES / "good-integration", integration)
     external = tmp_path / "external_pkg"
@@ -932,7 +946,7 @@ def test_package_allowlist_excludes_unrelated_credentials_and_private_files(tmp_
         assert set(archive.namelist()) == set(included)
 
 
-def test_package_rejects_symlinked_helper_module(tmp_path: Path) -> None:
+def test_package_rejects_symlinked_helper_module(tmp_path: Path, require_symlink_support) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()
     (integration / "demo.py").write_text("import helper\n", encoding="utf-8")
@@ -945,7 +959,9 @@ def test_package_rejects_symlinked_helper_module(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("relative", [Path("vendor"), Path("actions/vendor")])
-def test_package_rejects_symlinked_package_directories(tmp_path: Path, relative: Path) -> None:
+def test_package_rejects_symlinked_package_directories(
+    tmp_path: Path, relative: Path, require_symlink_support
+) -> None:
     integration = tmp_path / "demo"
     integration.mkdir()
     (integration / "demo.py").write_text("import vendor.helper\n", encoding="utf-8")
@@ -1259,7 +1275,7 @@ def test_default_package_output_uses_safe_config_components(tmp_path: Path, monk
 
 @pytest.mark.parametrize("filename", ["config.json", "demo.py", "icon.png"])
 def test_build_package_rejects_symlinked_deployment_files(
-    tmp_path: Path, monkeypatch, filename: str
+    tmp_path: Path, monkeypatch, filename: str, require_symlink_support
 ) -> None:
     integration = _integration_with_entry_point(tmp_path / f"symlink-package-{filename}", "demo.py")
     deployment_file = integration / filename

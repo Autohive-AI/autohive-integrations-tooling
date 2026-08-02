@@ -40,6 +40,7 @@ def test_compatibility_script_help_works_outside_repo(tmp_path: Path, script_nam
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert result.returncode == 0, result.stderr
@@ -52,6 +53,7 @@ def test_run_tests_compatibility_script_works_outside_repo(tmp_path: Path) -> No
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert result.returncode == 0, result.stderr

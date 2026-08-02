@@ -158,7 +158,9 @@ def test_force_preflights_directory_conflicts_before_writing(tmp_path: Path, mon
     assert config.read_text(encoding="utf-8") == "old config"
 
 
-def test_force_rejects_symlinked_scaffold_target_without_writing_outside(tmp_path: Path, monkeypatch) -> None:
+def test_force_rejects_symlinked_scaffold_target_without_writing_outside(
+    tmp_path: Path, monkeypatch, require_symlink_support
+) -> None:
     external = tmp_path / "external"
     external.mkdir()
     target = tmp_path / "sample"
@@ -172,7 +174,9 @@ def test_force_rejects_symlinked_scaffold_target_without_writing_outside(tmp_pat
     assert list(external.iterdir()) == []
 
 
-def test_force_rejects_symlinked_scaffold_parent_without_writing_outside(tmp_path: Path, monkeypatch) -> None:
+def test_force_rejects_symlinked_scaffold_parent_without_writing_outside(
+    tmp_path: Path, monkeypatch, require_symlink_support
+) -> None:
     target = tmp_path / "sample"
     target.mkdir()
     config = target / "config.json"
