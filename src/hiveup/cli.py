@@ -36,6 +36,7 @@ from hiveup.render.markdown import GROUPS, render_markdown
 app = typer.Typer(help="Developer CLI for Autohive integrations.", no_args_is_help=True)
 
 AUTH_TYPES = {"platform", "custom", "none"}
+PACKAGE_FILENAME_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def _version_callback(value: bool) -> None:
@@ -276,15 +277,26 @@ def package(
     if not has_valid_entry_point_identifier(config.get("entry_point")):
         typer.echo(ENTRY_POINT_IDENTIFIER_MESSAGE, err=True)
         raise typer.Exit(2)
-    package_path = output or Path.cwd() / f"{config.get('name', directory.name)}-{config.get('version', '0.0.0')}.zip"
-
     try:
+        package_path = output or _default_package_path(config, directory)
         build_package(directory, package_path)
     except PackageBuildError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(2)
 
     typer.echo(f"✅ Wrote {package_path}")
+
+
+def _default_package_path(config: dict, directory: Path) -> Path:
+    name = config.get("name", directory.name)
+    version = config.get("version", "0.0.0")
+    for label, value in (("name", name), ("version", version)):
+        if not isinstance(value, str) or not PACKAGE_FILENAME_COMPONENT.fullmatch(value):
+            raise PackageBuildError(
+                f"config.{label} must be a filename-safe value containing only letters, numbers, "
+                f"'.', '_', or '-': {value!r}"
+            )
+    return Path.cwd() / f"{name}-{version}.zip"
 
 
 @app.command()

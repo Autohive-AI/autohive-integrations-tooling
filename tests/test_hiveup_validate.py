@@ -1130,6 +1130,70 @@ def test_package_allows_zip_output_inside_integration(tmp_path: Path, monkeypatc
         assert "release.zip" not in archive.namelist()
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("name", "../escaped"),
+        ("name", "nested/escaped"),
+        ("name", "nested\\escaped"),
+        ("version", "../1.0.0"),
+        ("version", 1),
+    ],
+)
+def test_default_package_output_rejects_unsafe_config_components(
+    tmp_path: Path, monkeypatch, field: str, value: object
+) -> None:
+    integration = _integration_with_entry_point(tmp_path / "unsafe-default-output", "demo.py")
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config[field] = value
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    working = tmp_path / "working"
+    working.mkdir()
+    monkeypatch.chdir(working)
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *args: None)
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 2
+    assert f"config.{field} must be a filename-safe value" in result.output
+    assert list(tmp_path.rglob("*.zip")) == []
+
+
+def test_default_package_output_rejects_absolute_config_name(tmp_path: Path, monkeypatch) -> None:
+    integration = _integration_with_entry_point(tmp_path / "absolute-default-output", "demo.py")
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["name"] = str(tmp_path / "escaped")
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    working = tmp_path / "working"
+    working.mkdir()
+    monkeypatch.chdir(working)
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *args: None)
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 2
+    assert "config.name must be a filename-safe value" in result.output
+    assert list(tmp_path.rglob("*.zip")) == []
+
+
+def test_default_package_output_uses_safe_config_components(tmp_path: Path, monkeypatch) -> None:
+    integration = _integration_with_entry_point(tmp_path / "safe-default-output", "demo.py")
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["name"] = "demo_integration"
+    config["version"] = "1.2.3-beta.1"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *args: None)
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 0
+    assert (tmp_path / "demo_integration-1.2.3-beta.1.zip").is_file()
+
+
 @pytest.mark.parametrize("filename", ["config.json", "demo.py", "icon.png"])
 def test_build_package_rejects_symlinked_deployment_files(
     tmp_path: Path, monkeypatch, filename: str
