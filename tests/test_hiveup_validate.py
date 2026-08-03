@@ -439,7 +439,9 @@ def test_markdown_renders_compact_check_tables_and_collapsed_success_logs() -> N
     assert "| 🐍 Syntax | ✅ Passed | 0.01s |" in output
     assert "| 🎨 Format | ✅ Passed | 11 files formatted · 0.02s |" in output
     assert "| 🔗 Config-code sync | ⚠️ Passed with warnings | — |" in output
-    assert "<summary><strong>⚠️ Code</strong></summary>\n\n<br>\n\n#### Results" in output
+    assert "<summary><strong>⚠️ Code</strong></summary>\n\n> #### Results" in output
+    assert "> | Check | Result | Summary |" in output
+    assert "> #### Notices" in output
     assert "<summary>⚠️ 🔗 Config-code sync — 1 notice</summary>" in output
     assert "- ⚠️ SDK input drift is historic" in output
     assert "<details><summary>📋 🎨 Format log</summary>" in output

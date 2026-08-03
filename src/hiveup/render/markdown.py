@@ -98,7 +98,8 @@ def _group_status_text(results: list[CheckResult]) -> str:
 def _section(label: str, results: list[CheckResult]) -> str:
     icon = _group_status_text(results).split(" ", 1)[0]
     body = _section_body(results)
-    return f"<details><summary><strong>{icon} {label}</strong></summary>\n\n<br>\n\n{body}\n\n</details>\n\n<br>\n"
+    indented_body = "\n".join(f"> {line}" if line else ">" for line in body.splitlines())
+    return f"<details><summary><strong>{icon} {label}</strong></summary>\n\n{indented_body}\n\n</details>\n\n<br>\n"
 
 
 def _section_body(results: list[CheckResult]) -> str:
