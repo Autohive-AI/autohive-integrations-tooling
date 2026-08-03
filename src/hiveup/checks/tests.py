@@ -125,6 +125,11 @@ def _execute_tests(
     integration_dir: Path,
     test_files: list[Path],
 ) -> tuple[int, str]:
+    coverage_config = integration_dir.parent / ".hiveup-coveragerc"
+    coverage_config.write_text(
+        "[run]\nomit =\n    */test/*\n    */tests/*\n",
+        encoding="utf-8",
+    )
     cmd = [
         str(environment.python),
         "-m",
@@ -139,6 +144,8 @@ def _execute_tests(
         "markers=unit: isolated integration unit test",
         "--cov",
         str(integration_dir),
+        "--cov-config",
+        str(coverage_config),
         "--cov-report=term-missing:skip-covered",
         *[str(f) for f in test_files],
     ]
