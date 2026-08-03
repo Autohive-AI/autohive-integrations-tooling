@@ -431,6 +431,17 @@ def test_markdown_renders_pre_hiveup_plain_text_check_output() -> None:
                 raw_output="\x1b[32m11 files already formatted\x1b[0m",
             ),
             CheckResult(
+                check="security",
+                integration="github",
+                status="passed",
+                raw_output=(
+                    "[tester]\tWARNING\tnosec encountered (B105), but no failed test on file "
+                    "/home/runner/work/autohive-integrations/autohive-integrations/github/tests/conftest.py:17\n"
+                    "[tester]\tWARNING\tnosec encountered (B105), but no failed test on file "
+                    "/home/runner/work/autohive-integrations/autohive-integrations/github/tests/conftest.py:18"
+                ),
+            ),
+            CheckResult(
                 check="sync",
                 integration="github",
                 status="warning",
@@ -449,6 +460,10 @@ def test_markdown_renders_pre_hiveup_plain_text_check_output() -> None:
     assert "Checking: github" in output
     assert "🐍 Checking Python syntax...\n   ✅ Syntax OK" in output
     assert "🎨 Checking formatting with ruff...\n   ✅ Formatting OK" in output
+    assert "🔒 Scanning for security issues with bandit...\n   ✅ Security OK\n   Warnings:" in output
+    assert "⚠️ nosec encountered (B105) in github/tests/conftest.py:17" in output
+    assert "⚠️ nosec encountered (B105) in github/tests/conftest.py:18" in output
+    assert "/home/runner/work" not in output
     assert "🔗 Checking config-code sync..." in output
     assert "   ⚠️ SDK input drift is historic" in output
     assert "   ✅ Config-code sync OK" in output
@@ -484,6 +499,43 @@ def test_markdown_summarizes_tests_and_includes_failure_detail() -> None:
     assert "github — failure detail" in output
     assert "FAILED tests/test_github_unit.py::test_demo" in output
     assert "❌ Tests failed: github" in output
+
+
+def test_markdown_groups_successful_pytest_warnings_without_raw_test_noise() -> None:
+    affected_tests = "\n".join(
+        f"gmail/tests/test_gmail_unit.py::TestEmail::test_html_{index}" for index in range(1, 8)
+    )
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="tests",
+                integration="gmail",
+                status="passed",
+                raw_output=(
+                    "........................................................................ [ 65%]\n"
+                    "=============================== warnings summary ===============================\n"
+                    f"{affected_tests}\n"
+                    "  /home/runner/.cache/hiveup/envs/example/lib/python3.13/site-packages/bleach/sanitizer.py:166: "
+                    "NoCssSanitizerWarning: 'style' attribute specified, but css_sanitizer not set.\n"
+                    "    warnings.warn(\n\n"
+                    "-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n"
+                    "TOTAL  626  64  90%\n"
+                    "110 passed, 7 warnings in 0.94s"
+                ),
+            )
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert "gmail          110/110       90%      ✅ Passed" in output
+    assert "Warnings:\n  gmail:" in output
+    assert "⚠️ NoCssSanitizerWarning — 7 occurrences" in output
+    assert "'style' attribute specified, but css_sanitizer not set." in output
+    assert "Source: bleach/sanitizer.py:166" in output
+    assert "Affected tests: 7" in output
+    assert "[ 65%]" not in output
+    assert "warnings.warn(" not in output
 
 
 def test_git_based_checks_work_outside_repo_cwd(tmp_path: Path, monkeypatch) -> None:

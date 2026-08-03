@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 from hiveup.core.results import CheckMessage, CheckResult, ValidationReport
 
@@ -28,6 +29,15 @@ CODE_CHECKS = {
 }
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+@dataclass
+class _WarningSummary:
+    category: str
+    message: str
+    source: str
+    occurrences: int = 0
+    tests: list[str] = field(default_factory=list)
 
 
 def render_markdown(report: ValidationReport, *, commit: str = "", commit_msg: str = "", dirs: str = "") -> str:
@@ -171,6 +181,10 @@ def _code_output(results: list[CheckResult]) -> str:
                     lines.extend(f"      {line}" for line in output.splitlines())
             else:
                 lines.append(f"   ✅ {success_label} OK")
+                warnings = _bandit_warnings(result) if result.check == "security" else []
+                if warnings:
+                    lines.append("   Warnings:")
+                    lines.extend(f"     ⚠️ {warning}" for warning in warnings)
 
         lines.extend(["", "=" * 40])
         if any(result.status in {"failed", "error"} for result in integration_results):
@@ -186,6 +200,7 @@ def _tests_output(results: list[CheckResult]) -> str:
     rows = []
     failure_outputs = []
     notices = []
+    warning_sections = []
     for result in results:
         passed = _count(r"(\d+) passed", result.raw_output)
         failed = _count(r"(\d+) failed", result.raw_output)
@@ -201,6 +216,11 @@ def _tests_output(results: list[CheckResult]) -> str:
         }[result.status]
         rows.append((result.integration, tests, coverage, status))
         notices.extend(f"{_message_line(message)} ({result.integration})" for message in result.messages)
+        warnings = (
+            [] if result.status in {"failed", "error"} else _pytest_warnings(result.raw_output, result.integration)
+        )
+        if warnings:
+            warning_sections.append(_pytest_warning_output(result.integration, warnings))
         if result.status in {"failed", "error"} and result.raw_output:
             failure_outputs.extend(
                 ["", "=" * 60, f"{result.integration} — failure detail", "=" * 60, result.raw_output]
@@ -234,6 +254,8 @@ def _tests_output(results: list[CheckResult]) -> str:
     lines.append(table_line(total_row))
     if notices:
         lines.extend(["", *notices])
+    if warning_sections:
+        lines.extend(["", "Warnings:", *warning_sections])
     lines.extend(failure_outputs)
     outcome = "✅ Tests passed" if total_status.startswith("✅") else "❌ Tests failed"
     integrations = ", ".join(result.integration for result in results)
@@ -269,6 +291,79 @@ def _raw_output_without_messages(result: CheckResult) -> str:
     return "\n".join(
         line for line in ANSI_ESCAPE.sub("", result.raw_output).splitlines() if line.strip() not in message_texts
     ).strip()
+
+
+def _bandit_warnings(result: CheckResult) -> list[str]:
+    warnings = []
+    seen = set()
+    pattern = re.compile(r"^\[tester\]\s+WARNING\s+nosec encountered \((B\d+)\), but no failed test on file (.+)$")
+    for line in ANSI_ESCAPE.sub("", result.raw_output).splitlines():
+        match = pattern.match(line.strip())
+        if not match:
+            continue
+        warning = f"nosec encountered ({match.group(1)}) in {_normalized_path(match.group(2), result.integration)}"
+        if warning not in seen:
+            warnings.append(warning)
+            seen.add(warning)
+    return warnings
+
+
+def _pytest_warnings(output: str, integration: str) -> list[_WarningSummary]:
+    lines = ANSI_ESCAPE.sub("", output).splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if re.match(r"^=+ warnings summary =+$", line)) + 1
+    except StopIteration:
+        return []
+
+    source_pattern = re.compile(r"^\s+(.+?):(\d+): ([A-Za-z_][\w.]*Warning): (.+)$")
+    grouped: dict[tuple[str, str, str], _WarningSummary] = {}
+    affected_tests: list[str] = []
+    for line in lines[start:]:
+        if line.startswith("-- Docs:") or re.match(r"^=+ .+ =+$", line):
+            break
+        source_match = source_pattern.match(line)
+        if source_match:
+            source = f"{_normalized_path(source_match.group(1), integration)}:{source_match.group(2)}"
+            category = source_match.group(3)
+            message = source_match.group(4).strip()
+            key = (category, message, source)
+            warning = grouped.setdefault(key, _WarningSummary(category, message, source))
+            warning.occurrences += max(len(affected_tests), 1)
+            for test in affected_tests:
+                if test not in warning.tests:
+                    warning.tests.append(test)
+            affected_tests = []
+        elif line and not line[0].isspace():
+            affected_tests.append(line.strip())
+    return list(grouped.values())
+
+
+def _pytest_warning_output(integration: str, warnings: list[_WarningSummary]) -> str:
+    lines = [f"  {integration}:"]
+    for warning in warnings:
+        noun = "occurrence" if warning.occurrences == 1 else "occurrences"
+        lines.extend(
+            [
+                f"    ⚠️ {warning.category} — {warning.occurrences} {noun}",
+                f"       {warning.message}",
+                f"       Source: {warning.source}",
+            ]
+        )
+        if len(warning.tests) <= 2:
+            lines.append("       Affected tests:")
+            lines.extend(f"         - {test}" for test in warning.tests)
+        else:
+            lines.append(f"       Affected tests: {len(warning.tests)}")
+    return "\n".join(lines)
+
+
+def _normalized_path(value: str, integration: str) -> str:
+    path = value.replace("\\", "/")
+    for marker in ("/site-packages/", f"/{integration}/"):
+        if marker in path:
+            suffix = path.rsplit(marker, 1)[1]
+            return f"{integration}/{suffix}" if marker.endswith(f"/{integration}/") else suffix
+    return path
 
 
 def _message_line(message: CheckMessage) -> str:
