@@ -130,7 +130,8 @@ def _section_body(results: list[CheckResult]) -> str:
                 severity_icon = "❌" if message.severity == "error" else "⚠️" if message.severity == "warning" else "ℹ️"
                 _, check_label = _check_presentation(result.check)
                 location = _message_location(message.file, message.line)
-                lines.append(f"- {severity_icon} **{check_label}:** {location}{message.message}")
+                message_text = re.sub(r"^(?:⚠️|❌|ℹ️)\s*", "", message.message)
+                lines.append(f"- {severity_icon} **{check_label}:** {location}{message_text}")
                 if message.fix_hint:
                     lines.append(f"  - **Suggested fix:** `{message.fix_hint}`")
 

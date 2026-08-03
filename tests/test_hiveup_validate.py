@@ -428,7 +428,7 @@ def test_markdown_renders_compact_check_tables_and_collapsed_success_logs() -> N
                 check="sync",
                 integration="github",
                 status="warning",
-                messages=[CheckMessage("warning", "SDK input drift is historic")],
+                messages=[CheckMessage("warning", "⚠️ SDK input drift is historic")],
             ),
         ]
     )
