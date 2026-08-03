@@ -429,6 +429,7 @@ def test_markdown_renders_compact_check_tables_and_collapsed_success_logs() -> N
                 integration="github",
                 status="warning",
                 messages=[CheckMessage("warning", "⚠️ SDK input drift is historic")],
+                raw_output="⚠️ SDK input drift is historic",
             ),
         ]
     )
@@ -442,6 +443,7 @@ def test_markdown_renders_compact_check_tables_and_collapsed_success_logs() -> N
     assert "<summary>⚠️ 🔗 Config-code sync — 1 notice</summary>" in output
     assert "- ⚠️ SDK input drift is historic" in output
     assert "<details><summary>📋 🎨 Format log</summary>" in output
+    assert "Config-code sync log" not in output
     assert "11 files already formatted" in output
     assert "\x1b" not in output
 

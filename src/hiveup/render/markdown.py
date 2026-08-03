@@ -131,7 +131,7 @@ def _section_body(results: list[CheckResult]) -> str:
             lines.append(f"\n{heading} Notices")
             lines.extend(_result_notices(result) for result in notices)
 
-        logs = [result for result in integration_results if result.raw_output]
+        logs = [result for result in integration_results if _result_log_output(result)]
         if logs:
             lines.append(f"\n{heading} Logs")
             lines.extend(_result_log(result) for result in logs)
@@ -171,13 +171,20 @@ def _result_summary(result: CheckResult) -> str:
 def _result_log(result: CheckResult) -> str:
     check_icon, check_label = _check_presentation(result.check)
     expanded = " open" if result.status in {"failed", "error"} else ""
-    output = ANSI_ESCAPE.sub("", result.raw_output)
+    output = ANSI_ESCAPE.sub("", _result_log_output(result))
     fence = "````" if "```" in output else "```"
     return (
         f"<details{expanded}><summary>📋 {check_icon} {check_label} log</summary>\n\n"
         f"{fence}text\n{output}\n{fence}\n\n"
         "</details>"
     )
+
+
+def _result_log_output(result: CheckResult) -> str:
+    if result.status != "warning" or not result.messages:
+        return result.raw_output
+    message_texts = {message.message.strip() for message in result.messages}
+    return "\n".join(line for line in result.raw_output.splitlines() if line.strip() not in message_texts).strip()
 
 
 def _result_notices(result: CheckResult) -> str:
