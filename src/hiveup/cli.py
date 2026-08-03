@@ -455,10 +455,13 @@ def _group_output(results: list[CheckResult]) -> str:
     lines = []
     for result in results:
         lines.append(f"[{result.integration}] {result.check}: {result.status}")
+        message_texts = {message.message for message in result.messages}
         for message in result.messages:
             lines.append(f"  {message.severity}: {message.message}")
-        if result.raw_output:
-            lines.append(result.raw_output)
+        if result.raw_output and result.raw_output not in message_texts:
+            raw_lines = [line for line in result.raw_output.splitlines() if line not in message_texts]
+            if raw_lines:
+                lines.append("\n".join(raw_lines))
     return "\n".join(lines)
 
 
