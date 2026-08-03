@@ -413,9 +413,15 @@ def test_console_renders_raw_unit_test_failure_output(capsys) -> None:
     assert "AssertionError: expected 2, got 1" in output
 
 
-def test_markdown_renders_compact_check_tables_and_collapsed_success_logs() -> None:
+def test_markdown_renders_pre_hiveup_plain_text_check_output() -> None:
     report = ValidationReport(
         [
+            CheckResult(
+                check="structure",
+                integration="github",
+                status="warning",
+                messages=[CheckMessage("warning", "SDK version is deprecated")],
+            ),
             CheckResult(check="syntax", integration="github", status="passed", duration_s=0.01),
             CheckResult(
                 check="format",
@@ -436,21 +442,24 @@ def test_markdown_renders_compact_check_tables_and_collapsed_success_logs() -> N
 
     output = render_markdown(report)
 
-    assert "| 🐍 Syntax | ✅ Passed | 0.01s |" in output
-    assert "| 🎨 Format | ✅ Passed | 11 files formatted · 0.02s |" in output
-    assert "| 🔗 Config-code sync | ⚠️ Passed with warnings | — |" in output
-    assert "<summary><strong>⚠️ Code</strong></summary>\n\n> #### Results" in output
-    assert "> | Check | Result | Summary |" in output
-    assert "> #### Notices" in output
-    assert "<summary>⚠️ 🔗 Config-code sync — 1 notice</summary>" in output
-    assert "- ⚠️ SDK input drift is historic" in output
-    assert "<details><summary>📋 🎨 Format log</summary>" in output
-    assert "Config-code sync log" not in output
-    assert "11 files already formatted" in output
+    assert "<details><summary>⚠️ Structure Check output</summary>\n\n```text" in output
+    assert "Warnings (1):\n  ⚠️ SDK version is deprecated" in output
+    assert "⚠️ Validation passed with warnings - please review" in output
+    assert "<details><summary>⚠️ Code Check output</summary>\n\n```text" in output
+    assert "Checking: github" in output
+    assert "🐍 Checking Python syntax...\n   ✅ Syntax OK" in output
+    assert "🎨 Checking formatting with ruff...\n   ✅ Formatting OK" in output
+    assert "🔗 Checking config-code sync..." in output
+    assert "   ⚠️ SDK input drift is historic" in output
+    assert "   ✅ Config-code sync OK" in output
+    assert "✅ CODE CHECK PASSED" in output
+    assert "#### Results" not in output
+    assert "<summary>📋" not in output
+    assert "11 files already formatted" not in output
     assert "\x1b" not in output
 
 
-def test_markdown_summarizes_tests_and_expands_failure_logs() -> None:
+def test_markdown_summarizes_tests_and_includes_failure_detail() -> None:
     report = ValidationReport(
         [
             CheckResult(
@@ -470,10 +479,11 @@ def test_markdown_summarizes_tests_and_expands_failure_logs() -> None:
 
     output = render_markdown(report)
 
-    assert "| 🧪 Unit tests | ❌ Failed | 103 tests · 88% coverage · 0.88s |" in output
-    assert "<details open><summary>❌ 🧪 Unit tests — 1 notice</summary>" in output
-    assert "<details open><summary>📋 🧪 Unit tests log</summary>" in output
-    assert "- ❌ Unit tests failed" in output
+    assert "<details><summary>❌ Tests Check output</summary>" in output
+    assert "github         103/104       88%       ❌ Failed" in output
+    assert "github — failure detail" in output
+    assert "FAILED tests/test_github_unit.py::test_demo" in output
+    assert "❌ Tests failed: github" in output
 
 
 def test_git_based_checks_work_outside_repo_cwd(tmp_path: Path, monkeypatch) -> None:
