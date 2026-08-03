@@ -589,6 +589,28 @@ def test_github_outputs_include_legacy_action_keys(tmp_path: Path) -> None:
     assert "comment_path<<EOF_comment_path" in output
 
 
+def test_github_outputs_do_not_repeat_structured_messages_from_raw_output(tmp_path: Path) -> None:
+    warning = "⚠️ Existing integration has config-code input drift"
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="sync",
+                integration="gmail",
+                status="warning",
+                messages=[CheckMessage("warning", warning)],
+                raw_output=f"Checking config-code sync...\n{warning}",
+            )
+        ]
+    )
+    output_file = tmp_path / "github-output.txt"
+
+    _write_github_outputs(output_file, report, comment_file=tmp_path / "comment.md", dirs="gmail")
+    output = output_file.read_text(encoding="utf-8")
+
+    assert output.count(warning) == 1
+    assert "Checking config-code sync..." in output
+
+
 def test_github_outputs_report_run_errors_in_every_group(tmp_path: Path) -> None:
     report = ValidationReport(
         [
