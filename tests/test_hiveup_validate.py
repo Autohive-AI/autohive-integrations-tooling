@@ -19,7 +19,7 @@ import hiveup.cli as cli  # noqa: E402
 from hiveup.cli import _emit_github_annotations, _report_dirs, _write_github_outputs, app, run_validation  # noqa: E402
 from hiveup import __version__  # noqa: E402
 from hiveup.checks.readme import check_readme  # noqa: E402
-from hiveup.checks.static import _legacy_check, check_syntax  # noqa: E402
+from hiveup.checks.static import _legacy_check, check_security, check_syntax  # noqa: E402
 from hiveup.checks.structure import (  # noqa: E402
     ENTRY_POINT_IDENTIFIER_MESSAGE,
     RESERVED_ENTRY_POINT_MESSAGE,
@@ -474,6 +474,21 @@ def test_successful_legacy_check_only_reports_actual_warnings(tmp_path: Path) ->
     assert result.status == "warning"
     assert [message.message for message in result.messages] == ["⚠️ consider a larger version bump"]
     assert "✅ CHECK PASSED" in result.raw_output
+
+
+def test_security_check_deduplicates_bandit_nosec_warnings(tmp_path: Path, monkeypatch) -> None:
+    duplicate_warning = "[tester]\tWARNING\tnosec encountered (B105), but no failed test on file demo.py:23"
+    distinct_warning = "[tester]\tWARNING\tnosec encountered (B106), but no failed test on file demo.py:24"
+    output = "\n".join([duplicate_warning, distinct_warning, duplicate_warning, distinct_warning])
+    monkeypatch.setattr(
+        "hiveup.checks.static.subprocess.run",
+        lambda *args, **kwargs: Mock(returncode=0, stdout="", stderr=output),
+    )
+
+    result = check_security(tmp_path)
+
+    assert result.status == "passed"
+    assert result.raw_output.splitlines() == [duplicate_warning, distinct_warning]
 
 
 def test_failed_legacy_check_preserves_diagnostic_severity(tmp_path: Path) -> None:
