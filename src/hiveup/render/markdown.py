@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from collections import defaultdict
 from collections.abc import Iterable
 
 from hiveup.core.results import CheckResult, ValidationReport
@@ -13,6 +15,32 @@ GROUPS = {
     "readme": {"readme"},
     "version": {"version"},
 }
+
+CHECK_PRESENTATION = {
+    "structure": ("🧱", "Structure"),
+    "syntax": ("🐍", "Syntax"),
+    "imports": ("📦", "Imports"),
+    "json": ("📄", "JSON"),
+    "lint": ("🔍", "Lint"),
+    "format": ("🎨", "Format"),
+    "security": ("🔒", "Security"),
+    "audit": ("🛡️", "Dependency audit"),
+    "sync": ("🔗", "Config-code sync"),
+    "fetch": ("🔄", "Fetch patterns"),
+    "tests": ("🧪", "Unit tests"),
+    "readme": ("📝", "README"),
+    "version": ("🏷️", "Version"),
+}
+
+STATUS_PRESENTATION = {
+    "passed": ("✅", "Passed"),
+    "warning": ("⚠️", "Passed with warnings"),
+    "failed": ("❌", "Failed"),
+    "error": ("🛑", "Error"),
+    "skipped": ("⏭️", "Skipped"),
+}
+
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def render_markdown(report: ValidationReport, *, commit: str = "", commit_msg: str = "", dirs: str = "") -> str:
@@ -68,16 +96,101 @@ def _group_status_text(results: list[CheckResult]) -> str:
 
 
 def _section(label: str, results: list[CheckResult]) -> str:
-    body = "\n".join(_result_lines(result) for result in results) or "(skipped)"
     icon = _group_status_text(results).split(" ", 1)[0]
-    return f"<details><summary>{icon} {label} Check output</summary>\n\n```\n{body}\n```\n\n</details>\n"
+    body = _section_body(results)
+    return f"<details><summary>{icon} {label}</summary>\n\n{body}\n\n</details>\n"
 
 
-def _result_lines(result: CheckResult) -> str:
-    lines = [f"[{result.integration}] {result.check}: {result.status}"]
-    for message in result.messages:
-        location = f"{message.file}: " if message.file else ""
-        lines.append(f"  {message.severity}: {location}{message.message}")
-    if result.raw_output:
-        lines.append(result.raw_output)
-    return "\n".join(lines)
+def _section_body(results: list[CheckResult]) -> str:
+    if not results:
+        return "_Skipped._"
+
+    grouped: dict[str, list[CheckResult]] = defaultdict(list)
+    for result in results:
+        grouped[result.integration].append(result)
+
+    sections = []
+    show_integration_heading = len(grouped) > 1
+    for integration, integration_results in grouped.items():
+        lines = []
+        if show_integration_heading:
+            lines.append(f"#### `{integration}`")
+        lines.extend(
+            [
+                "| Check | Result | Summary |",
+                "|:------|:-------|:--------|",
+                *[_result_row(result) for result in integration_results],
+            ]
+        )
+
+        messages = [(result, message) for result in integration_results for message in result.messages]
+        if messages:
+            lines.append("\n#### Notices")
+            for result, message in messages:
+                severity_icon = "❌" if message.severity == "error" else "⚠️" if message.severity == "warning" else "ℹ️"
+                _, check_label = _check_presentation(result.check)
+                location = _message_location(message.file, message.line)
+                lines.append(f"- {severity_icon} **{check_label}:** {location}{message.message}")
+                if message.fix_hint:
+                    lines.append(f"  - **Suggested fix:** `{message.fix_hint}`")
+
+        logs = [result for result in integration_results if result.raw_output]
+        if logs:
+            lines.append("\n#### Logs")
+            lines.extend(_result_log(result) for result in logs)
+        sections.append("\n".join(lines))
+
+    return "\n\n".join(sections)
+
+
+def _result_row(result: CheckResult) -> str:
+    check_icon, check_label = _check_presentation(result.check)
+    status_icon, status_label = STATUS_PRESENTATION[result.status]
+    summary = _result_summary(result)
+    return f"| {check_icon} {check_label} | {status_icon} {status_label} | {summary} |"
+
+
+def _result_summary(result: CheckResult) -> str:
+    details = []
+    if result.check == "tests":
+        passed = re.search(r"(\d+) passed", result.raw_output)
+        coverage = re.search(r"^TOTAL\s+\d+\s+\d+\s+(\d+%)", result.raw_output, re.MULTILINE)
+        if passed:
+            details.append(f"{passed.group(1)} tests")
+        if coverage:
+            details.append(f"{coverage.group(1)} coverage")
+    elif result.check == "format":
+        formatted = re.search(r"(\d+) files? already formatted", result.raw_output)
+        if formatted:
+            details.append(f"{formatted.group(1)} files formatted")
+    elif result.check == "audit" and "No known vulnerabilities found" in result.raw_output:
+        details.append("No known vulnerabilities")
+
+    if result.duration_s:
+        details.append(f"{result.duration_s:.2f}s")
+    return " · ".join(details) or "—"
+
+
+def _result_log(result: CheckResult) -> str:
+    check_icon, check_label = _check_presentation(result.check)
+    expanded = " open" if result.status in {"failed", "error"} else ""
+    output = ANSI_ESCAPE.sub("", result.raw_output)
+    fence = "````" if "```" in output else "```"
+    return (
+        f"<details{expanded}><summary>📋 {check_icon} {check_label} log</summary>\n\n"
+        f"{fence}text\n{output}\n{fence}\n\n"
+        "</details>"
+    )
+
+
+def _check_presentation(check: str) -> tuple[str, str]:
+    return CHECK_PRESENTATION.get(check, ("🔧", check.replace("_", " ").title()))
+
+
+def _message_location(file: str | None, line: int | None) -> str:
+    if not file:
+        return ""
+    location = file
+    if line:
+        location += f":{line}"
+    return f"`{location}` — "

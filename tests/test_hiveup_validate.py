@@ -39,6 +39,7 @@ from hiveup.packaging import (  # noqa: E402
     write_package_zip,
 )
 from hiveup.render.console import render_report  # noqa: E402
+from hiveup.render.markdown import render_markdown  # noqa: E402
 
 
 EXAMPLES = Path(__file__).resolve().parent / "examples"
@@ -410,6 +411,62 @@ def test_console_renders_raw_unit_test_failure_output(capsys) -> None:
     output = capsys.readouterr().out
     assert "FAILED tests/test_demo_unit.py::test_demo" in output
     assert "AssertionError: expected 2, got 1" in output
+
+
+def test_markdown_renders_compact_check_tables_and_collapsed_success_logs() -> None:
+    report = ValidationReport(
+        [
+            CheckResult(check="syntax", integration="github", status="passed", duration_s=0.01),
+            CheckResult(
+                check="format",
+                integration="github",
+                status="passed",
+                duration_s=0.02,
+                raw_output="\x1b[32m11 files already formatted\x1b[0m",
+            ),
+            CheckResult(
+                check="sync",
+                integration="github",
+                status="warning",
+                messages=[CheckMessage("warning", "SDK input drift is historic")],
+            ),
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert "| 🐍 Syntax | ✅ Passed | 0.01s |" in output
+    assert "| 🎨 Format | ✅ Passed | 11 files formatted · 0.02s |" in output
+    assert "| 🔗 Config-code sync | ⚠️ Passed with warnings | — |" in output
+    assert "- ⚠️ **Config-code sync:** SDK input drift is historic" in output
+    assert "<details><summary>📋 🎨 Format log</summary>" in output
+    assert "11 files already formatted" in output
+    assert "\x1b" not in output
+
+
+def test_markdown_summarizes_tests_and_expands_failure_logs() -> None:
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="tests",
+                integration="github",
+                status="failed",
+                duration_s=0.88,
+                messages=[CheckMessage("error", "Unit tests failed")],
+                raw_output=(
+                    "FAILED tests/test_github_unit.py::test_demo\n"
+                    "TOTAL  745  91  88%\n"
+                    "103 passed, 1 failed in 0.88s"
+                ),
+            )
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert "| 🧪 Unit tests | ❌ Failed | 103 tests · 88% coverage · 0.88s |" in output
+    assert "<details open><summary>📋 🧪 Unit tests log</summary>" in output
+    assert "- ❌ **Unit tests:** Unit tests failed" in output
 
 
 def test_git_based_checks_work_outside_repo_cwd(tmp_path: Path, monkeypatch) -> None:
