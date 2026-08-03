@@ -98,7 +98,7 @@ def _group_status_text(results: list[CheckResult]) -> str:
 def _section(label: str, results: list[CheckResult]) -> str:
     icon = _group_status_text(results).split(" ", 1)[0]
     body = _section_body(results)
-    return f"<details><summary>{icon} {label}</summary>\n\n{body}\n\n</details>\n"
+    return f"<details><summary><strong>{icon} {label}</strong></summary>\n\n<br>\n\n{body}\n\n</details>\n\n<br>\n"
 
 
 def _section_body(results: list[CheckResult]) -> str:
@@ -115,29 +115,25 @@ def _section_body(results: list[CheckResult]) -> str:
         lines = []
         if show_integration_heading:
             lines.append(f"#### `{integration}`")
+        heading = "#####" if show_integration_heading else "####"
         lines.extend(
             [
+                f"{heading} Results",
+                "",
                 "| Check | Result | Summary |",
                 "|:------|:-------|:--------|",
                 *[_result_row(result) for result in integration_results],
             ]
         )
 
-        messages = [(result, message) for result in integration_results for message in result.messages]
-        if messages:
-            lines.append("\n#### Notices")
-            for result, message in messages:
-                severity_icon = "❌" if message.severity == "error" else "⚠️" if message.severity == "warning" else "ℹ️"
-                _, check_label = _check_presentation(result.check)
-                location = _message_location(message.file, message.line)
-                message_text = re.sub(r"^(?:⚠️|❌|ℹ️)\s*", "", message.message)
-                lines.append(f"- {severity_icon} **{check_label}:** {location}{message_text}")
-                if message.fix_hint:
-                    lines.append(f"  - **Suggested fix:** `{message.fix_hint}`")
+        notices = [result for result in integration_results if result.messages]
+        if notices:
+            lines.append(f"\n{heading} Notices")
+            lines.extend(_result_notices(result) for result in notices)
 
         logs = [result for result in integration_results if result.raw_output]
         if logs:
-            lines.append("\n#### Logs")
+            lines.append(f"\n{heading} Logs")
             lines.extend(_result_log(result) for result in logs)
         sections.append("\n".join(lines))
 
@@ -182,6 +178,25 @@ def _result_log(result: CheckResult) -> str:
         f"{fence}text\n{output}\n{fence}\n\n"
         "</details>"
     )
+
+
+def _result_notices(result: CheckResult) -> str:
+    check_icon, check_label = _check_presentation(result.check)
+    has_errors = any(message.severity == "error" for message in result.messages)
+    status_icon = "❌" if has_errors else "⚠️"
+    expanded = " open" if has_errors else ""
+    count = len(result.messages)
+    noun = "notice" if count == 1 else "notices"
+    lines = [f"<details{expanded}><summary>{status_icon} {check_icon} {check_label} — {count} {noun}</summary>", ""]
+    for message in result.messages:
+        severity_icon = "❌" if message.severity == "error" else "⚠️" if message.severity == "warning" else "ℹ️"
+        location = _message_location(message.file, message.line)
+        message_text = re.sub(r"^(?:⚠️|❌|ℹ️)\s*", "", message.message)
+        lines.append(f"- {severity_icon} {location}{message_text}")
+        if message.fix_hint:
+            lines.append(f"  - **Suggested fix:** `{message.fix_hint}`")
+    lines.extend(["", "</details>"])
+    return "\n".join(lines)
 
 
 def _check_presentation(check: str) -> tuple[str, str]:

@@ -438,7 +438,9 @@ def test_markdown_renders_compact_check_tables_and_collapsed_success_logs() -> N
     assert "| 🐍 Syntax | ✅ Passed | 0.01s |" in output
     assert "| 🎨 Format | ✅ Passed | 11 files formatted · 0.02s |" in output
     assert "| 🔗 Config-code sync | ⚠️ Passed with warnings | — |" in output
-    assert "- ⚠️ **Config-code sync:** SDK input drift is historic" in output
+    assert "<summary><strong>⚠️ Code</strong></summary>\n\n<br>\n\n#### Results" in output
+    assert "<summary>⚠️ 🔗 Config-code sync — 1 notice</summary>" in output
+    assert "- ⚠️ SDK input drift is historic" in output
     assert "<details><summary>📋 🎨 Format log</summary>" in output
     assert "11 files already formatted" in output
     assert "\x1b" not in output
@@ -465,8 +467,9 @@ def test_markdown_summarizes_tests_and_expands_failure_logs() -> None:
     output = render_markdown(report)
 
     assert "| 🧪 Unit tests | ❌ Failed | 103 tests · 88% coverage · 0.88s |" in output
+    assert "<details open><summary>❌ 🧪 Unit tests — 1 notice</summary>" in output
     assert "<details open><summary>📋 🧪 Unit tests log</summary>" in output
-    assert "- ❌ **Unit tests:** Unit tests failed" in output
+    assert "- ❌ Unit tests failed" in output
 
 
 def test_git_based_checks_work_outside_repo_cwd(tmp_path: Path, monkeypatch) -> None:
