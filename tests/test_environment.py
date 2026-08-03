@@ -452,6 +452,7 @@ def test_integration_tests_run_with_isolated_interpreter(tmp_path: Path, monkeyp
     isolated = environment.IntegrationEnvironment(tmp_path / "cache", isolated_python, "key", created=False)
     prepared = []
     commands = []
+    coverage_configs = []
 
     def prepare(path: Path, *, include_test_tools: bool):
         prepared.append((path, include_test_tools))
@@ -459,6 +460,8 @@ def test_integration_tests_run_with_isolated_interpreter(tmp_path: Path, monkeyp
 
     def run(command, **kwargs):
         commands.append((command, kwargs))
+        coverage_config = Path(command[command.index("--cov-config") + 1])
+        coverage_configs.append(coverage_config.read_text(encoding="utf-8"))
         return type("Result", (), {"returncode": 0, "stdout": "1 passed\n", "stderr": ""})()
 
     monkeypatch.setattr(test_checks, "prepare_environment", prepare)
@@ -481,6 +484,37 @@ def test_integration_tests_run_with_isolated_interpreter(tmp_path: Path, monkeyp
         str(staged_integration.parent.resolve()),
         str(staged_integration.resolve()),
     ]
+    coverage_config = Path(commands[0][0][commands[0][0].index("--cov-config") + 1])
+    assert coverage_config.name == ".hiveup-coveragerc"
+    assert "*/tests/*" in coverage_configs[0]
+
+
+def test_integration_test_coverage_excludes_test_files(tmp_path: Path, monkeypatch) -> None:
+    integration = tmp_path / "demo"
+    tests_dir = integration / "tests"
+    tests_dir.mkdir(parents=True)
+    (integration / "__init__.py").write_text("", encoding="utf-8")
+    (integration / "demo.py").write_text(
+        "VALUE = 1\n\ndef uncovered():\n    return 2\n",
+        encoding="utf-8",
+    )
+    test_file = tests_dir / "test_demo_unit.py"
+    test_file.write_text(
+        "import pytest\n\n"
+        "from demo.demo import VALUE\n\n"
+        "pytestmark = pytest.mark.unit\n\n"
+        "def test_value():\n"
+        "    assert VALUE == 1\n",
+        encoding="utf-8",
+    )
+    isolated = environment.IntegrationEnvironment(tmp_path / "cache", Path(sys.executable), "key", created=False)
+    monkeypatch.setattr(test_checks, "_stage_sdk_config", lambda *args: None)
+
+    exit_code, output = test_checks._run_integration_tests(isolated, integration, [test_file])
+
+    assert exit_code == 0, output
+    assert "demo.py" in output
+    assert "test_demo_unit.py" not in output
 
 
 def test_integration_tests_stage_config_where_installed_sdk_expects_it(tmp_path: Path, monkeypatch) -> None:
