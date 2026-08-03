@@ -194,12 +194,14 @@ def check_format(path: Path, *, fix: bool = False) -> CheckResult:
 
 def check_security(path: Path) -> CheckResult:
     excludes = ",".join(str(path / directory) for directory in BANDIT_EXCLUDE_DIRS)
-    return _subprocess_check(
+    result = _subprocess_check(
         "security",
         path,
         [sys.executable, "-m", "bandit", "-r", str(path), "-x", excludes, "-s", "B101", "-q"],
         fix_hint="Review flagged code for security risks.",
     )
+    result.raw_output = _deduplicate_bandit_nosec_warnings(result.raw_output)
+    return result
 
 
 def check_audit(path: Path) -> CheckResult:
@@ -349,6 +351,19 @@ def _subprocess_check(
         start,
         raw_output=output,
     )
+
+
+def _deduplicate_bandit_nosec_warnings(output: str) -> str:
+    lines: list[str] = []
+    seen_warnings: set[str] = set()
+    for line in output.splitlines():
+        is_nosec_warning = line.startswith("[tester]") and "nosec encountered" in line
+        if is_nosec_warning and line in seen_warnings:
+            continue
+        lines.append(line)
+        if is_nosec_warning:
+            seen_warnings.add(line)
+    return "\n".join(lines)
 
 
 def _check_file_imports(
