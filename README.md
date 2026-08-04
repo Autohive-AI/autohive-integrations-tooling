@@ -156,6 +156,7 @@ For example, `2.1.0` means "the second tooling release for SDK v2" — it does n
 | `2.1.0` | New checks or features (still SDK v2) |
 | `2.1.1` | Bug-fix to the tooling (still SDK v2) |
 | `2.4.0a1` | First Python HiveUp rewrite prerelease after tooling `2.3.0` |
+| `2.4.1` | Stable HiveUp patch release with improved CI output and behavior |
 | `3.0.0` | Tooling targeting SDK v3 |
 
 The Python distribution, import package, and executable are all named `hiveup`.
@@ -164,7 +165,7 @@ reads the version from there.
 
 ## Install HiveUp from a local build
 
-HiveUp is currently distributed as a local prerelease build. It is **not
+HiveUp is currently distributed as a local build. It is **not
 published to PyPI**. PyPI Trusted Publishing is deferred to
 [issue #50](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/50).
 
@@ -186,17 +187,17 @@ python -m twine check dist/*
 Install the resulting wheel as an isolated command-line tool:
 
 ```bash
-uv tool install --force ./dist/hiveup-2.4.0a1-py3-none-any.whl
+uv tool install --force ./dist/hiveup-2.4.1-py3-none-any.whl
 hiveup --version
 ```
 
 `pipx` is also supported:
 
 ```bash
-pipx install --force ./dist/hiveup-2.4.0a1-py3-none-any.whl
+pipx install --force ./dist/hiveup-2.4.1-py3-none-any.whl
 ```
 
-Rebuild and repeat the `--force` installation to upgrade a local prerelease.
+Rebuild and repeat the `--force` installation to upgrade a local build.
 To remove it:
 
 ```bash
@@ -204,8 +205,8 @@ uv tool uninstall hiveup
 # or: pipx uninstall hiveup
 ```
 
-Pull-request CI builds both `hiveup-2.4.0a1-py3-none-any.whl` and
-`hiveup-2.4.0a1.tar.gz`, verifies their metadata, installs the wheel outside the
+Pull-request CI builds both `hiveup-2.4.1-py3-none-any.whl` and
+`hiveup-2.4.1.tar.gz`, verifies their metadata, installs the wheel outside the
 source checkout, exercises the supported CLI lifecycle, and uploads them as a
 GitHub Actions artifact. It does not publish either file.
 
