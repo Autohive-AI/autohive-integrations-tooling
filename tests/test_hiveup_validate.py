@@ -501,6 +501,37 @@ def test_markdown_summarizes_tests_and_includes_failure_detail() -> None:
     assert "❌ Tests failed: github" in output
 
 
+def test_markdown_test_failure_summary_only_names_failed_integrations_and_strips_ansi() -> None:
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="tests",
+                integration="passing",
+                status="passed",
+                raw_output="1 passed in 0.01s",
+            ),
+            CheckResult(
+                check="tests",
+                integration="failing",
+                status="failed",
+                raw_output=(
+                    "\x1b[31mFAILED tests/test_demo.py::test_demo\x1b[0m\n"
+                    "\x1b[33mTOTAL  10  1  90%\x1b[0m\n"
+                    "1 failed in 0.01s"
+                ),
+            ),
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert "❌ Tests failed: failing" in output
+    assert "❌ Tests failed: passing" not in output
+    assert "FAILED tests/test_demo.py::test_demo" in output
+    assert "failing          0/1       90%       ❌ Failed" in output
+    assert "\x1b" not in output
+
+
 def test_markdown_groups_successful_pytest_warnings_without_raw_test_noise() -> None:
     affected_tests = "\n".join(
         f"gmail/tests/test_gmail_unit.py::TestEmail::test_html_{index}" for index in range(1, 8)
@@ -536,6 +567,52 @@ def test_markdown_groups_successful_pytest_warnings_without_raw_test_noise() -> 
     assert "Affected tests: 7" in output
     assert "[ 65%]" not in output
     assert "warnings.warn(" not in output
+
+
+def test_markdown_keeps_test_attribution_for_each_warning_in_a_pytest_block() -> None:
+    test_id = "demo/tests/test_demo_unit.py::test_warns"
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="tests",
+                integration="demo",
+                status="passed",
+                raw_output=(
+                    "=============================== warnings summary ===============================\n"
+                    f"{test_id}\n"
+                    "  /tmp/first.py:10: FirstWarning: first warning\n"
+                    "  /tmp/second.py:20: SecondWarning: second warning\n\n"
+                    "  /tmp/collection.py:30: CollectionWarning: collection warning\n"
+                    "-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n"
+                    "1 passed, 3 warnings in 0.01s"
+                ),
+            )
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert output.count(f"- {test_id}") == 2
+    assert "⚠️ CollectionWarning — 1 occurrence" in output
+    assert output.count("Affected tests:") == 2
+
+
+def test_markdown_includes_raw_output_for_message_free_code_warning() -> None:
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="sync",
+                integration="demo",
+                status="warning",
+                raw_output="Warning details emitted only by the checker",
+            )
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert "🔗 Checking config-code sync..." in output
+    assert "Warning details emitted only by the checker" in output
 
 
 def test_git_based_checks_work_outside_repo_cwd(tmp_path: Path, monkeypatch) -> None:

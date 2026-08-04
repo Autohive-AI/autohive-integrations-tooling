@@ -185,6 +185,10 @@ def _code_output(results: list[CheckResult]) -> str:
                 if warnings:
                     lines.append("   Warnings:")
                     lines.extend(f"     ⚠️ {warning}" for warning in warnings)
+                if result.status == "warning" and not result.messages:
+                    output = _raw_output_without_messages(result)
+                    if output:
+                        lines.extend(f"      {line}" for line in output.splitlines())
 
         lines.extend(["", "=" * 40])
         if any(result.status in {"failed", "error"} for result in integration_results):
@@ -201,10 +205,15 @@ def _tests_output(results: list[CheckResult]) -> str:
     failure_outputs = []
     notices = []
     warning_sections = []
+    total_passed = 0
+    total_failed = 0
     for result in results:
-        passed = _count(r"(\d+) passed", result.raw_output)
-        failed = _count(r"(\d+) failed", result.raw_output)
-        coverage = _match(r"^TOTAL\s+\d+\s+\d+\s+(\d+%)", result.raw_output, re.MULTILINE) or "n/a"
+        raw_output = ANSI_ESCAPE.sub("", result.raw_output)
+        passed = _count(r"(\d+) passed", raw_output)
+        failed = _count(r"(\d+) failed", raw_output)
+        total_passed += passed
+        total_failed += failed
+        coverage = _match(r"^TOTAL\s+\d+\s+\d+\s+(\d+%)", raw_output, re.MULTILINE) or "n/a"
         total = passed + failed
         tests = f"{passed}/{total}" if total else "n/a"
         status = {
@@ -216,19 +225,13 @@ def _tests_output(results: list[CheckResult]) -> str:
         }[result.status]
         rows.append((result.integration, tests, coverage, status))
         notices.extend(f"{_message_line(message)} ({result.integration})" for message in result.messages)
-        warnings = (
-            [] if result.status in {"failed", "error"} else _pytest_warnings(result.raw_output, result.integration)
-        )
+        warnings = [] if result.status in {"failed", "error"} else _pytest_warnings(raw_output, result.integration)
         if warnings:
             warning_sections.append(_pytest_warning_output(result.integration, warnings))
-        if result.status in {"failed", "error"} and result.raw_output:
-            failure_outputs.extend(
-                ["", "=" * 60, f"{result.integration} — failure detail", "=" * 60, result.raw_output]
-            )
+        if result.status in {"failed", "error"} and raw_output:
+            failure_outputs.extend(["", "=" * 60, f"{result.integration} — failure detail", "=" * 60, raw_output])
 
     headers = ("Integration", "Tests", "Coverage", "Status")
-    total_passed = sum(_count(r"(\d+) passed", result.raw_output) for result in results)
-    total_failed = sum(_count(r"(\d+) failed", result.raw_output) for result in results)
     total_tests = total_passed + total_failed
     total_status = (
         "✅ All passed" if not any(result.status in {"failed", "error"} for result in results) else "❌ Some failed"
@@ -258,7 +261,12 @@ def _tests_output(results: list[CheckResult]) -> str:
         lines.extend(["", "Warnings:", *warning_sections])
     lines.extend(failure_outputs)
     outcome = "✅ Tests passed" if total_status.startswith("✅") else "❌ Tests failed"
-    integrations = ", ".join(result.integration for result in results)
+    outcome_results = (
+        results
+        if total_status.startswith("✅")
+        else [result for result in results if result.status in {"failed", "error"}]
+    )
+    integrations = ", ".join(result.integration for result in outcome_results)
     lines.extend(["", f"{outcome}: {integrations}"])
     return "\n".join(lines)
 
@@ -321,6 +329,9 @@ def _pytest_warnings(output: str, integration: str) -> list[_WarningSummary]:
     for line in lines[start:]:
         if line.startswith("-- Docs:") or re.match(r"^=+ .+ =+$", line):
             break
+        if not line.strip():
+            affected_tests = []
+            continue
         source_match = source_pattern.match(line)
         if source_match:
             source = f"{_normalized_path(source_match.group(1), integration)}:{source_match.group(2)}"
@@ -332,7 +343,6 @@ def _pytest_warnings(output: str, integration: str) -> list[_WarningSummary]:
             for test in affected_tests:
                 if test not in warning.tests:
                     warning.tests.append(test)
-            affected_tests = []
         elif line and not line[0].isspace():
             affected_tests.append(line.strip())
     return list(grouped.values())
@@ -349,10 +359,10 @@ def _pytest_warning_output(integration: str, warnings: list[_WarningSummary]) ->
                 f"       Source: {warning.source}",
             ]
         )
-        if len(warning.tests) <= 2:
+        if warning.tests and len(warning.tests) <= 2:
             lines.append("       Affected tests:")
             lines.extend(f"         - {test}" for test in warning.tests)
-        else:
+        elif warning.tests:
             lines.append(f"       Affected tests: {len(warning.tests)}")
     return "\n".join(lines)
 
