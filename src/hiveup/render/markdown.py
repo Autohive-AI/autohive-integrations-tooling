@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 
-from hiveup.core.results import CheckResult, ValidationReport
+from hiveup.core.results import CheckMessage, CheckResult, ValidationReport
 
 GROUPS = {
     "structure": {"structure"},
@@ -13,6 +15,29 @@ GROUPS = {
     "readme": {"readme"},
     "version": {"version"},
 }
+
+CODE_CHECKS = {
+    "syntax": ("🐍", "Checking Python syntax", "Syntax"),
+    "imports": ("📥", "Checking imports", "Imports"),
+    "json": ("📄", "Checking JSON files", "JSON files"),
+    "lint": ("🔍", "Linting with ruff", "Lint"),
+    "format": ("🎨", "Checking formatting with ruff", "Formatting"),
+    "security": ("🔒", "Scanning for security issues with bandit", "Security"),
+    "audit": ("🛡️", "Checking dependencies for vulnerabilities with pip-audit", "Dependencies"),
+    "sync": ("🔗", "Checking config-code sync", "Config-code sync"),
+    "fetch": ("🔄", "Checking fetch patterns", "Fetch patterns"),
+}
+
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+@dataclass
+class _WarningSummary:
+    category: str
+    message: str
+    source: str
+    occurrences: int = 0
+    tests: list[str] = field(default_factory=list)
 
 
 def render_markdown(report: ValidationReport, *, commit: str = "", commit_msg: str = "", dirs: str = "") -> str:
@@ -33,10 +58,10 @@ def render_markdown(report: ValidationReport, *, commit: str = "", commit_msg: s
     ]:
         results = list(_group_results(report, group))
         rows.append(f"| {label} | {_group_status_text([*run_errors, *results])} |")
-        sections.append(_section(label, results))
+        sections.append(_section(label, group, results))
 
     if run_errors:
-        sections.insert(0, _section("Run", run_errors))
+        sections.insert(0, _section("Run", "run", run_errors))
 
     header = "## 🔍 Integration Validation Results\n\n"
     if commit:
@@ -67,17 +92,308 @@ def _group_status_text(results: list[CheckResult]) -> str:
     return "✅ Passed"
 
 
-def _section(label: str, results: list[CheckResult]) -> str:
-    body = "\n".join(_result_lines(result) for result in results) or "(skipped)"
+def _section(label: str, group: str, results: list[CheckResult]) -> str:
     icon = _group_status_text(results).split(" ", 1)[0]
-    return f"<details><summary>{icon} {label} Check output</summary>\n\n```\n{body}\n```\n\n</details>\n"
+    body = _section_output(group, results)
+    fence = "````" if "```" in body else "```"
+    return f"<details><summary>{icon} {label} Check output</summary>\n\n{fence}text\n{body}\n{fence}\n\n</details>\n"
 
 
-def _result_lines(result: CheckResult) -> str:
-    lines = [f"[{result.integration}] {result.check}: {result.status}"]
-    for message in result.messages:
-        location = f"{message.file}: " if message.file else ""
-        lines.append(f"  {message.severity}: {location}{message.message}")
-    if result.raw_output:
-        lines.append(result.raw_output)
+def _section_output(group: str, results: list[CheckResult]) -> str:
+    if not results:
+        return "Skipped."
+    if group == "structure":
+        return _structure_output(results)
+    if group == "code":
+        return _code_output(results)
+    if group == "tests":
+        return _tests_output(results)
+    if group in {"readme", "version"}:
+        return _legacy_output(results)
+    return _generic_output(results)
+
+
+def _structure_output(results: list[CheckResult]) -> str:
+    lines = [f"Validating {len(results)} integration(s)..."]
+    total_errors = 0
+    total_warnings = 0
+    for result in results:
+        errors = [message for message in result.messages if message.severity == "error"]
+        warnings = [message for message in result.messages if message.severity == "warning"]
+        total_errors += len(errors)
+        total_warnings += len(warnings)
+        lines.extend(["", "=" * 60, f"Integration: {result.integration}", "=" * 60])
+        if errors:
+            lines.extend(["", f"Errors ({len(errors)}):", *[f"  ❌ {_message_text(message)}" for message in errors]])
+        if warnings:
+            lines.extend(
+                ["", f"Warnings ({len(warnings)}):", *[f"  ⚠️ {_message_text(message)}" for message in warnings]]
+            )
+        if not errors and not warnings:
+            lines.extend(["", "✅ Structure valid"])
+
+    lines.extend(
+        [
+            "",
+            "=" * 60,
+            "SUMMARY",
+            "=" * 60,
+            f"Integrations validated: {len(results)}",
+            f"Total errors: {total_errors}",
+            f"Total warnings: {total_warnings}",
+            "",
+        ]
+    )
+    if total_errors:
+        lines.append("❌ Validation FAILED - please fix errors before submitting PR")
+    elif total_warnings:
+        lines.append("⚠️ Validation passed with warnings - please review")
+    else:
+        lines.append("✅ All validations passed!")
     return "\n".join(lines)
+
+
+def _code_output(results: list[CheckResult]) -> str:
+    integrations: dict[str, list[CheckResult]] = {}
+    for result in results:
+        integrations.setdefault(result.integration, []).append(result)
+
+    sections = []
+    for integration, integration_results in integrations.items():
+        lines = ["-" * 40, f"Checking: {integration}", "-" * 40]
+        for result in integration_results:
+            icon, action, success_label = CODE_CHECKS.get(
+                result.check,
+                ("🔧", f"Checking {result.check.replace('_', ' ')}", result.check.replace("_", " ").title()),
+            )
+            lines.extend(["", f"{icon} {action}..."])
+            for message in result.messages:
+                message_icon = "❌" if message.severity == "error" else "⚠️" if message.severity == "warning" else "ℹ️"
+                lines.append(f"   {message_icon} {_message_text(message)}")
+                if message.fix_hint:
+                    lines.append(f"      Fix: {message.fix_hint}")
+            if result.status == "skipped":
+                lines.append(f"   ⏭️ {success_label} skipped")
+            elif result.status in {"failed", "error"}:
+                lines.append(f"   ❌ {success_label} failed")
+                output = _raw_output_without_messages(result)
+                if output:
+                    lines.extend(f"      {line}" for line in output.splitlines())
+            else:
+                lines.append(f"   ✅ {success_label} OK")
+                warnings = _bandit_warnings(result) if result.check == "security" else []
+                if warnings:
+                    lines.append("   Warnings:")
+                    lines.extend(f"     ⚠️ {warning}" for warning in warnings)
+                if result.status == "warning" and not result.messages:
+                    output = _raw_output_without_messages(result)
+                    if output:
+                        lines.extend(f"      {line}" for line in output.splitlines())
+
+        lines.extend(["", "=" * 40])
+        if any(result.status in {"failed", "error"} for result in integration_results):
+            lines.append("❌ CODE CHECK FAILED")
+        else:
+            lines.append("✅ CODE CHECK PASSED")
+        lines.append("=" * 40)
+        sections.append("\n".join(lines))
+    return "\n\n".join(sections)
+
+
+def _tests_output(results: list[CheckResult]) -> str:
+    rows = []
+    failure_outputs = []
+    notices = []
+    warning_sections = []
+    total_passed = 0
+    total_failed = 0
+    for result in results:
+        raw_output = ANSI_ESCAPE.sub("", result.raw_output)
+        passed = _count(r"(\d+) passed", raw_output)
+        failed = _count(r"(\d+) failed", raw_output)
+        total_passed += passed
+        total_failed += failed
+        coverage = _match(r"^TOTAL\s+\d+\s+\d+\s+(\d+%)", raw_output, re.MULTILINE) or "n/a"
+        total = passed + failed
+        tests = f"{passed}/{total}" if total else "n/a"
+        status = {
+            "passed": "✅ Passed",
+            "warning": "⚠️ Warning",
+            "failed": "❌ Failed",
+            "error": "💥 Error",
+            "skipped": "⏭️ Skipped",
+        }[result.status]
+        rows.append((result.integration, tests, coverage, status))
+        notices.extend(f"{_message_line(message)} ({result.integration})" for message in result.messages)
+        warnings = [] if result.status in {"failed", "error"} else _pytest_warnings(raw_output, result.integration)
+        if warnings:
+            warning_sections.append(_pytest_warning_output(result.integration, warnings))
+        if result.status in {"failed", "error"} and raw_output:
+            failure_outputs.extend(["", "=" * 60, f"{result.integration} — failure detail", "=" * 60, raw_output])
+
+    headers = ("Integration", "Tests", "Coverage", "Status")
+    total_tests = total_passed + total_failed
+    total_status = (
+        "✅ All passed" if not any(result.status in {"failed", "error"} for result in results) else "❌ Some failed"
+    )
+    total_tests_text = f"{total_passed}/{total_tests}" if total_tests else "n/a"
+    total_row = ("Total", total_tests_text, "", total_status)
+    widths = [len(header) for header in headers]
+    for row in [*rows, total_row]:
+        for index, value in enumerate(row):
+            widths[index] = max(widths[index], len(value))
+
+    def table_line(values: tuple[str, ...]) -> str:
+        return (
+            f"{values[0]:<{widths[0] + 2}}"
+            f"{values[1]:>{widths[1] + 2}}"
+            f"{values[2]:>{widths[2] + 2}}"
+            f"{values[3]:>{widths[3] + 2}}"
+        )
+
+    lines = [table_line(headers)]
+    divider = "-" * len(lines[0])
+    lines.extend([divider, *[table_line(row) for row in rows], divider])
+    lines.append(table_line(total_row))
+    if notices:
+        lines.extend(["", *notices])
+    if warning_sections:
+        lines.extend(["", "Warnings:", *warning_sections])
+    lines.extend(failure_outputs)
+    outcome = "✅ Tests passed" if total_status.startswith("✅") else "❌ Tests failed"
+    outcome_results = (
+        results
+        if total_status.startswith("✅")
+        else [result for result in results if result.status in {"failed", "error"}]
+    )
+    integrations = ", ".join(result.integration for result in outcome_results)
+    lines.extend(["", f"{outcome}: {integrations}"])
+    return "\n".join(lines)
+
+
+def _legacy_output(results: list[CheckResult]) -> str:
+    sections = []
+    for result in results:
+        if result.raw_output:
+            sections.append(ANSI_ESCAPE.sub("", result.raw_output))
+        elif result.messages:
+            sections.append("\n".join(_message_line(message) for message in result.messages))
+        elif result.status == "skipped":
+            sections.append("Skipped.")
+    return "\n\n".join(sections) or "Passed."
+
+
+def _generic_output(results: list[CheckResult]) -> str:
+    lines = []
+    for result in results:
+        lines.append(f"[{result.integration}] {result.check}: {result.status}")
+        lines.extend(f"  {_message_line(message)}" for message in result.messages)
+        output = _raw_output_without_messages(result)
+        if output:
+            lines.append(output)
+    return "\n".join(lines)
+
+
+def _raw_output_without_messages(result: CheckResult) -> str:
+    message_texts = {message.message.strip() for message in result.messages}
+    return "\n".join(
+        line for line in ANSI_ESCAPE.sub("", result.raw_output).splitlines() if line.strip() not in message_texts
+    ).strip()
+
+
+def _bandit_warnings(result: CheckResult) -> list[str]:
+    warnings = []
+    seen = set()
+    pattern = re.compile(r"^\[tester\]\s+WARNING\s+nosec encountered \((B\d+)\), but no failed test on file (.+)$")
+    for line in ANSI_ESCAPE.sub("", result.raw_output).splitlines():
+        match = pattern.match(line.strip())
+        if not match:
+            continue
+        warning = f"nosec encountered ({match.group(1)}) in {_normalized_path(match.group(2), result.integration)}"
+        if warning not in seen:
+            warnings.append(warning)
+            seen.add(warning)
+    return warnings
+
+
+def _pytest_warnings(output: str, integration: str) -> list[_WarningSummary]:
+    lines = ANSI_ESCAPE.sub("", output).splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if re.match(r"^=+ warnings summary =+$", line)) + 1
+    except StopIteration:
+        return []
+
+    source_pattern = re.compile(r"^\s+(.+?):(\d+): ([A-Za-z_][\w.]*Warning): (.+)$")
+    grouped: dict[tuple[str, str, str], _WarningSummary] = {}
+    affected_tests: list[str] = []
+    for line in lines[start:]:
+        if line.startswith("-- Docs:") or re.match(r"^=+ .+ =+$", line):
+            break
+        if not line.strip():
+            affected_tests = []
+            continue
+        source_match = source_pattern.match(line)
+        if source_match:
+            source = f"{_normalized_path(source_match.group(1), integration)}:{source_match.group(2)}"
+            category = source_match.group(3)
+            message = source_match.group(4).strip()
+            key = (category, message, source)
+            warning = grouped.setdefault(key, _WarningSummary(category, message, source))
+            warning.occurrences += max(len(affected_tests), 1)
+            for test in affected_tests:
+                if test not in warning.tests:
+                    warning.tests.append(test)
+        elif line and not line[0].isspace():
+            affected_tests.append(line.strip())
+    return list(grouped.values())
+
+
+def _pytest_warning_output(integration: str, warnings: list[_WarningSummary]) -> str:
+    lines = [f"  {integration}:"]
+    for warning in warnings:
+        noun = "occurrence" if warning.occurrences == 1 else "occurrences"
+        lines.extend(
+            [
+                f"    ⚠️ {warning.category} — {warning.occurrences} {noun}",
+                f"       {warning.message}",
+                f"       Source: {warning.source}",
+            ]
+        )
+        if warning.tests and len(warning.tests) <= 2:
+            lines.append("       Affected tests:")
+            lines.extend(f"         - {test}" for test in warning.tests)
+        elif warning.tests:
+            lines.append(f"       Affected tests: {len(warning.tests)}")
+    return "\n".join(lines)
+
+
+def _normalized_path(value: str, integration: str) -> str:
+    path = value.replace("\\", "/")
+    for marker in ("/site-packages/", f"/{integration}/"):
+        if marker in path:
+            suffix = path.rsplit(marker, 1)[1]
+            return f"{integration}/{suffix}" if marker.endswith(f"/{integration}/") else suffix
+    return path
+
+
+def _message_line(message: CheckMessage) -> str:
+    icon = "❌" if message.severity == "error" else "⚠️" if message.severity == "warning" else "ℹ️"
+    return f"{icon} {_message_text(message)}"
+
+
+def _message_text(message: CheckMessage) -> str:
+    text = re.sub(r"^(?:⚠️|❌|ℹ️)\s*", "", message.message)
+    if not message.file:
+        return text
+    location = message.file + (f":{message.line}" if message.line else "")
+    return f"{location}: {text}"
+
+
+def _count(pattern: str, value: str) -> int:
+    match = re.search(pattern, value)
+    return int(match.group(1)) if match else 0
+
+
+def _match(pattern: str, value: str, flags: int = 0) -> str | None:
+    match = re.search(pattern, value, flags)
+    return match.group(1) if match else None

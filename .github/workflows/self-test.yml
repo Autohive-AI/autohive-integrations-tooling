@@ -599,7 +599,7 @@ jobs:
           [ "$README_RESULT" = skipped ]
           [ "$VERSION_RESULT" = skipped ]
           [ -f "$COMMENT_PATH" ]
-          grep -Fq "[$EXPECTED_INTEGRATION]" "$COMMENT_PATH"
+          grep -Fq "Integration: $EXPECTED_INTEGRATION" "$COMMENT_PATH"
 
           if [ -n "$EXPECTED_FAILURE_TEXT" ]; then
             grep -Fq "$EXPECTED_FAILURE_TEXT" \
@@ -661,7 +661,7 @@ jobs:
           [ "$README_RESULT" = success ]
           [ "$VERSION_RESULT" = success ]
           [ -f "$COMMENT_PATH" ]
-          grep -Fq '[action-fixture]' "$COMMENT_PATH"
+          grep -Fq 'Integration: action-fixture' "$COMMENT_PATH"
 
   test-action-comment-lifecycle:
     if: >-
@@ -701,9 +701,9 @@ jobs:
           COMMENT_ID=$(jq -r --arg marker "$COMMENT_MARKER" '.[] | select(.body | contains($marker)) | .id' <<< "$COMMENTS")
           echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
           COMMENT_BODY=$(gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" --jq .body)
-          grep -Fq '[good-integration]' <<< "$COMMENT_BODY"
+          grep -Fq 'Integration: good-integration' <<< "$COMMENT_BODY"
           grep -Fq '| Tests | ✅ Passed |' <<< "$COMMENT_BODY"
-          grep -Fq '[good-integration] tests: passed' <<< "$COMMENT_BODY"
+          grep -Fq '✅ Tests passed: good-integration' <<< "$COMMENT_BODY"
 
       - name: Replace sticky comment
         uses: ./
@@ -725,10 +725,10 @@ jobs:
           COMMENT_ID=$(jq -r --arg marker "$COMMENT_MARKER" '.[] | select(.body | contains($marker)) | .id' <<< "$COMMENTS")
           [ "$COMMENT_ID" = "$CREATED_COMMENT_ID" ]
           COMMENT_BODY=$(gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" --jq .body)
-          grep -Fq '[modular-integration]' <<< "$COMMENT_BODY"
+          grep -Fq 'Integration: modular-integration' <<< "$COMMENT_BODY"
           grep -Fq '| Tests | ✅ Passed |' <<< "$COMMENT_BODY"
-          grep -Fq '[modular-integration] tests: passed' <<< "$COMMENT_BODY"
-          if grep -Fq '[good-integration]' <<< "$COMMENT_BODY"; then
+          grep -Fq '✅ Tests passed: modular-integration' <<< "$COMMENT_BODY"
+          if grep -Fq 'Integration: good-integration' <<< "$COMMENT_BODY"; then
             echo 'Sticky comment retained stale validation output'
             exit 1
           fi

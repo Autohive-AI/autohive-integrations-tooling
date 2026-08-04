@@ -19,7 +19,7 @@ import hiveup.cli as cli  # noqa: E402
 from hiveup.cli import _emit_github_annotations, _report_dirs, _write_github_outputs, app, run_validation  # noqa: E402
 from hiveup import __version__  # noqa: E402
 from hiveup.checks.readme import check_readme  # noqa: E402
-from hiveup.checks.static import _legacy_check, check_syntax  # noqa: E402
+from hiveup.checks.static import _legacy_check, check_security, check_syntax  # noqa: E402
 from hiveup.checks.structure import (  # noqa: E402
     ENTRY_POINT_IDENTIFIER_MESSAGE,
     RESERVED_ENTRY_POINT_MESSAGE,
@@ -39,6 +39,7 @@ from hiveup.packaging import (  # noqa: E402
     write_package_zip,
 )
 from hiveup.render.console import render_report  # noqa: E402
+from hiveup.render.markdown import render_markdown  # noqa: E402
 
 
 EXAMPLES = Path(__file__).resolve().parent / "examples"
@@ -412,6 +413,208 @@ def test_console_renders_raw_unit_test_failure_output(capsys) -> None:
     assert "AssertionError: expected 2, got 1" in output
 
 
+def test_markdown_renders_pre_hiveup_plain_text_check_output() -> None:
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="structure",
+                integration="github",
+                status="warning",
+                messages=[CheckMessage("warning", "SDK version is deprecated")],
+            ),
+            CheckResult(check="syntax", integration="github", status="passed", duration_s=0.01),
+            CheckResult(
+                check="format",
+                integration="github",
+                status="passed",
+                duration_s=0.02,
+                raw_output="\x1b[32m11 files already formatted\x1b[0m",
+            ),
+            CheckResult(
+                check="security",
+                integration="github",
+                status="passed",
+                raw_output=(
+                    "[tester]\tWARNING\tnosec encountered (B105), but no failed test on file "
+                    "/home/runner/work/autohive-integrations/autohive-integrations/github/tests/conftest.py:17\n"
+                    "[tester]\tWARNING\tnosec encountered (B105), but no failed test on file "
+                    "/home/runner/work/autohive-integrations/autohive-integrations/github/tests/conftest.py:18"
+                ),
+            ),
+            CheckResult(
+                check="sync",
+                integration="github",
+                status="warning",
+                messages=[CheckMessage("warning", "⚠️ SDK input drift is historic")],
+                raw_output="⚠️ SDK input drift is historic",
+            ),
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert "<details><summary>⚠️ Structure Check output</summary>\n\n```text" in output
+    assert "Warnings (1):\n  ⚠️ SDK version is deprecated" in output
+    assert "⚠️ Validation passed with warnings - please review" in output
+    assert "<details><summary>⚠️ Code Check output</summary>\n\n```text" in output
+    assert "Checking: github" in output
+    assert "🐍 Checking Python syntax...\n   ✅ Syntax OK" in output
+    assert "🎨 Checking formatting with ruff...\n   ✅ Formatting OK" in output
+    assert "🔒 Scanning for security issues with bandit...\n   ✅ Security OK\n   Warnings:" in output
+    assert "⚠️ nosec encountered (B105) in github/tests/conftest.py:17" in output
+    assert "⚠️ nosec encountered (B105) in github/tests/conftest.py:18" in output
+    assert "/home/runner/work" not in output
+    assert "🔗 Checking config-code sync..." in output
+    assert "   ⚠️ SDK input drift is historic" in output
+    assert "   ✅ Config-code sync OK" in output
+    assert "✅ CODE CHECK PASSED" in output
+    assert "#### Results" not in output
+    assert "<summary>📋" not in output
+    assert "11 files already formatted" not in output
+    assert "\x1b" not in output
+
+
+def test_markdown_summarizes_tests_and_includes_failure_detail() -> None:
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="tests",
+                integration="github",
+                status="failed",
+                duration_s=0.88,
+                messages=[CheckMessage("error", "Unit tests failed")],
+                raw_output=(
+                    "FAILED tests/test_github_unit.py::test_demo\n"
+                    "TOTAL  745  91  88%\n"
+                    "103 passed, 1 failed in 0.88s"
+                ),
+            )
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert "<details><summary>❌ Tests Check output</summary>" in output
+    assert "github         103/104       88%       ❌ Failed" in output
+    assert "github — failure detail" in output
+    assert "FAILED tests/test_github_unit.py::test_demo" in output
+    assert "❌ Tests failed: github" in output
+
+
+def test_markdown_test_failure_summary_only_names_failed_integrations_and_strips_ansi() -> None:
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="tests",
+                integration="passing",
+                status="passed",
+                raw_output="1 passed in 0.01s",
+            ),
+            CheckResult(
+                check="tests",
+                integration="failing",
+                status="failed",
+                raw_output=(
+                    "\x1b[31mFAILED tests/test_demo.py::test_demo\x1b[0m\n"
+                    "\x1b[33mTOTAL  10  1  90%\x1b[0m\n"
+                    "1 failed in 0.01s"
+                ),
+            ),
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert "❌ Tests failed: failing" in output
+    assert "❌ Tests failed: passing" not in output
+    assert "FAILED tests/test_demo.py::test_demo" in output
+    assert "failing          0/1       90%       ❌ Failed" in output
+    assert "\x1b" not in output
+
+
+def test_markdown_groups_successful_pytest_warnings_without_raw_test_noise() -> None:
+    affected_tests = "\n".join(
+        f"gmail/tests/test_gmail_unit.py::TestEmail::test_html_{index}" for index in range(1, 8)
+    )
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="tests",
+                integration="gmail",
+                status="passed",
+                raw_output=(
+                    "........................................................................ [ 65%]\n"
+                    "=============================== warnings summary ===============================\n"
+                    f"{affected_tests}\n"
+                    "  /home/runner/.cache/hiveup/envs/example/lib/python3.13/site-packages/bleach/sanitizer.py:166: "
+                    "NoCssSanitizerWarning: 'style' attribute specified, but css_sanitizer not set.\n"
+                    "    warnings.warn(\n\n"
+                    "-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n"
+                    "TOTAL  626  64  90%\n"
+                    "110 passed, 7 warnings in 0.94s"
+                ),
+            )
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert "gmail          110/110       90%      ✅ Passed" in output
+    assert "Warnings:\n  gmail:" in output
+    assert "⚠️ NoCssSanitizerWarning — 7 occurrences" in output
+    assert "'style' attribute specified, but css_sanitizer not set." in output
+    assert "Source: bleach/sanitizer.py:166" in output
+    assert "Affected tests: 7" in output
+    assert "[ 65%]" not in output
+    assert "warnings.warn(" not in output
+
+
+def test_markdown_keeps_test_attribution_for_each_warning_in_a_pytest_block() -> None:
+    test_id = "demo/tests/test_demo_unit.py::test_warns"
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="tests",
+                integration="demo",
+                status="passed",
+                raw_output=(
+                    "=============================== warnings summary ===============================\n"
+                    f"{test_id}\n"
+                    "  /tmp/first.py:10: FirstWarning: first warning\n"
+                    "  /tmp/second.py:20: SecondWarning: second warning\n\n"
+                    "  /tmp/collection.py:30: CollectionWarning: collection warning\n"
+                    "-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n"
+                    "1 passed, 3 warnings in 0.01s"
+                ),
+            )
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert output.count(f"- {test_id}") == 2
+    assert "⚠️ CollectionWarning — 1 occurrence" in output
+    assert output.count("Affected tests:") == 2
+
+
+def test_markdown_includes_raw_output_for_message_free_code_warning() -> None:
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="sync",
+                integration="demo",
+                status="warning",
+                raw_output="Warning details emitted only by the checker",
+            )
+        ]
+    )
+
+    output = render_markdown(report)
+
+    assert "🔗 Checking config-code sync..." in output
+    assert "Warning details emitted only by the checker" in output
+
+
 def test_git_based_checks_work_outside_repo_cwd(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -474,6 +677,21 @@ def test_successful_legacy_check_only_reports_actual_warnings(tmp_path: Path) ->
     assert result.status == "warning"
     assert [message.message for message in result.messages] == ["⚠️ consider a larger version bump"]
     assert "✅ CHECK PASSED" in result.raw_output
+
+
+def test_security_check_deduplicates_bandit_nosec_warnings(tmp_path: Path, monkeypatch) -> None:
+    duplicate_warning = "[tester]\tWARNING\tnosec encountered (B105), but no failed test on file demo.py:23"
+    distinct_warning = "[tester]\tWARNING\tnosec encountered (B106), but no failed test on file demo.py:24"
+    output = "\n".join([duplicate_warning, distinct_warning, duplicate_warning, distinct_warning])
+    monkeypatch.setattr(
+        "hiveup.checks.static.subprocess.run",
+        lambda *args, **kwargs: Mock(returncode=0, stdout="", stderr=output),
+    )
+
+    result = check_security(tmp_path)
+
+    assert result.status == "passed"
+    assert result.raw_output.splitlines() == [duplicate_warning, distinct_warning]
 
 
 def test_failed_legacy_check_preserves_diagnostic_severity(tmp_path: Path) -> None:
@@ -572,6 +790,28 @@ def test_github_outputs_include_legacy_action_keys(tmp_path: Path) -> None:
     assert "readme_result<<EOF_readme_result\nskipped" in output
     assert "version_result<<EOF_version_result\nskipped" in output
     assert "comment_path<<EOF_comment_path" in output
+
+
+def test_github_outputs_do_not_repeat_structured_messages_from_raw_output(tmp_path: Path) -> None:
+    warning = "⚠️ Existing integration has config-code input drift"
+    report = ValidationReport(
+        [
+            CheckResult(
+                check="sync",
+                integration="gmail",
+                status="warning",
+                messages=[CheckMessage("warning", warning)],
+                raw_output=f"Checking config-code sync...\n{warning}",
+            )
+        ]
+    )
+    output_file = tmp_path / "github-output.txt"
+
+    _write_github_outputs(output_file, report, comment_file=tmp_path / "comment.md", dirs="gmail")
+    output = output_file.read_text(encoding="utf-8")
+
+    assert output.count(warning) == 1
+    assert "Checking config-code sync..." in output
 
 
 def test_github_outputs_report_run_errors_in_every_group(tmp_path: Path) -> None:
