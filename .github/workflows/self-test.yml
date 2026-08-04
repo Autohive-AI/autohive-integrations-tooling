@@ -342,8 +342,8 @@ jobs:
           mapfile -t SDISTS < <(compgen -G 'dist/hiveup-*.tar.gz')
           [ "${#WHEELS[@]}" -eq 1 ]
           [ "${#SDISTS[@]}" -eq 1 ]
-          [ "${WHEELS[0]}" = 'dist/hiveup-2.4.0a1-py3-none-any.whl' ]
-          [ "${SDISTS[0]}" = 'dist/hiveup-2.4.0a1.tar.gz' ]
+          [ "${WHEELS[0]}" = 'dist/hiveup-2.4.1-py3-none-any.whl' ]
+          [ "${SDISTS[0]}" = 'dist/hiveup-2.4.1.tar.gz' ]
 
       - name: Test installed wheel outside source checkout
         run: |
@@ -355,7 +355,7 @@ jobs:
           "$ENV_DIR/bin/python" -m pip install "$WHEEL"
 
           cd "$WORK_DIR"
-          [ "$("$ENV_DIR/bin/hiveup" --version)" = 'hiveup 2.4.0a1' ]
+          [ "$("$ENV_DIR/bin/hiveup" --version)" = 'hiveup 2.4.1' ]
           "$ENV_DIR/bin/hiveup" --help
           if "$ENV_DIR/bin/hiveup" run >run-output.txt 2>&1; then
             echo 'The deferred hiveup run command was unexpectedly installed'
@@ -368,7 +368,7 @@ jobs:
           from importlib.metadata import metadata, version
 
           assert metadata("hiveup")["Name"] == "hiveup"
-          assert version("hiveup") == "2.4.0a1"
+          assert version("hiveup") == "2.4.1"
           assert files("hiveup").joinpath("data/ruff.toml").is_file()
           PY
 
@@ -384,7 +384,7 @@ jobs:
       - name: Upload local-install artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: hiveup-2.4.0a1
+          name: hiveup-2.4.1
           path: dist/*
           if-no-files-found: error
 
