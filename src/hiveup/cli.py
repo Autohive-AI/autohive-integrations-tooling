@@ -297,7 +297,9 @@ def package(
 
 @app.command("release-plan")
 def release_plan(
-    selection: Annotated[str, typer.Option(help="'all' or comma/newline-separated paths or source identities.")] = "all",
+    selection: Annotated[
+        str, typer.Option(help="'all' or comma/newline-separated paths or source identities.")
+    ] = "all",
     repository_root: Annotated[Path, typer.Option(help="Integrations monorepo root.")] = Path("."),
     config: Annotated[Path | None, typer.Option(help="Optional release configuration path.")] = None,
 ) -> None:
@@ -318,7 +320,9 @@ def release_manifest(
     repository: Annotated[str, typer.Option(help="GitHub repository name.")],
     commit_sha: Annotated[str, typer.Option(help="Source commit SHA.")],
     workflow_run_id: Annotated[str, typer.Option(help="GitHub Actions workflow run ID.")],
-    selection: Annotated[str, typer.Option(help="'all' or comma/newline-separated paths or source identities.")] = "all",
+    selection: Annotated[
+        str, typer.Option(help="'all' or comma/newline-separated paths or source identities.")
+    ] = "all",
     repository_root: Annotated[Path, typer.Option(help="Integrations monorepo root.")] = Path("."),
     artifacts: Annotated[Path, typer.Option(help="Directory containing <source-path>.zip assets.")] = Path("dist"),
     output: Annotated[Path, typer.Option(help="Manifest JSON output path.")] = Path("dist/autohive-manifest.json"),
