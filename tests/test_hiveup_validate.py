@@ -53,7 +53,7 @@ def test_package_identity_and_version_have_one_source_of_truth() -> None:
     assert metadata["project"]["dynamic"] == ["version"]
     assert "version" not in metadata["project"]
     assert metadata["tool"]["setuptools"]["dynamic"]["version"] == {"attr": "hiveup.__version__"}
-    assert __version__ == "2.4.1"
+    assert __version__ == "2.5.0"
 
 
 def test_action_passes_expression_inputs_via_environment_without_shell_evaluation(tmp_path: Path) -> None:
