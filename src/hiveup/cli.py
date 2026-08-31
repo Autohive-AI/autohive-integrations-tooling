@@ -302,9 +302,7 @@ def package(
 
 @app.command("release-plan")
 def release_plan(
-    selection: Annotated[
-        str, typer.Option(help="'all' or comma/newline-separated integration paths.")
-    ] = "all",
+    selection: Annotated[str, typer.Option(help="'all' or comma/newline-separated integration paths.")] = "all",
     repository_root: Annotated[Path, typer.Option(help="Integrations monorepo root.")] = Path("."),
     config: Annotated[Path | None, typer.Option(help="Optional release configuration path.")] = None,
 ) -> None:
@@ -347,9 +345,7 @@ def release_manifest(
         str,
         typer.Option(help="incremental for merge releases or snapshot for manual repackaging."),
     ] = "incremental",
-    selection: Annotated[
-        str, typer.Option(help="'all' or comma/newline-separated integration paths.")
-    ] = "all",
+    selection: Annotated[str, typer.Option(help="'all' or comma/newline-separated integration paths.")] = "all",
     repository_root: Annotated[Path, typer.Option(help="Integrations monorepo root.")] = Path("."),
     artifacts: Annotated[Path, typer.Option(help="Directory containing <source-path>.zip assets.")] = Path("dist"),
     output: Annotated[Path, typer.Option(help="Manifest JSON output path.")] = Path("dist/autohive-manifest.json"),

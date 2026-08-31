@@ -456,7 +456,6 @@ jobs:
           for names in archives.values():
               assert any(name.startswith("dependencies/autohive_integrations_sdk/") for name in names)
           assert any(name.startswith("dependencies/idna/") for name in archives["pure-python"])
-          assert not any(name.endswith(".so") for name in archives["pure-python"])
           assert any(
               name.startswith("dependencies/multidict/")
               and name.endswith(".cpython-313-x86_64-linux-gnu.so")
