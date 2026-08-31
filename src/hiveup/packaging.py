@@ -14,6 +14,7 @@ from hiveup.core.deployment import (
     is_deployment_source,
     is_excluded_development_path,
 )
+from hiveup.sdk_requirement import SdkRequirementError, read_sdk_requirement
 
 TARGET_PLATFORM = "manylinux2014_x86_64"
 TARGET_PYTHON_VERSION = "3.13"
@@ -33,6 +34,10 @@ def build_package(directory: Path, package_path: Path) -> None:
     requirements = directory / "requirements.txt"
     if not _is_regular_file(requirements):
         raise PackageBuildError(f"requirements.txt not found: {requirements}")
+    try:
+        read_sdk_requirement(requirements)
+    except SdkRequirementError as exc:
+        raise PackageBuildError(str(exc)) from exc
 
     with tempfile.TemporaryDirectory() as temporary_directory:
         dependencies = Path(temporary_directory) / "dependencies"

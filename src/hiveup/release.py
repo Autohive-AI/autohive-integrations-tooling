@@ -5,13 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 
 PACKAGE_TYPES = {"preserve", "zip", "container"}
-SAFE_SOURCE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$")
 SAFE_SOURCE_PATH = re.compile(r"^[a-z0-9][a-z0-9._-]{0,254}$")
 FULL_COMMIT_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 WORKFLOW_RUN_ID = re.compile(r"^[1-9][0-9]*$")
@@ -23,12 +23,52 @@ class ReleaseManifestError(RuntimeError):
 
 @dataclass(frozen=True)
 class ReleaseIntegration:
-    source_id: str
     source_path: str
     config_name: str
     display_name: str
     version: str
     package_type: str
+
+
+def load_version_bumped_integrations(
+    repository_root: Path,
+    base_ref: str,
+    configuration_path: Path | None = None,
+) -> list[ReleaseIntegration]:
+    """Return new integrations and integrations whose config version increased."""
+
+    repository_root = repository_root.resolve()
+    _verify_git_ref(repository_root, base_ref)
+    configuration = _load_configuration(repository_root, configuration_path)
+    overrides = configuration.get("integrations", {})
+    if not isinstance(overrides, dict):
+        raise ReleaseManifestError("release configuration 'integrations' must be an object")
+
+    changed: list[ReleaseIntegration] = []
+    for integration in _discover_release_integrations(repository_root, overrides):
+        base_config = _git_json_object(
+            repository_root,
+            base_ref,
+            f"{integration.source_path}/config.json",
+        )
+        if base_config is None:
+            changed.append(integration)
+            continue
+
+        base_version_text = _required_string(
+            base_config,
+            "version",
+            Path(f"{base_ref}:{integration.source_path}/config.json"),
+        )
+        base_version = _semantic_version(base_version_text, integration.source_path)
+        current_version = _semantic_version(integration.version, integration.source_path)
+        if current_version < base_version:
+            raise ReleaseManifestError(
+                f"{integration.source_path}: version decreased from {base_version_text} to {integration.version}"
+            )
+        if current_version > base_version:
+            changed.append(integration)
+    return changed
 
 
 def load_release_integrations(
@@ -44,8 +84,31 @@ def load_release_integrations(
     if not isinstance(overrides, dict):
         raise ReleaseManifestError("release configuration 'integrations' must be an object")
 
+    discovered = _discover_release_integrations(repository_root, overrides)
+
+    tokens = _selection_tokens(selection)
+    if tokens == ["all"]:
+        return discovered
+
+    by_path = {integration.source_path.casefold(): integration for integration in discovered}
+    selected: list[ReleaseIntegration] = []
+    selected_paths: set[str] = set()
+    for token in tokens:
+        integration = by_path.get(token.casefold())
+        if integration is None:
+            raise ReleaseManifestError(f"unknown integration selection: {token}")
+        key = integration.source_path.casefold()
+        if key not in selected_paths:
+            selected.append(integration)
+            selected_paths.add(key)
+    return selected
+
+
+def _discover_release_integrations(
+    repository_root: Path,
+    overrides: dict[str, Any],
+) -> list[ReleaseIntegration]:
     discovered: list[ReleaseIntegration] = []
-    seen_source_ids: dict[str, str] = {}
     paths_with_configs: set[str] = set()
     for directory in sorted(repository_root.iterdir(), key=lambda path: path.name.casefold()):
         config_path = directory / "config.json"
@@ -66,25 +129,18 @@ def load_release_integrations(
         display_name = config.get("display_name") or config_name
         if not isinstance(display_name, str) or not display_name.strip():
             raise ReleaseManifestError(f"display_name must be a non-empty string in {config_path}")
-        source_id = override.get("source_id", config_name)
-        if not isinstance(source_id, str) or not SAFE_SOURCE_ID.fullmatch(source_id):
+        unsupported_keys = set(override) - {"package_type"}
+        if unsupported_keys:
             raise ReleaseManifestError(
-                f"source identity for '{source_path}' must be 1-128 letters, numbers, spaces, '.', '_', or '-'"
+                f"unsupported release configuration for '{source_path}': {', '.join(sorted(unsupported_keys))}"
             )
         package_type = override.get("package_type", "preserve")
         if package_type not in PACKAGE_TYPES:
             raise ReleaseManifestError(
                 f"package_type for '{source_path}' must be one of: {', '.join(sorted(PACKAGE_TYPES))}"
             )
-        source_id_key = source_id.casefold()
-        if source_id_key in seen_source_ids:
-            raise ReleaseManifestError(
-                f"duplicate source identity '{source_id}' for '{seen_source_ids[source_id_key]}' and '{source_path}'"
-            )
-        seen_source_ids[source_id_key] = source_path
         discovered.append(
             ReleaseIntegration(
-                source_id=source_id,
                 source_path=source_path,
                 config_name=config_name,
                 display_name=display_name,
@@ -100,24 +156,7 @@ def load_release_integrations(
         )
     if not discovered:
         raise ReleaseManifestError(f"no integration directories found in {repository_root}")
-
-    tokens = _selection_tokens(selection)
-    if tokens == ["all"]:
-        return discovered
-
-    by_path = {integration.source_path.casefold(): integration for integration in discovered}
-    by_source_id = {integration.source_id.casefold(): integration for integration in discovered}
-    selected: list[ReleaseIntegration] = []
-    selected_ids: set[str] = set()
-    for token in tokens:
-        integration = by_path.get(token.casefold()) or by_source_id.get(token.casefold())
-        if integration is None:
-            raise ReleaseManifestError(f"unknown integration selection: {token}")
-        key = integration.source_id.casefold()
-        if key not in selected_ids:
-            selected.append(integration)
-            selected_ids.add(key)
-    return selected
+    return discovered
 
 
 def write_release_manifest(
@@ -128,17 +167,28 @@ def write_release_manifest(
     owner: str,
     repository: str,
     commit_sha: str,
+    previous_commit_sha: str,
     workflow_run_id: str,
+    release_kind: str = "incremental",
 ) -> dict[str, Any]:
     """Hash packaged ZIPs and write the schema consumed by Autohive."""
 
     if not integrations:
         raise ReleaseManifestError("at least one integration is required")
-    for label, value in (("owner", owner), ("repository", repository), ("commit_sha", commit_sha)):
+    for label, value in (
+        ("owner", owner),
+        ("repository", repository),
+        ("commit_sha", commit_sha),
+        ("previous_commit_sha", previous_commit_sha),
+    ):
         if not value or not value.strip():
             raise ReleaseManifestError(f"{label} is required")
     if not FULL_COMMIT_SHA.fullmatch(commit_sha):
         raise ReleaseManifestError("commit_sha must be a full 40-character Git commit SHA")
+    if not FULL_COMMIT_SHA.fullmatch(previous_commit_sha):
+        raise ReleaseManifestError("previous_commit_sha must be a full 40-character Git commit SHA")
+    if release_kind not in {"incremental", "snapshot"}:
+        raise ReleaseManifestError("release_kind must be 'incremental' or 'snapshot'")
     if not WORKFLOW_RUN_ID.fullmatch(workflow_run_id):
         raise ReleaseManifestError("workflow_run_id must be a positive GitHub Actions run ID")
 
@@ -151,7 +201,6 @@ def write_release_manifest(
             raise ReleaseManifestError(f"packaged asset not found: {asset_path}")
         assets.append(
             {
-                "sourceId": integration.source_id,
                 "sourcePath": integration.source_path,
                 "configName": integration.config_name,
                 "displayName": integration.display_name,
@@ -164,8 +213,14 @@ def write_release_manifest(
         )
 
     manifest: dict[str, Any] = {
-        "schemaVersion": 1,
-        "repository": {"owner": owner, "name": repository, "commitSha": commit_sha},
+        "schemaVersion": 3,
+        "releaseKind": release_kind,
+        "repository": {
+            "owner": owner,
+            "name": repository,
+            "commitSha": commit_sha,
+            "previousCommitSha": previous_commit_sha,
+        },
         "assets": assets,
     }
     manifest["workflowRunId"] = workflow_run_id
@@ -176,9 +231,7 @@ def write_release_manifest(
 
 
 def _load_configuration(repository_root: Path, configuration_path: Path | None) -> dict[str, Any]:
-    path = configuration_path or repository_root / ".github" / "autohive-release.json"
-    if not path.is_absolute():
-        path = repository_root / path
+    path = _configuration_path(repository_root, configuration_path)
     if not path.exists():
         return {}
     configuration = _load_json_object(path, "release configuration")
@@ -186,6 +239,13 @@ def _load_configuration(repository_root: Path, configuration_path: Path | None) 
     if schema_version != 1:
         raise ReleaseManifestError("release configuration schema_version must be 1")
     return configuration
+
+
+def _configuration_path(repository_root: Path, configuration_path: Path | None) -> Path:
+    path = configuration_path or repository_root / ".github" / "autohive-release.json"
+    if not path.is_absolute():
+        path = repository_root / path
+    return path
 
 
 def _load_json_object(path: Path, label: str) -> dict[str, Any]:
@@ -222,3 +282,43 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _verify_git_ref(repository_root: Path, ref: str) -> None:
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],
+        cwd=repository_root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ReleaseManifestError(f"invalid base Git ref '{ref}'")
+
+
+def _git_json_object(repository_root: Path, ref: str, path: str) -> dict[str, Any] | None:
+    result = subprocess.run(
+        ["git", "show", f"{ref}:{path}"],
+        cwd=repository_root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        value = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ReleaseManifestError(f"could not read integration config {ref}:{path}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise ReleaseManifestError(f"integration config must contain a JSON object: {ref}:{path}")
+    return value
+
+
+def _semantic_version(value: str, source_path: str) -> tuple[int, int, int]:
+    if not re.fullmatch(r"\d+\.\d+\.\d+", value):
+        raise ReleaseManifestError(f"{source_path}: version '{value}' must use semantic version x.y.z")
+    major, minor, patch = value.split(".")
+    return int(major), int(minor), int(patch)

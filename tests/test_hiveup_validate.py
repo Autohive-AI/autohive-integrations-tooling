@@ -1632,7 +1632,7 @@ def test_build_package_replaces_output_without_mutating_integration(tmp_path: Pa
     (integration / "config.json").write_text('{"entry_point": "demo.py"}\n', encoding="utf-8")
     (integration / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
     (integration / "icon.png").write_bytes(b"png")
-    (integration / "requirements.txt").write_text("example==1.0\n", encoding="utf-8")
+    (integration / "requirements.txt").write_text("autohive-integrations-sdk~=2.0.1\n", encoding="utf-8")
     owned_dependencies = integration / "dependencies"
     owned_dependencies.mkdir()
     owned_file = owned_dependencies / "keep.txt"

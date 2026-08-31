@@ -30,7 +30,12 @@ from hiveup.checks.structure import (
 from hiveup.core.discovery import changed_integrations, discover_integrations, explicit_integrations
 from hiveup.core.results import CheckMessage, CheckResult, ValidationReport
 from hiveup.packaging import PackageBuildError, build_package
-from hiveup.release import ReleaseManifestError, load_release_integrations, write_release_manifest
+from hiveup.release import (
+    ReleaseManifestError,
+    load_release_integrations,
+    load_version_bumped_integrations,
+    write_release_manifest,
+)
 from hiveup.render.console import render_report
 from hiveup.render.markdown import GROUPS, render_markdown
 
@@ -298,7 +303,7 @@ def package(
 @app.command("release-plan")
 def release_plan(
     selection: Annotated[
-        str, typer.Option(help="'all' or comma/newline-separated paths or source identities.")
+        str, typer.Option(help="'all' or comma/newline-separated integration paths.")
     ] = "all",
     repository_root: Annotated[Path, typer.Option(help="Integrations monorepo root.")] = Path("."),
     config: Annotated[Path | None, typer.Option(help="Optional release configuration path.")] = None,
@@ -314,14 +319,36 @@ def release_plan(
         typer.echo(integration.source_path)
 
 
+@app.command("release-changes")
+def release_changes(
+    base_ref: Annotated[str, typer.Option(help="Base Git commit/ref to compare integration versions against.")],
+    repository_root: Annotated[Path, typer.Option(help="Integrations monorepo root.")] = Path("."),
+    config: Annotated[Path | None, typer.Option(help="Optional release configuration path.")] = None,
+) -> None:
+    """Print integration paths with a version bump since a Git ref."""
+
+    try:
+        integrations = load_version_bumped_integrations(repository_root, base_ref, config)
+    except ReleaseManifestError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(2)
+    for integration in integrations:
+        typer.echo(integration.source_path)
+
+
 @app.command("release-manifest")
 def release_manifest(
     owner: Annotated[str, typer.Option(help="GitHub repository owner.")],
     repository: Annotated[str, typer.Option(help="GitHub repository name.")],
     commit_sha: Annotated[str, typer.Option(help="Source commit SHA.")],
+    previous_commit_sha: Annotated[str, typer.Option(help="Commit SHA preceding this release range.")],
     workflow_run_id: Annotated[str, typer.Option(help="GitHub Actions workflow run ID.")],
+    release_kind: Annotated[
+        str,
+        typer.Option(help="incremental for merge releases or snapshot for manual repackaging."),
+    ] = "incremental",
     selection: Annotated[
-        str, typer.Option(help="'all' or comma/newline-separated paths or source identities.")
+        str, typer.Option(help="'all' or comma/newline-separated integration paths.")
     ] = "all",
     repository_root: Annotated[Path, typer.Option(help="Integrations monorepo root.")] = Path("."),
     artifacts: Annotated[Path, typer.Option(help="Directory containing <source-path>.zip assets.")] = Path("dist"),
@@ -339,7 +366,9 @@ def release_manifest(
             owner=owner,
             repository=repository,
             commit_sha=commit_sha,
+            previous_commit_sha=previous_commit_sha,
             workflow_run_id=workflow_run_id,
+            release_kind=release_kind,
         )
     except ReleaseManifestError as exc:
         typer.echo(str(exc), err=True)
