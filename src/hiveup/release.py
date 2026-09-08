@@ -131,7 +131,7 @@ def _discover_release_integrations(
         config_name = _required_string(config, "name", config_path, max_length=MAX_CONFIG_NAME_LENGTH)
         version = _required_string(config, "version", config_path, max_length=MAX_VERSION_LENGTH)
         _semantic_version(version, source_path)
-        display_name = config.get("display_name") or config_name
+        display_name = config["display_name"] if "display_name" in config else config_name
         if (
             not isinstance(display_name, str)
             or not display_name.strip()

@@ -126,6 +126,33 @@ def test_load_release_integrations_rejects_unstorable_metadata(
         load_release_integrations(tmp_path, "all")
 
 
+@pytest.mark.parametrize("display_name", [None, False, ""])
+def test_load_release_integrations_rejects_explicitly_invalid_display_name(
+    tmp_path: Path,
+    display_name: object,
+) -> None:
+    _integration(tmp_path, "demo", "Demo")
+    config_path = tmp_path / "demo" / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["display_name"] = display_name
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    with pytest.raises(ReleaseManifestError, match="display_name must be a non-empty string"):
+        load_release_integrations(tmp_path, "all")
+
+
+def test_load_release_integrations_uses_config_name_when_display_name_is_omitted(tmp_path: Path) -> None:
+    _integration(tmp_path, "demo", "Demo")
+    config_path = tmp_path / "demo" / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    del config["display_name"]
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    selected = load_release_integrations(tmp_path, "all")
+
+    assert selected[0].display_name == "Demo"
+
+
 def test_load_release_integrations_rejects_deprecated_source_id_configuration(tmp_path: Path) -> None:
     _integration(tmp_path, "alpha", "Alpha Integration")
     config = tmp_path / ".github" / "autohive-release.json"
