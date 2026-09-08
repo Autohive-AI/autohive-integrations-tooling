@@ -223,6 +223,41 @@ def test_load_version_bumped_integrations_returns_only_newer_versions(tmp_path: 
     assert [item.source_path for item in changed] == ["changed", "new-source"]
 
 
+def test_load_version_bumped_integrations_treats_folder_rename_as_new_repository_identity(
+    tmp_path: Path,
+) -> None:
+    _git(tmp_path, "init")
+    _git(tmp_path, "config", "user.email", "test@example.com")
+    _git(tmp_path, "config", "user.name", "Test")
+    _integration(tmp_path, "old-folder", "Renamed integration", version="1.0.0")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-m", "base")
+    base_ref = _git(tmp_path, "rev-parse", "HEAD")
+
+    (tmp_path / "old-folder").rename(tmp_path / "new-folder")
+
+    changed = load_version_bumped_integrations(tmp_path, base_ref)
+
+    assert [item.source_path for item in changed] == ["new-folder"]
+
+
+def test_load_version_bumped_integrations_rejects_version_rollback(tmp_path: Path) -> None:
+    _git(tmp_path, "init")
+    _git(tmp_path, "config", "user.email", "test@example.com")
+    _git(tmp_path, "config", "user.name", "Test")
+    _integration(tmp_path, "demo", "Demo", version="2.0.0")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-m", "base")
+    base_ref = _git(tmp_path, "rev-parse", "HEAD")
+    config_path = tmp_path / "demo" / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["version"] = "1.9.9"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    with pytest.raises(ReleaseManifestError, match="version decreased from 2.0.0 to 1.9.9"):
+        load_version_bumped_integrations(tmp_path, base_ref)
+
+
 def test_write_release_manifest_hashes_assets_and_records_provenance(tmp_path: Path) -> None:
     _integration(tmp_path, "demo", "Demo")
     selected = load_release_integrations(tmp_path, "all")
