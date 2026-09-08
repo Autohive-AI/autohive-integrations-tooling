@@ -136,11 +136,7 @@ def get_diff_stats(base_ref: str, dir_name: str) -> dict | None:
 
     # --- check if only tests / docs changed ---
     all_changed = get_changed_files(base_ref, dir_name) or []
-    non_test_doc = [
-        f
-        for f in all_changed
-        if not ("/tests/" in f or f.endswith("README.md") or f.endswith(".md") or f.endswith("requirements.txt"))
-    ]
+    non_test_doc = [f for f in all_changed if not ("/tests/" in f or f.endswith("README.md") or f.endswith(".md"))]
     # config.json is handled separately so exclude it here
     non_test_doc = [f for f in non_test_doc if not f.endswith("config.json")]
     only_tests_docs = len(non_test_doc) == 0
@@ -221,7 +217,7 @@ def recommend_bump(
     if base_ref:
         stats = get_diff_stats(base_ref, dir_name)
         if stats:
-            # Only tests, docs, or requirements changed — always patch
+            # Only tests or docs changed — always patch
             if stats["only_tests_docs"]:
                 return "patch"
 
@@ -307,7 +303,8 @@ def check_version_bump(base_ref: str, dirs: list[str]) -> int:
             # No changes in this dir — nothing to check
             continue
 
-        # If only tests, docs, or requirements changed, version bump is optional
+        # If only tests or docs changed, version bump is optional. Dependency
+        # changes alter the deployment package and therefore require a bump.
         diff_stats = get_diff_stats(base_ref, d)
         no_bump_needed = (
             diff_stats

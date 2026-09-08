@@ -19,6 +19,7 @@ Validation tools and CI/CD workflows for Autohive integrations.
 | `scripts/check_config_sync.py` | Config-code sync checker ([docs](scripts/docs/check_config_sync.md)) |
 | `scripts/run_tests.py` | Unit test runner with coverage ([docs](scripts/docs/run_tests.md)) |
 | `scripts/get_changed_dirs.py` | Changed directory detection ([docs](scripts/docs/get_changed_dirs.md)) |
+| `hiveup release-plan` / `release-changes` / `release-manifest` | Manual or version-bump release selection and checksummed deployment manifests |
 | `.github/workflows/validate-integration.yml` | PR validation pipeline |
 | `.github/workflows/self-test.yml` | Regression guard for tooling scripts |
 | `.github/workflows/conv-commits.yml` | Conventional commit enforcement |
@@ -157,11 +158,50 @@ For example, `2.1.0` means "the second tooling release for SDK v2" — it does n
 | `2.1.1` | Bug-fix to the tooling (still SDK v2) |
 | `2.4.0a1` | First Python HiveUp rewrite prerelease after tooling `2.3.0` |
 | `2.4.1` | Stable HiveUp patch release with improved CI output and behavior |
+| `2.5.0` | GitHub deployment release selection and manifest support |
 | `3.0.0` | Tooling targeting SDK v3 |
 
 The Python distribution, import package, and executable are all named `hiveup`.
 `src/hiveup/__init__.py` is the single package-version source; build metadata
 reads the version from there.
+
+## GitHub deployment release metadata
+
+`hiveup release-plan` resolves `all` or a comma/newline-separated manual
+selection to top-level integration paths without evaluating shell input.
+`hiveup release-changes --base-ref <sha>` is the merge-CI equivalent: it emits
+only new integrations and integrations whose semantic version increased since
+the supplied commit. A merge with no integration version bumps produces no
+release.
+
+`hiveup release-manifest` verifies every selected `<path>.zip` and writes the
+schema consumed by Autohive. Manifest schema 3 records whether the release is
+an incremental merge release or a manual snapshot, the current and preceding
+commit SHAs, the GitHub workflow run ID, repository path, config name and
+version, package type, byte size, and SHA-256. This lets Autohive consume every
+release after its stored cursor and deterministically keep the newest package
+when a repository path occurs more than once.
+
+The top-level integration folder is the repository identity. No separate source
+ID is generated or maintained. The optional release configuration is used only
+for package-type overrides:
+
+```json
+{
+  "schema_version": 1,
+  "integrations": {
+    "renamed-folder": {
+      "package_type": "container"
+    }
+  }
+}
+```
+
+`package_type` is `preserve` by default; `zip` and `container` are explicit
+requests that Autohive still validates against its server-side conversion
+policy. A folder move is surfaced as a new repository path and requires a
+one-time reviewed binding in Autohive. Stale paths and unsafe selections fail
+before a release is created.
 
 ## Install HiveUp from a local build
 
@@ -187,14 +227,14 @@ python -m twine check dist/*
 Install the resulting wheel as an isolated command-line tool:
 
 ```bash
-uv tool install --force ./dist/hiveup-2.4.1-py3-none-any.whl
+uv tool install --force ./dist/hiveup-2.5.0-py3-none-any.whl
 hiveup --version
 ```
 
 `pipx` is also supported:
 
 ```bash
-pipx install --force ./dist/hiveup-2.4.1-py3-none-any.whl
+pipx install --force ./dist/hiveup-2.5.0-py3-none-any.whl
 ```
 
 Rebuild and repeat the `--force` installation to upgrade a local build.
@@ -205,8 +245,8 @@ uv tool uninstall hiveup
 # or: pipx uninstall hiveup
 ```
 
-Pull-request CI builds both `hiveup-2.4.1-py3-none-any.whl` and
-`hiveup-2.4.1.tar.gz`, verifies their metadata, installs the wheel outside the
+Pull-request CI builds both `hiveup-2.5.0-py3-none-any.whl` and
+`hiveup-2.5.0.tar.gz`, verifies their metadata, installs the wheel outside the
 source checkout, exercises the supported CLI lifecycle, and uploads them as a
 GitHub Actions artifact. It does not publish either file.
 
@@ -299,6 +339,11 @@ and ZIP files are excluded. Package outputs must use a `.zip` extension and may
 not overwrite integration source; default output names are built only from
 filename-safe `config.name` and `config.version` values. Use `--output` to select
 another destination explicitly.
+
+Packaging always requires the top-level `requirements.txt` to declare
+`autohive-integrations-sdk` with a stable lower bound of `1.0.2` or later. This
+deployment safety check still runs with `--skip-validate`, so a release workflow
+cannot package an integration that permits an older SDK.
 
 ## Local Testing
 
