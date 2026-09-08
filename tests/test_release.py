@@ -95,6 +95,37 @@ def test_load_release_integrations_rejects_unsafe_asset_path(tmp_path: Path) -> 
         load_release_integrations(tmp_path, "all")
 
 
+def test_load_release_integrations_rejects_source_path_that_cannot_fit_zip_asset_name(tmp_path: Path) -> None:
+    _integration(tmp_path, "a" * 252, "Demo")
+
+    with pytest.raises(ReleaseManifestError, match="at most 251 characters"):
+        load_release_integrations(tmp_path, "all")
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("name", "n" * 256, "name must be a non-empty string"),
+        ("display_name", "d" * 256, "display_name must be a non-empty string"),
+        ("version", "1.0", "must use semantic version x.y.z"),
+    ],
+)
+def test_load_release_integrations_rejects_unstorable_metadata(
+    tmp_path: Path,
+    field: str,
+    value: str,
+    message: str,
+) -> None:
+    _integration(tmp_path, "demo", "Demo")
+    config_path = tmp_path / "demo" / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config[field] = value
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    with pytest.raises(ReleaseManifestError, match=message):
+        load_release_integrations(tmp_path, "all")
+
+
 def test_load_release_integrations_rejects_deprecated_source_id_configuration(tmp_path: Path) -> None:
     _integration(tmp_path, "alpha", "Alpha Integration")
     config = tmp_path / ".github" / "autohive-release.json"

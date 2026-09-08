@@ -12,9 +12,12 @@ from typing import Any
 
 
 PACKAGE_TYPES = {"preserve", "zip", "container"}
-SAFE_SOURCE_PATH = re.compile(r"^[a-z0-9][a-z0-9._-]{0,254}$")
+SAFE_SOURCE_PATH = re.compile(r"^[a-z0-9][a-z0-9._-]{0,250}$")
 FULL_COMMIT_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 WORKFLOW_RUN_ID = re.compile(r"^[1-9][0-9]*$")
+MAX_CONFIG_NAME_LENGTH = 255
+MAX_DISPLAY_NAME_LENGTH = 255
+MAX_VERSION_LENGTH = 64
 
 
 class ReleaseManifestError(RuntimeError):
@@ -117,18 +120,28 @@ def _discover_release_integrations(
         source_path = directory.name
         if not SAFE_SOURCE_PATH.fullmatch(source_path):
             raise ReleaseManifestError(
-                f"integration directory '{source_path}' must use lowercase letters, numbers, '.', '_', or '-'"
+                f"integration directory '{source_path}' must use lowercase letters, numbers, '.', '_', or '-' "
+                "and be at most 251 characters"
             )
         paths_with_configs.add(source_path)
         override = overrides.get(source_path, {})
         if not isinstance(override, dict):
             raise ReleaseManifestError(f"release configuration for '{source_path}' must be an object")
         config = _load_json_object(config_path, "integration config")
-        config_name = _required_string(config, "name", config_path)
-        version = _required_string(config, "version", config_path)
+        config_name = _required_string(config, "name", config_path, max_length=MAX_CONFIG_NAME_LENGTH)
+        version = _required_string(config, "version", config_path, max_length=MAX_VERSION_LENGTH)
+        _semantic_version(version, source_path)
         display_name = config.get("display_name") or config_name
-        if not isinstance(display_name, str) or not display_name.strip():
-            raise ReleaseManifestError(f"display_name must be a non-empty string in {config_path}")
+        if (
+            not isinstance(display_name, str)
+            or not display_name.strip()
+            or len(display_name) > MAX_DISPLAY_NAME_LENGTH
+            or _has_control_characters(display_name)
+        ):
+            raise ReleaseManifestError(
+                f"display_name must be a non-empty string of at most {MAX_DISPLAY_NAME_LENGTH} characters in "
+                f"{config_path}"
+            )
         unsupported_keys = set(override) - {"package_type"}
         if unsupported_keys:
             raise ReleaseManifestError(
@@ -258,11 +271,27 @@ def _load_json_object(path: Path, label: str) -> dict[str, Any]:
     return value
 
 
-def _required_string(value: dict[str, Any], key: str, path: Path) -> str:
+def _required_string(
+    value: dict[str, Any],
+    key: str,
+    path: Path,
+    *,
+    max_length: int | None = None,
+) -> str:
     result = value.get(key)
-    if not isinstance(result, str) or not result.strip():
-        raise ReleaseManifestError(f"{key} must be a non-empty string in {path}")
+    if (
+        not isinstance(result, str)
+        or not result.strip()
+        or (max_length is not None and len(result) > max_length)
+        or _has_control_characters(result)
+    ):
+        length_requirement = f" of at most {max_length} characters" if max_length is not None else ""
+        raise ReleaseManifestError(f"{key} must be a non-empty string{length_requirement} in {path}")
     return result
+
+
+def _has_control_characters(value: str) -> bool:
+    return any(ord(character) < 32 or ord(character) == 127 for character in value)
 
 
 def _selection_tokens(selection: str) -> list[str]:
