@@ -40,7 +40,7 @@ def load_version_bumped_integrations(
 ) -> list[ReleaseIntegration]:
     """Return new integrations and integrations whose config version increased."""
 
-    repository_root = repository_root.resolve()
+    repository_root = _resolve_repository_root(repository_root)
     _verify_git_ref(repository_root, base_ref)
     configuration = _load_configuration(repository_root, configuration_path)
     overrides = configuration.get("integrations", {})
@@ -81,7 +81,7 @@ def load_release_integrations(
 ) -> list[ReleaseIntegration]:
     """Resolve a user selection to validated top-level integration directories."""
 
-    repository_root = repository_root.resolve()
+    repository_root = _resolve_repository_root(repository_root)
     configuration = _load_configuration(repository_root, configuration_path)
     overrides = configuration.get("integrations", {})
     if not isinstance(overrides, dict):
@@ -252,6 +252,16 @@ def _load_configuration(repository_root: Path, configuration_path: Path | None) 
     if schema_version != 1:
         raise ReleaseManifestError("release configuration schema_version must be 1")
     return configuration
+
+
+def _resolve_repository_root(repository_root: Path) -> Path:
+    try:
+        resolved = repository_root.resolve(strict=True)
+    except OSError as exc:
+        raise ReleaseManifestError(f"could not access repository root {repository_root}: {exc}") from exc
+    if not resolved.is_dir():
+        raise ReleaseManifestError(f"repository root must be a directory: {repository_root}")
+    return resolved
 
 
 def _configuration_path(repository_root: Path, configuration_path: Path | None) -> Path:

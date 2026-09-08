@@ -186,6 +186,19 @@ def test_load_release_integrations_rejects_non_string_package_type(tmp_path: Pat
         load_release_integrations(tmp_path, "all")
 
 
+def test_release_plan_cli_reports_missing_repository_root_without_traceback(tmp_path: Path) -> None:
+    missing_root = tmp_path / "missing"
+
+    result = CliRunner().invoke(
+        app,
+        ["release-plan", "--repository-root", str(missing_root), "--selection", "all"],
+    )
+
+    assert result.exit_code == 2
+    assert "could not access repository root" in result.output
+    assert "Traceback" not in result.output
+
+
 def test_load_version_bumped_integrations_returns_only_newer_versions(tmp_path: Path) -> None:
     _git(tmp_path, "init")
     _git(tmp_path, "config", "user.email", "test@example.com")
