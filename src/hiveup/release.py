@@ -135,7 +135,7 @@ def _discover_release_integrations(
                 f"unsupported release configuration for '{source_path}': {', '.join(sorted(unsupported_keys))}"
             )
         package_type = override.get("package_type", "preserve")
-        if package_type not in PACKAGE_TYPES:
+        if not isinstance(package_type, str) or package_type not in PACKAGE_TYPES:
             raise ReleaseManifestError(
                 f"package_type for '{source_path}' must be one of: {', '.join(sorted(PACKAGE_TYPES))}"
             )

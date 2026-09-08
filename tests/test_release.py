@@ -115,6 +115,19 @@ def test_load_release_integrations_rejects_deprecated_source_id_configuration(tm
         load_release_integrations(tmp_path, "all")
 
 
+def test_load_release_integrations_rejects_non_string_package_type(tmp_path: Path) -> None:
+    _integration(tmp_path, "alpha", "Alpha Integration")
+    config = tmp_path / ".github" / "autohive-release.json"
+    config.parent.mkdir()
+    config.write_text(
+        json.dumps({"integrations": {"alpha": {"package_type": ["zip"]}}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ReleaseManifestError, match="package_type for 'alpha' must be one of"):
+        load_release_integrations(tmp_path, "all")
+
+
 def test_load_version_bumped_integrations_returns_only_newer_versions(tmp_path: Path) -> None:
     _git(tmp_path, "init")
     _git(tmp_path, "config", "user.email", "test@example.com")
