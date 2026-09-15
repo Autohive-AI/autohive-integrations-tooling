@@ -53,7 +53,7 @@ def test_package_identity_and_version_have_one_source_of_truth() -> None:
     assert metadata["project"]["dynamic"] == ["version"]
     assert "version" not in metadata["project"]
     assert metadata["tool"]["setuptools"]["dynamic"]["version"] == {"attr": "hiveup.__version__"}
-    assert __version__ == "2.4.1"
+    assert __version__ == "2.5.0"
 
 
 def test_action_passes_expression_inputs_via_environment_without_shell_evaluation(tmp_path: Path) -> None:
@@ -1632,7 +1632,7 @@ def test_build_package_replaces_output_without_mutating_integration(tmp_path: Pa
     (integration / "config.json").write_text('{"entry_point": "demo.py"}\n', encoding="utf-8")
     (integration / "demo.py").write_text("VALUE = 1\n", encoding="utf-8")
     (integration / "icon.png").write_bytes(b"png")
-    (integration / "requirements.txt").write_text("example==1.0\n", encoding="utf-8")
+    (integration / "requirements.txt").write_text("autohive-integrations-sdk~=2.0.1\n", encoding="utf-8")
     owned_dependencies = integration / "dependencies"
     owned_dependencies.mkdir()
     owned_file = owned_dependencies / "keep.txt"
