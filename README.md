@@ -432,3 +432,18 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 <!-- Add your integration here when submitting a PR -->
 | Integration | Description | Auth Type |
 |-------------|-------------|-----------|
+
+## Refreshing deployed dependencies in bulk
+
+Bump affected integrations' `config.json` versions in one PR and merge it.
+Actions runs HiveUp, stores ZIPs and a manifest in a GitHub Release, and Admin
+syncs the batch for Create/Bind and bulk upload. Publish through the existing page.
+
+Every build resolves requirements into fresh Linux/Python 3.13 staging and ignores
+local `dependencies/`. Compatible ranges may pick up newer packages; exact pins
+remain pinned. Update requirements too when the fix is outside the allowed range.
+
+`release-changes` selects new/version-bumped folders; `release-manifest` hashes
+their ZIPs. `release-plan` supports snapshots run directly from GitHub Actions.
+See the [integration workflow guide](https://github.com/Autohive-AI/autohive-integrations/blob/feat/440/package-release-pipeline/docs/integration-release-workflow.md)
+for the daily flow and rollout reference.

@@ -111,7 +111,12 @@ def _reject_deployment_symlinks(directory: Path) -> None:
 
 
 def install_dependencies(requirements: Path, target: Path) -> None:
-    """Install deployment-compatible wheels into a package staging directory."""
+    """Resolve deployment wheels into fresh staging, honoring requirements constraints.
+
+    build_package creates a new target for every invocation so repackaging can
+    pick up newer compatible dependencies without reusing a previous install.
+    Exact pins intentionally keep their specified versions.
+    """
 
     command = [
         sys.executable,
