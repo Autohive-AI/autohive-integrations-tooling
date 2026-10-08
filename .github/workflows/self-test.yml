@@ -342,8 +342,8 @@ jobs:
           mapfile -t SDISTS < <(compgen -G 'dist/hiveup-*.tar.gz')
           [ "${#WHEELS[@]}" -eq 1 ]
           [ "${#SDISTS[@]}" -eq 1 ]
-          [ "${WHEELS[0]}" = 'dist/hiveup-2.4.1-py3-none-any.whl' ]
-          [ "${SDISTS[0]}" = 'dist/hiveup-2.4.1.tar.gz' ]
+          [ "${WHEELS[0]}" = 'dist/hiveup-2.5.0-py3-none-any.whl' ]
+          [ "${SDISTS[0]}" = 'dist/hiveup-2.5.0.tar.gz' ]
 
       - name: Test installed wheel outside source checkout
         run: |
@@ -355,7 +355,7 @@ jobs:
           "$ENV_DIR/bin/python" -m pip install "$WHEEL"
 
           cd "$WORK_DIR"
-          [ "$("$ENV_DIR/bin/hiveup" --version)" = 'hiveup 2.4.1' ]
+          [ "$("$ENV_DIR/bin/hiveup" --version)" = 'hiveup 2.5.0' ]
           "$ENV_DIR/bin/hiveup" --help
           if "$ENV_DIR/bin/hiveup" run >run-output.txt 2>&1; then
             echo 'The deferred hiveup run command was unexpectedly installed'
@@ -368,7 +368,7 @@ jobs:
           from importlib.metadata import metadata, version
 
           assert metadata("hiveup")["Name"] == "hiveup"
-          assert version("hiveup") == "2.4.1"
+          assert version("hiveup") == "2.5.0"
           assert files("hiveup").joinpath("data/ruff.toml").is_file()
           PY
 
@@ -384,7 +384,7 @@ jobs:
       - name: Upload local-install artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: hiveup-2.4.1
+          name: hiveup-2.5.0
           path: dist/*
           if-no-files-found: error
 
@@ -407,7 +407,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for fixture in no-dependencies pure-python native-wheel; do
+          for fixture in sdk-only pure-python native-wheel; do
             mkdir -p "$RUNNER_TEMP/$fixture"
             cp tests/examples/good-integration/icon.png "$RUNNER_TEMP/$fixture/icon.png"
             printf 'fixture = object()\n' > "$RUNNER_TEMP/$fixture/fixture.py"
@@ -419,15 +419,15 @@ jobs:
           }
           JSON
           done
-          : > "$RUNNER_TEMP/no-dependencies/requirements.txt"
-          printf 'idna==3.10\n' > "$RUNNER_TEMP/pure-python/requirements.txt"
-          printf 'multidict==6.6.3\n' > "$RUNNER_TEMP/native-wheel/requirements.txt"
+          printf 'autohive-integrations-sdk~=1.0.2\n' > "$RUNNER_TEMP/sdk-only/requirements.txt"
+          printf 'autohive-integrations-sdk~=1.0.2\nidna==3.10\n' > "$RUNNER_TEMP/pure-python/requirements.txt"
+          printf 'autohive-integrations-sdk~=1.0.2\nmultidict==6.6.3\n' > "$RUNNER_TEMP/native-wheel/requirements.txt"
 
       - name: Package deployment fixtures
         shell: bash
         run: |
           set -euo pipefail
-          for fixture in no-dependencies pure-python native-wheel; do
+          for fixture in sdk-only pure-python native-wheel; do
             hiveup package "$RUNNER_TEMP/$fixture" \
               --skip-validate \
               --output "$RUNNER_TEMP/$fixture.zip"
@@ -443,7 +443,7 @@ jobs:
 
           root = Path(os.environ["RUNNER_TEMP"])
           archives = {}
-          for fixture in ("no-dependencies", "pure-python", "native-wheel"):
+          for fixture in ("sdk-only", "pure-python", "native-wheel"):
               with zipfile.ZipFile(root / f"{fixture}.zip") as archive:
                   names = archive.namelist()
                   assert names == sorted(names), names
@@ -453,9 +453,9 @@ jobs:
                   assert not any(name.startswith("tests/") for name in names)
                   archives[fixture] = names
 
-          assert not any(name.startswith("dependencies/") for name in archives["no-dependencies"])
+          for names in archives.values():
+              assert any(name.startswith("dependencies/autohive_integrations_sdk/") for name in names)
           assert any(name.startswith("dependencies/idna/") for name in archives["pure-python"])
-          assert not any(name.endswith(".so") for name in archives["pure-python"])
           assert any(
               name.startswith("dependencies/multidict/")
               and name.endswith(".cpython-313-x86_64-linux-gnu.so")

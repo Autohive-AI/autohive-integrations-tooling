@@ -35,6 +35,7 @@ from typing import Dict, List
 
 from hiveup.core.deployment import is_excluded_development_path
 from hiveup.core.discovery import is_ignored_top_level_dir
+from hiveup.sdk_requirement import SdkRequirementError, read_sdk_requirement
 
 # Fix Windows console encoding for unicode characters
 if sys.platform == "win32":
@@ -412,24 +413,15 @@ class IntegrationValidator:
         if not req_path.exists():
             return
 
-        with open(req_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        if "autohive-integrations-sdk" not in content:
-            self.add_error("requirements.txt must include 'autohive-integrations-sdk'")
+        try:
+            requirement = read_sdk_requirement(req_path)
+        except SdkRequirementError as exc:
+            self.add_error(str(exc))
             return
 
-        # Extract version pin — accept ~= or == operators
-        match = re.search(r"autohive-integrations-sdk\s*(~=|==)\s*(\d+\.\d+(?:\.\d+)?)", content)
-        if not match:
-            self.add_warning("requirements.txt should pin SDK version (e.g., autohive-integrations-sdk~=2.0.1)")
-            return
-
-        operator, version_str = match.group(1), match.group(2)
-        parts = tuple(int(p) for p in version_str.split("."))
-        # Normalise to 3-part tuple
-        while len(parts) < 3:
-            parts = (*parts, 0)
+        operator = requirement.operator
+        version_str = requirement.version_text
+        parts = requirement.version
         major = parts[0]
 
         min_version = self._MIN_SDK_VERSIONS.get(major)
