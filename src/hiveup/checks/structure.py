@@ -340,6 +340,11 @@ class IntegrationValidator:
                 self.add_error("Custom auth requires 'fields' configuration")
             elif "properties" not in auth.get("fields", {}):
                 self.add_error("Custom auth fields must have 'properties' defined")
+            elif not isinstance(auth["fields"]["properties"], dict) or not auth["fields"]["properties"]:
+                self.add_error(
+                    "Custom auth must define at least one field in 'fields.properties'. "
+                    "Remove the 'auth' block if users do not need to enter credentials"
+                )
 
         elif auth_type is not None:
             self.add_warning(f"Unknown auth type: '{auth_type}'. Expected 'platform' or 'custom'")

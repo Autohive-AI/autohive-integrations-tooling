@@ -962,6 +962,38 @@ def test_structure_accepts_512_pixel_jpg_and_jpeg_icons(tmp_path: Path) -> None:
         assert not any("icon" in message.message.lower() for message in report.results[0].messages)
 
 
+@pytest.mark.parametrize("properties", [{}, []])
+def test_structure_rejects_custom_auth_without_fields(tmp_path: Path, properties) -> None:
+    integration = tmp_path / "empty-custom-auth"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["auth"]["fields"]["properties"] = properties
+    config["auth"]["fields"].pop("required", None)
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.results[0].status == "failed"
+    assert any(
+        "Custom auth must define at least one field in 'fields.properties'" in message.message
+        for message in report.results[0].messages
+    )
+
+
+def test_structure_accepts_integration_without_auth(tmp_path: Path) -> None:
+    integration = tmp_path / "no-auth"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    del config["auth"]
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    report = run_validation([integration], only={"structure"})
+
+    assert not any("auth" in message.message.lower() for message in report.results[0].messages)
+
+
 def test_structure_rejects_unsupported_icon_format(tmp_path: Path) -> None:
     integration = tmp_path / "svg-icon-integration"
     shutil.copytree(EXAMPLES / "good-integration", integration)
