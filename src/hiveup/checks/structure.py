@@ -124,6 +124,27 @@ def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
     raise ValueError("could not determine JPEG dimensions")
 
 
+# Keywords whose values are data, not nested schemas.
+_SCHEMA_VALUE_KEYWORDS = frozenset({"default", "enum", "const", "examples", "example"})
+
+
+def arrays_without_items(schema: object, path: str) -> list[str]:
+    """Return the paths of every array schema that does not define its item schema."""
+    found: list[str] = []
+    if isinstance(schema, dict):
+        schema_type = schema.get("type")
+        is_array = schema_type == "array" or (isinstance(schema_type, list) and "array" in schema_type)
+        if is_array and "items" not in schema and "prefixItems" not in schema:
+            found.append(path)
+        for key, value in schema.items():
+            if key not in _SCHEMA_VALUE_KEYWORDS:
+                found.extend(arrays_without_items(value, f"{path}.{key}"))
+    elif isinstance(schema, list):
+        for index, value in enumerate(schema):
+            found.extend(arrays_without_items(value, f"{path}[{index}]"))
+    return found
+
+
 def _is_integration_load(
     value: ast.expr | None,
     integration_names: set[str],
@@ -377,6 +398,9 @@ class IntegrationValidator:
             # Check schemas
             if "input_schema" not in action_config:
                 self.add_warning(f"Action '{action_name}' missing 'input_schema'")
+            else:
+                for path in arrays_without_items(action_config["input_schema"], "input_schema"):
+                    self.add_error(f"Action '{action_name}' {path} is an array without 'items'")
 
             if "output_schema" not in action_config:
                 self.add_warning(f"Action '{action_name}' missing 'output_schema'")

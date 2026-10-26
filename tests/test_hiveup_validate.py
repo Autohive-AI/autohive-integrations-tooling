@@ -24,6 +24,7 @@ from hiveup.checks.structure import (  # noqa: E402
     ENTRY_POINT_IDENTIFIER_MESSAGE,
     RESERVED_ENTRY_POINT_MESSAGE,
     ROOT_ENTRY_POINT_MESSAGE,
+    arrays_without_items,
     get_integration_folders,
     validate as validate_structure,
 )
@@ -992,6 +993,81 @@ def test_structure_accepts_integration_without_auth(tmp_path: Path) -> None:
     report = run_validation([integration], only={"structure"})
 
     assert not any("auth" in message.message.lower() for message in report.results[0].messages)
+
+
+def _integration_with_get_data_schemas(tmp_path: Path, input_schema: dict, output_schema: dict | None = None) -> Path:
+    integration = tmp_path / "array-schemas"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["actions"]["get_data"]["input_schema"] = input_schema
+    if output_schema is not None:
+        config["actions"]["get_data"]["output_schema"] = output_schema
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    return integration
+
+
+def test_structure_rejects_input_array_without_items(tmp_path: Path) -> None:
+    integration = _integration_with_get_data_schemas(
+        tmp_path,
+        {"type": "object", "properties": {"tags": {"type": "array", "description": "Tags"}}},
+    )
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.results[0].status == "failed"
+    assert any(
+        message.message == "Action 'get_data' input_schema.properties.tags is an array without 'items'"
+        for message in report.results[0].messages
+    )
+
+
+def test_structure_accepts_input_array_with_items_and_ignores_output_arrays(tmp_path: Path) -> None:
+    integration = _integration_with_get_data_schemas(
+        tmp_path,
+        {"type": "object", "properties": {"tags": {"type": "array", "items": {"type": "string"}}}},
+        {"type": "object", "properties": {"results": {"type": "array"}}},
+    )
+
+    report = run_validation([integration], only={"structure"})
+
+    assert not any("without 'items'" in message.message for message in report.results[0].messages)
+
+
+def test_arrays_without_items_reports_nested_and_nullable_arrays() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "filters": {
+                "type": "object",
+                "properties": {"ids": {"type": ["array", "null"]}},
+            },
+            "matrix": {"type": "array", "items": {"type": "array"}},
+            "choice": {"anyOf": [{"type": "array"}, {"type": "string"}]},
+            "tuple": {"type": "array", "prefixItems": [{"type": "string"}]},
+        },
+    }
+
+    assert arrays_without_items(schema, "input_schema") == [
+        "input_schema.properties.filters.properties.ids",
+        "input_schema.properties.matrix.items",
+        "input_schema.properties.choice.anyOf[0]",
+    ]
+
+
+def test_arrays_without_items_ignores_schema_shaped_values() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "options": {
+                "type": "object",
+                "default": {"type": "array"},
+                "examples": [{"type": "array"}],
+            }
+        },
+    }
+
+    assert arrays_without_items(schema, "input_schema") == []
 
 
 def test_structure_rejects_unsupported_icon_format(tmp_path: Path) -> None:
