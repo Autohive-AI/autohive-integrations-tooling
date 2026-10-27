@@ -1070,6 +1070,51 @@ def test_arrays_without_items_ignores_schema_shaped_values() -> None:
     assert arrays_without_items(schema, "input_schema") == []
 
 
+@pytest.mark.parametrize("name", ["default", "enum", "const", "examples", "example"])
+def test_arrays_without_items_checks_properties_named_like_value_keywords(name: str) -> None:
+    schema = {"type": "object", "properties": {name: {"type": "array"}}}
+
+    assert arrays_without_items(schema, "input_schema") == [f"input_schema.properties.{name}"]
+
+
+def test_structure_rejects_input_array_named_default_without_items(tmp_path: Path) -> None:
+    integration = _integration_with_get_data_schemas(
+        tmp_path,
+        {"type": "object", "properties": {"default": {"type": "array"}}},
+    )
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.results[0].status == "failed"
+    assert any(
+        message.message == "Action 'get_data' input_schema.properties.default is an array without 'items'"
+        for message in report.results[0].messages
+    )
+
+
+def test_arrays_without_items_ignores_non_schema_maps() -> None:
+    schema = {
+        "type": "object",
+        "properties": {"type": {"type": "string"}, "array": {"type": "string"}},
+        "dependentRequired": {"type": ["array"]},
+    }
+
+    assert arrays_without_items(schema, "input_schema") == []
+
+
+def test_arrays_without_items_walks_tuple_items_and_definitions() -> None:
+    schema = {
+        "type": "object",
+        "properties": {"pair": {"type": "array", "items": [{"type": "string"}, {"type": "array"}]}},
+        "$defs": {"tags": {"type": "array"}},
+    }
+
+    assert arrays_without_items(schema, "input_schema") == [
+        "input_schema.properties.pair.items[1]",
+        "input_schema.$defs.tags",
+    ]
+
+
 def test_structure_rejects_unsupported_icon_format(tmp_path: Path) -> None:
     integration = tmp_path / "svg-icon-integration"
     shutil.copytree(EXAMPLES / "good-integration", integration)

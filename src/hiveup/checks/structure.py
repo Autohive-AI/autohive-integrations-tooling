@@ -124,24 +124,54 @@ def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
     raise ValueError("could not determine JPEG dimensions")
 
 
-# Keywords whose values are data, not nested schemas.
-_SCHEMA_VALUE_KEYWORDS = frozenset({"default", "enum", "const", "examples", "example"})
+# JSON Schema keywords that hold nested schemas. Only these are walked, so data-valued
+# keywords such as default or examples are never mistaken for schemas, and entries in the
+# map keywords are visited by value whatever their names are.
+_SUBSCHEMA_KEYWORDS = frozenset(
+    {
+        "items",
+        "additionalItems",
+        "additionalProperties",
+        "contains",
+        "else",
+        "if",
+        "not",
+        "propertyNames",
+        "then",
+        "unevaluatedItems",
+        "unevaluatedProperties",
+    }
+)
+_SUBSCHEMA_LIST_KEYWORDS = frozenset({"allOf", "anyOf", "oneOf", "prefixItems"})
+_SUBSCHEMA_MAP_KEYWORDS = frozenset(
+    {"$defs", "definitions", "dependencies", "dependentSchemas", "patternProperties", "properties"}
+)
 
 
 def arrays_without_items(schema: object, path: str) -> list[str]:
     """Return the paths of every array schema that does not define its item schema."""
+    if not isinstance(schema, dict):
+        return []
+
     found: list[str] = []
-    if isinstance(schema, dict):
-        schema_type = schema.get("type")
-        is_array = schema_type == "array" or (isinstance(schema_type, list) and "array" in schema_type)
-        if is_array and "items" not in schema and "prefixItems" not in schema:
-            found.append(path)
-        for key, value in schema.items():
-            if key not in _SCHEMA_VALUE_KEYWORDS:
-                found.extend(arrays_without_items(value, f"{path}.{key}"))
-    elif isinstance(schema, list):
-        for index, value in enumerate(schema):
-            found.extend(arrays_without_items(value, f"{path}[{index}]"))
+    schema_type = schema.get("type")
+    is_array = schema_type == "array" or (isinstance(schema_type, list) and "array" in schema_type)
+    if is_array and "items" not in schema and "prefixItems" not in schema:
+        found.append(path)
+
+    for key, value in schema.items():
+        if key in _SUBSCHEMA_KEYWORDS:
+            # Draft-04 tuple validation allows "items" to be a list of schemas.
+            subschemas = enumerate(value) if isinstance(value, list) else [(None, value)]
+            for index, subschema in subschemas:
+                suffix = f"{key}[{index}]" if index is not None else key
+                found.extend(arrays_without_items(subschema, f"{path}.{suffix}"))
+        elif key in _SUBSCHEMA_LIST_KEYWORDS and isinstance(value, list):
+            for index, subschema in enumerate(value):
+                found.extend(arrays_without_items(subschema, f"{path}.{key}[{index}]"))
+        elif key in _SUBSCHEMA_MAP_KEYWORDS and isinstance(value, dict):
+            for name, subschema in value.items():
+                found.extend(arrays_without_items(subschema, f"{path}.{key}.{name}"))
     return found
 
 
