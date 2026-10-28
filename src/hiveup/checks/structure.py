@@ -133,6 +133,7 @@ _SUBSCHEMA_KEYWORDS = frozenset(
         "additionalItems",
         "additionalProperties",
         "contains",
+        "contentSchema",
         "else",
         "if",
         "not",
@@ -160,12 +161,12 @@ def arrays_without_items(schema: object, path: str) -> list[str]:
         found.append(path)
 
     for key, value in schema.items():
-        if key in _SUBSCHEMA_KEYWORDS:
+        if key == "items" and isinstance(value, list):
             # Draft-04 tuple validation allows "items" to be a list of schemas.
-            subschemas = enumerate(value) if isinstance(value, list) else [(None, value)]
-            for index, subschema in subschemas:
-                suffix = f"{key}[{index}]" if index is not None else key
-                found.extend(arrays_without_items(subschema, f"{path}.{suffix}"))
+            for index, subschema in enumerate(value):
+                found.extend(arrays_without_items(subschema, f"{path}.items[{index}]"))
+        elif key in _SUBSCHEMA_KEYWORDS:
+            found.extend(arrays_without_items(value, f"{path}.{key}"))
         elif key in _SUBSCHEMA_LIST_KEYWORDS and isinstance(value, list):
             for index, subschema in enumerate(value):
                 found.extend(arrays_without_items(subschema, f"{path}.{key}[{index}]"))

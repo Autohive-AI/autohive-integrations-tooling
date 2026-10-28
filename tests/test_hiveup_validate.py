@@ -1115,6 +1115,27 @@ def test_arrays_without_items_walks_tuple_items_and_definitions() -> None:
     ]
 
 
+def test_arrays_without_items_walks_content_schema() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "payload": {
+                "type": "string",
+                "contentMediaType": "application/json",
+                "contentSchema": {"type": "array"},
+            }
+        },
+    }
+
+    assert arrays_without_items(schema, "input_schema") == ["input_schema.properties.payload.contentSchema"]
+
+
+def test_arrays_without_items_ignores_lists_under_single_schema_keywords() -> None:
+    schema = {"type": "object", "not": [{"type": "array"}], "additionalProperties": [{"type": "array"}]}
+
+    assert arrays_without_items(schema, "input_schema") == []
+
+
 def test_structure_rejects_unsupported_icon_format(tmp_path: Path) -> None:
     integration = tmp_path / "svg-icon-integration"
     shutil.copytree(EXAMPLES / "good-integration", integration)
