@@ -124,6 +124,58 @@ def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
     raise ValueError("could not determine JPEG dimensions")
 
 
+# JSON Schema keywords that hold nested schemas. Only these are walked, so data-valued
+# keywords such as default or examples are never mistaken for schemas, and entries in the
+# map keywords are visited by value whatever their names are.
+_SUBSCHEMA_KEYWORDS = frozenset(
+    {
+        "items",
+        "additionalItems",
+        "additionalProperties",
+        "contains",
+        "contentSchema",
+        "else",
+        "if",
+        "not",
+        "propertyNames",
+        "then",
+        "unevaluatedItems",
+        "unevaluatedProperties",
+    }
+)
+_SUBSCHEMA_LIST_KEYWORDS = frozenset({"allOf", "anyOf", "oneOf", "prefixItems"})
+_SUBSCHEMA_MAP_KEYWORDS = frozenset(
+    {"$defs", "definitions", "dependencies", "dependentSchemas", "patternProperties", "properties"}
+)
+
+
+def arrays_without_items(schema: object, path: str) -> list[str]:
+    """Return the paths of every array schema that does not define its item schema."""
+    if not isinstance(schema, dict):
+        return []
+
+    found: list[str] = []
+    schema_type = schema.get("type")
+    is_array = schema_type == "array" or (isinstance(schema_type, list) and "array" in schema_type)
+    if is_array and "items" not in schema and "prefixItems" not in schema:
+        found.append(path)
+
+    for key, value in schema.items():
+        if key == "items" and isinstance(value, list):
+            # Draft-04 tuple validation allows "items" to be a list of schemas.
+            for index, subschema in enumerate(value):
+                found.extend(arrays_without_items(subschema, f"{path}.items[{index}]"))
+        elif key in _SUBSCHEMA_KEYWORDS:
+            found.extend(arrays_without_items(value, f"{path}.{key}"))
+        elif key in _SUBSCHEMA_LIST_KEYWORDS and isinstance(value, list):
+            for index, subschema in enumerate(value):
+                found.extend(arrays_without_items(subschema, f"{path}.{key}[{index}]"))
+        elif key in _SUBSCHEMA_MAP_KEYWORDS and isinstance(value, dict):
+            for name, subschema in value.items():
+                found.extend(arrays_without_items(subschema, f"{path}.{key}.{name}"))
+    return found
+
+
 def _is_integration_load(
     value: ast.expr | None,
     integration_names: set[str],
@@ -377,6 +429,9 @@ class IntegrationValidator:
             # Check schemas
             if "input_schema" not in action_config:
                 self.add_warning(f"Action '{action_name}' missing 'input_schema'")
+            else:
+                for path in arrays_without_items(action_config["input_schema"], "input_schema"):
+                    self.add_error(f"Action '{action_name}' {path} is an array without 'items'")
 
             input_schema = action_config.get("input_schema")
             if isinstance(input_schema, dict):
