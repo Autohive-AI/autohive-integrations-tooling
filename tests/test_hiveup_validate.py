@@ -981,6 +981,66 @@ def test_structure_rejects_custom_auth_without_fields(tmp_path: Path, properties
     )
 
 
+@pytest.mark.parametrize("keyword", ["anyOf", "oneOf", "allOf"])
+@pytest.mark.parametrize("branches", [[{"required": ["owner_id"]}, {"required": ["owner_name"]}], []])
+def test_structure_rejects_root_input_schema_combinators(tmp_path: Path, keyword: str, branches) -> None:
+    integration = tmp_path / "root-combinator"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["actions"]["search_companies_by_owner_name"] = {
+        "input_schema": {
+            "type": "object",
+            "properties": {"owner_id": {"type": "string"}, "owner_name": {"type": "string"}},
+            keyword: branches,
+        }
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["check", "structure", str(integration), "--json"])
+
+    assert result.exit_code == 1
+    assert f"actions.search_companies_by_owner_name.input_schema.{keyword}" in result.output
+    assert "not supported at the top level by Claude" in result.output
+    assert "validate cross-field requirements in the action handler" in result.output
+
+
+def test_legacy_structure_reports_all_root_input_schema_combinators(tmp_path: Path, capsys) -> None:
+    integration = tmp_path / "multiple-combinators"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    for action_name in ("get_data", "search_companies"):
+        config["actions"][action_name] = {
+            "input_schema": {"type": "object", "anyOf": [{}], "oneOf": [{}], "allOf": [{}]}
+        }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    assert validate_structure([str(integration)]) == 1
+
+    output = capsys.readouterr().out
+    for action_name in ("get_data", "search_companies"):
+        for keyword in ("anyOf", "oneOf", "allOf"):
+            assert f"actions.{action_name}.input_schema.{keyword}" in output
+
+
+@pytest.mark.parametrize("keyword", ["anyOf", "oneOf", "allOf"])
+def test_structure_allows_nested_and_output_schema_combinators(tmp_path: Path, keyword: str) -> None:
+    integration = tmp_path / "allowed-combinators"
+    shutil.copytree(EXAMPLES / "good-integration", integration)
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    action = config["actions"]["get_data"]
+    action["input_schema"]["properties"]["limit"] = {keyword: [{"type": "integer"}]}
+    action["input_schema"]["properties"][keyword] = {"type": "string"}
+    action["output_schema"][keyword] = [{"required": ["result"]}]
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 0
+
+
 def test_structure_accepts_integration_without_auth(tmp_path: Path) -> None:
     integration = tmp_path / "no-auth"
     shutil.copytree(EXAMPLES / "good-integration", integration)

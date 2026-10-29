@@ -120,7 +120,20 @@ For each action defined in `config.json`:
 | `display_name` present | Warning | Human-readable name |
 | `description` present | Warning | What the action does |
 | `input_schema` present | Warning | JSON Schema for input |
+| No root-level `anyOf`, `oneOf`, or `allOf` in `input_schema` | Error | Claude rejects these tool schemas through both Anthropic and Amazon Bedrock |
 | `output_schema` present | Warning | JSON Schema for output |
+
+Root-level input-schema combinators fail validation for both new and existing
+integrations. Each error identifies the action and schema path, for example
+`actions.search_companies_by_owner_name.input_schema.anyOf`. This check runs in
+`hiveup check structure`, `hiveup validate`, `hiveup ci`, and the compatibility
+script `validate_integration.py`.
+
+Use an object input schema with `properties` and `required`. For alternatives
+such as "provide an owner ID, email, or name", describe the accepted inputs in
+the schema and enforce the cross-field requirement in the action handler.
+Combinators nested inside property schemas and root-level combinators in
+`output_schema` remain allowed.
 
 ### 4. \_\_init\_\_.py Minimality (`_check_init_py`)
 
