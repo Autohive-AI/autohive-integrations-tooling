@@ -378,6 +378,17 @@ class IntegrationValidator:
             if "input_schema" not in action_config:
                 self.add_warning(f"Action '{action_name}' missing 'input_schema'")
 
+            input_schema = action_config.get("input_schema")
+            if isinstance(input_schema, dict):
+                for keyword in ("anyOf", "oneOf", "allOf"):
+                    if keyword in input_schema:
+                        self.add_error(
+                            f"actions.{action_name}.input_schema.{keyword} is not supported at the top level by Claude "
+                            "(Anthropic and Amazon Bedrock). Use an object schema with properties and required; "
+                            "validate cross-field requirements in the action handler. "
+                            "Combinators inside property schemas are allowed."
+                        )
+
             if "output_schema" not in action_config:
                 self.add_warning(f"Action '{action_name}' missing 'output_schema'")
 
