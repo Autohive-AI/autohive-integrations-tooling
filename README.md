@@ -159,6 +159,7 @@ For example, `2.1.0` means "the second tooling release for SDK v2" — it does n
 | `2.4.0a1` | First Python HiveUp rewrite prerelease after tooling `2.3.0` |
 | `2.4.1` | Stable HiveUp patch release with improved CI output and behavior |
 | `2.5.0` | GitHub deployment release selection and manifest support |
+| `2.5.1` | Reject unsupported root input-schema combinators, arrays without items, and empty custom auth |
 | `3.0.0` | Tooling targeting SDK v3 |
 
 The Python distribution, import package, and executable are all named `hiveup`.
@@ -227,14 +228,14 @@ python -m twine check dist/*
 Install the resulting wheel as an isolated command-line tool:
 
 ```bash
-uv tool install --force ./dist/hiveup-2.5.0-py3-none-any.whl
+uv tool install --force ./dist/hiveup-2.5.1-py3-none-any.whl
 hiveup --version
 ```
 
 `pipx` is also supported:
 
 ```bash
-pipx install --force ./dist/hiveup-2.5.0-py3-none-any.whl
+pipx install --force ./dist/hiveup-2.5.1-py3-none-any.whl
 ```
 
 Rebuild and repeat the `--force` installation to upgrade a local build.
@@ -245,8 +246,8 @@ uv tool uninstall hiveup
 # or: pipx uninstall hiveup
 ```
 
-Pull-request CI builds both `hiveup-2.5.0-py3-none-any.whl` and
-`hiveup-2.5.0.tar.gz`, verifies their metadata, installs the wheel outside the
+Pull-request CI builds both `hiveup-2.5.1-py3-none-any.whl` and
+`hiveup-2.5.1.tar.gz`, verifies their metadata, installs the wheel outside the
 source checkout, exercises the supported CLI lifecycle, and uploads them as a
 GitHub Actions artifact. It does not publish either file.
 
