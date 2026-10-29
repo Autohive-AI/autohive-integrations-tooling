@@ -43,6 +43,7 @@ app = typer.Typer(help="Developer CLI for Autohive integrations.", no_args_is_he
 
 AUTH_TYPES = {"platform", "custom", "none"}
 PACKAGE_FILENAME_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+FILENAME_SEPARATOR_RUN = re.compile(r"[^A-Za-z0-9._]+")
 
 
 def _version_callback(value: bool) -> None:
@@ -374,14 +375,22 @@ def release_manifest(
 
 def _default_package_path(config: dict, directory: Path) -> Path:
     name = config.get("name", directory.name)
+    if not isinstance(name, str):
+        raise PackageBuildError(f"config.name must be a string: {name!r}")
+    # config.name is the user-facing name on Autohive, so it may contain spaces or other characters
+    # that are unsafe in a filename. Slugify it, falling back to the directory name.
+    name = _filename_slug(name) or _filename_slug(directory.name) or "integration"
     version = config.get("version", "0.0.0")
-    for label, value in (("name", name), ("version", version)):
-        if not isinstance(value, str) or not PACKAGE_FILENAME_COMPONENT.fullmatch(value):
-            raise PackageBuildError(
-                f"config.{label} must be a filename-safe value containing only letters, numbers, "
-                f"'.', '_', or '-': {value!r}"
-            )
+    if not isinstance(version, str) or not PACKAGE_FILENAME_COMPONENT.fullmatch(version):
+        raise PackageBuildError(
+            "config.version must be a filename-safe value containing only letters, numbers, "
+            f"'.', '_', or '-': {version!r}"
+        )
     return Path.cwd() / f"{name}-{version}.zip"
+
+
+def _filename_slug(value: str) -> str:
+    return FILENAME_SEPARATOR_RUN.sub("-", value).strip("._-")
 
 
 @app.command()

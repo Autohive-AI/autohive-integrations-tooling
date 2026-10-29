@@ -1704,23 +1704,12 @@ def test_package_allows_zip_output_inside_integration(tmp_path: Path, monkeypatc
         assert "release.zip" not in archive.namelist()
 
 
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("name", "../escaped"),
-        ("name", "nested/escaped"),
-        ("name", "nested\\escaped"),
-        ("version", "../1.0.0"),
-        ("version", 1),
-    ],
-)
-def test_default_package_output_rejects_unsafe_config_components(
-    tmp_path: Path, monkeypatch, field: str, value: object
-) -> None:
+@pytest.mark.parametrize("value", ["../1.0.0", 1])
+def test_default_package_output_rejects_unsafe_config_version(tmp_path: Path, monkeypatch, value: object) -> None:
     integration = _integration_with_entry_point(tmp_path / "unsafe-default-output", "demo.py")
     config_path = integration / "config.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    config[field] = value
+    config["version"] = value
     config_path.write_text(json.dumps(config), encoding="utf-8")
     working = tmp_path / "working"
     working.mkdir()
@@ -1730,11 +1719,60 @@ def test_default_package_output_rejects_unsafe_config_components(
     result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
 
     assert result.exit_code == 2
-    assert f"config.{field} must be a filename-safe value" in result.output
+    assert "config.version must be a filename-safe value" in result.output
     assert list(tmp_path.rglob("*.zip")) == []
 
 
-def test_default_package_output_rejects_absolute_config_name(tmp_path: Path, monkeypatch) -> None:
+def test_default_package_output_rejects_non_string_config_name(tmp_path: Path, monkeypatch) -> None:
+    integration = _integration_with_entry_point(tmp_path / "non-string-name", "demo.py")
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["name"] = 1
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *args: None)
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 2
+    assert "config.name must be a string" in result.output
+    assert list(tmp_path.rglob("*.zip")) == []
+
+
+@pytest.mark.parametrize(
+    ("name", "filename"),
+    [
+        ("Google Sheets", "Google-Sheets-1.0.0.zip"),
+        ("Supadata - Transcribe", "Supadata-Transcribe-1.0.0.zip"),
+        ("Café & Bar (Beta)", "Caf-Bar-Beta-1.0.0.zip"),
+        ("../escaped", "escaped-1.0.0.zip"),
+        ("nested/escaped", "nested-escaped-1.0.0.zip"),
+        ("nested\\escaped", "nested-escaped-1.0.0.zip"),
+        ("..", "slug-default-output-1.0.0.zip"),
+        ("日本語", "slug-default-output-1.0.0.zip"),
+    ],
+)
+def test_default_package_output_slugifies_config_name(
+    tmp_path: Path, monkeypatch, name: str, filename: str
+) -> None:
+    integration = _integration_with_entry_point(tmp_path / "slug-default-output", "demo.py")
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["name"] = name
+    config["version"] = "1.0.0"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    working = tmp_path / "working"
+    working.mkdir()
+    monkeypatch.chdir(working)
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *args: None)
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 0, result.output
+    assert [path.relative_to(tmp_path) for path in tmp_path.rglob("*.zip")] == [Path("working") / filename]
+
+
+def test_default_package_output_keeps_absolute_config_name_in_working_directory(tmp_path: Path, monkeypatch) -> None:
     integration = _integration_with_entry_point(tmp_path / "absolute-default-output", "demo.py")
     config_path = integration / "config.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -1747,9 +1785,10 @@ def test_default_package_output_rejects_absolute_config_name(tmp_path: Path, mon
 
     result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
 
-    assert result.exit_code == 2
-    assert "config.name must be a filename-safe value" in result.output
-    assert list(tmp_path.rglob("*.zip")) == []
+    assert result.exit_code == 0, result.output
+    packages = list(tmp_path.rglob("*.zip"))
+    assert len(packages) == 1
+    assert packages[0].parent == working
 
 
 def test_default_package_output_uses_safe_config_components(tmp_path: Path, monkeypatch) -> None:
