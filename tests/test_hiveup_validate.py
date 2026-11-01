@@ -1772,6 +1772,48 @@ def test_default_package_output_slugifies_config_name(
     assert [path.relative_to(tmp_path) for path in tmp_path.rglob("*.zip")] == [Path("working") / filename]
 
 
+@pytest.mark.parametrize("name", ["demo", "demo_", "demo.", "demo-", "demo--api", "Demo.API_v2"])
+def test_default_package_output_preserves_filename_safe_config_name(tmp_path: Path, monkeypatch, name: str) -> None:
+    integration = _integration_with_entry_point(tmp_path / "safe-name-output", "demo.py")
+    config_path = integration / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["name"] = name
+    config["version"] = "1.0.0"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    working = tmp_path / "working"
+    working.mkdir()
+    monkeypatch.chdir(working)
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *args: None)
+
+    result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+    assert result.exit_code == 0, result.output
+    assert [path.name for path in working.glob("*.zip")] == [f"{name}-1.0.0.zip"]
+
+
+def test_default_package_output_keeps_distinct_safe_names_apart(tmp_path: Path, monkeypatch) -> None:
+    working = tmp_path / "working"
+    working.mkdir()
+    monkeypatch.chdir(working)
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *args: None)
+    for name in ("demo", "demo_"):
+        integration = _integration_with_entry_point(tmp_path / f"integration{name}", "demo.py")
+        config_path = integration / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["name"] = name
+        config["version"] = "1.0.0"
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+
+        result = CliRunner().invoke(app, ["package", str(integration), "--skip-validate"])
+
+        assert result.exit_code == 0, result.output
+
+    assert sorted(path.name for path in working.glob("*.zip")) == ["demo-1.0.0.zip", "demo_-1.0.0.zip"]
+    for name in ("demo", "demo_"):
+        with zipfile.ZipFile(working / f"{name}-1.0.0.zip") as archive:
+            assert json.loads(archive.read("config.json"))["name"] == name
+
+
 def test_default_package_output_keeps_absolute_config_name_in_working_directory(tmp_path: Path, monkeypatch) -> None:
     integration = _integration_with_entry_point(tmp_path / "absolute-default-output", "demo.py")
     config_path = integration / "config.json"

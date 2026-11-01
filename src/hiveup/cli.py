@@ -378,8 +378,8 @@ def _default_package_path(config: dict, directory: Path) -> Path:
     if not isinstance(name, str):
         raise PackageBuildError(f"config.name must be a string: {name!r}")
     # config.name is the user-facing name on Autohive, so it may contain spaces or other characters
-    # that are unsafe in a filename. Slugify it, falling back to the directory name.
-    name = _filename_slug(name) or _filename_slug(directory.name) or "integration"
+    # that are unsafe in a filename. Slugify only unsafe names, falling back to the directory name.
+    name = _filename_component(name) or _filename_component(directory.name) or "integration"
     version = config.get("version", "0.0.0")
     if not isinstance(version, str) or not PACKAGE_FILENAME_COMPONENT.fullmatch(version):
         raise PackageBuildError(
@@ -389,7 +389,9 @@ def _default_package_path(config: dict, directory: Path) -> Path:
     return Path.cwd() / f"{name}-{version}.zip"
 
 
-def _filename_slug(value: str) -> str:
+def _filename_component(value: str) -> str:
+    if PACKAGE_FILENAME_COMPONENT.fullmatch(value):
+        return value
     return FILENAME_SEPARATOR_RUN.sub("-", value).strip("._-")
 
 
