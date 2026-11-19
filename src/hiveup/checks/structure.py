@@ -490,14 +490,13 @@ class IntegrationValidator:
             self.add_error(str(exc))
             return
 
-        operator = requirement.operator
         version_str = requirement.version_text
         parts = requirement.version
         major = parts[0]
 
-        if operator in ("==", "==="):
+        if requirement.exact_pin is not None:
             self.add_warning(
-                f"autohive-integrations-sdk{operator}{version_str} pins one exact version — "
+                f"autohive-integrations-sdk{requirement.exact_pin} pins one exact version — "
                 f"use autohive-integrations-sdk~={version_str} so patch releases are installed"
             )
 
