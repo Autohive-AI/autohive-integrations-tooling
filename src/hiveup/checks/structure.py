@@ -495,6 +495,12 @@ class IntegrationValidator:
         parts = requirement.version
         major = parts[0]
 
+        if operator in ("==", "==="):
+            self.add_warning(
+                f"autohive-integrations-sdk{operator}{version_str} pins one exact version — "
+                f"use autohive-integrations-sdk~={version_str} so patch releases are installed"
+            )
+
         min_version = self._MIN_SDK_VERSIONS.get(major)
         if min_version is None:
             self.add_warning(
@@ -504,8 +510,7 @@ class IntegrationValidator:
         elif parts < min_version:
             min_str = ".".join(str(v) for v in min_version)
             self.add_warning(
-                f"SDK version {version_str} is deprecated — "
-                f"upgrade to autohive-integrations-sdk{operator}{min_str} or later"
+                f"SDK version {version_str} is deprecated — upgrade to autohive-integrations-sdk~={min_str} or later"
             )
 
     def _check_tests_folder(self):

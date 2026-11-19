@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from hiveup.checks.structure import IntegrationValidator
 from hiveup.packaging import PackageBuildError, build_package
 from hiveup.sdk_requirement import MINIMUM_SDK_VERSION, SdkRequirementError, read_sdk_requirement
 
@@ -115,6 +116,35 @@ def test_build_package_rejects_an_open_sdk_range(
         build_package(integration, tmp_path / "demo.zip")
 
     assert not (tmp_path / "demo.zip").exists()
+
+
+@pytest.mark.parametrize("requirement", ["autohive-integrations-sdk==2.0.1", "autohive-integrations-sdk===2.0.1"])
+def test_structure_check_warns_about_an_exact_sdk_pin(tmp_path: Path, requirement: str) -> None:
+    validator = IntegrationValidator(_integration(tmp_path, requirement))
+
+    validator._check_requirements_txt()
+
+    assert validator.errors == []
+    assert [warning.message for warning in validator.warnings] == [
+        f"{requirement} pins one exact version — use autohive-integrations-sdk~=2.0.1 so patch releases are installed"
+    ]
+
+
+def test_structure_check_accepts_a_compatible_sdk_pin_without_warnings(tmp_path: Path) -> None:
+    validator = IntegrationValidator(_integration(tmp_path, "autohive-integrations-sdk~=2.0.1"))
+
+    validator._check_requirements_txt()
+
+    assert validator.errors == []
+    assert validator.warnings == []
+
+
+def test_structure_check_suggests_a_compatible_pin_for_a_deprecated_exact_version(tmp_path: Path) -> None:
+    validator = IntegrationValidator(_integration(tmp_path, "autohive-integrations-sdk==2.0.0"))
+
+    validator._check_requirements_txt()
+
+    assert "upgrade to autohive-integrations-sdk~=2.0.1 or later" in validator.warnings[1].message
 
 
 def _integration(root: Path, sdk_requirement: str) -> Path:
