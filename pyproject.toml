@@ -12,6 +12,7 @@ license = "MIT"
 dependencies = [
   "autohive-integrations-sdk~=2.0",
   "bandit",
+  "packaging",
   "pip-audit",
   "pytest>=9.0",
   "pytest-asyncio>=0.23",
