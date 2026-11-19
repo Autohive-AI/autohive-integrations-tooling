@@ -12,9 +12,10 @@ from hiveup.sdk_requirement import MINIMUM_SDK_VERSION, SdkRequirementError, rea
     [
         "autohive-integrations-sdk~=1.0.2",
         "autohive_integrations_sdk==1.0.2",
-        "Autohive.Integrations.SDK>=1.0.2",
-        "autohive-integrations-sdk>=1.0.2,<3",
+        "Autohive.Integrations.SDK~=1.0.2",
         "autohive-integrations-sdk~=2.0.1",
+        "autohive-integrations-sdk~=2.0",
+        "autohive-integrations-sdk~=2.0.1,!=2.0.2",
     ],
 )
 def test_read_sdk_requirement_accepts_supported_lower_bounds(tmp_path: Path, requirement: str) -> None:
@@ -29,12 +30,17 @@ def test_read_sdk_requirement_accepts_supported_lower_bounds(tmp_path: Path, req
 @pytest.mark.parametrize(
     ("requirement", "message"),
     [
-        ("requests==2.32.0", "must include autohive-integrations-sdk>=1.0.2"),
+        ("requests==2.32.0", "must include autohive-integrations-sdk~=1.0.2 or later"),
         ("autohive-integrations-sdk", "must declare a stable minimum version"),
         ("autohive-integrations-sdk<=2.0.1", "must declare a stable minimum version"),
         ("autohive-integrations-sdk~=1.0.1", "allows an SDK below the required minimum 1.0.2"),
         ("autohive-integrations-sdk>=1.0", "allows an SDK below the required minimum 1.0.2"),
         ("autohive-integrations-sdk>=1.0.2rc1", "must declare a stable minimum version"),
+        ("autohive-integrations-sdk>=2.0.1", r"autohive-integrations-sdk>=2\.0\.1 is not allowed"),
+        ("autohive-integrations-sdk>2.0.1", r"autohive-integrations-sdk>2\.0\.1 is not allowed"),
+        ("Autohive.Integrations.SDK>=1.0.2", "is not allowed"),
+        ("autohive-integrations-sdk>=1.0.2,<3", "is not allowed"),
+        ("autohive-integrations-sdk~=2.0.1,>=2.0.2", r">=2\.0\.2 is not allowed"),
     ],
 )
 def test_read_sdk_requirement_rejects_missing_or_unsupported_lower_bounds(
@@ -52,7 +58,7 @@ def test_read_sdk_requirement_rejects_missing_or_unsupported_lower_bounds(
 def test_read_sdk_requirement_rejects_environment_marker(tmp_path: Path) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_text(
-        "autohive-integrations-sdk>=1.0.2; python_version >= '3.13'\n",
+        "autohive-integrations-sdk~=1.0.2; python_version >= '3.13'\n",
         encoding="utf-8",
     )
 
@@ -60,14 +66,17 @@ def test_read_sdk_requirement_rejects_environment_marker(tmp_path: Path) -> None
         read_sdk_requirement(requirements)
 
 
-@pytest.mark.parametrize("second_requirement", ["autohive-integrations-sdk~=1.0.1", "autohive-integrations-sdk"])
+@pytest.mark.parametrize(
+    "second_requirement",
+    ["autohive-integrations-sdk~=1.0.1", "autohive-integrations-sdk", "autohive-integrations-sdk>=2.0.1"],
+)
 def test_read_sdk_requirement_validates_every_declaration(
     tmp_path: Path,
     second_requirement: str,
 ) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_text(
-        f"autohive-integrations-sdk>=2.0.1\n{second_requirement}\n",
+        f"autohive-integrations-sdk~=2.0.1\n{second_requirement}\n",
         encoding="utf-8",
     )
 
@@ -92,6 +101,19 @@ def test_build_package_enforces_sdk_floor_when_other_validation_is_skipped(
         build_package(integration, tmp_path / "demo.zip")
 
     assert install_called is False
+    assert not (tmp_path / "demo.zip").exists()
+
+
+def test_build_package_rejects_an_open_sdk_range(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    integration = _integration(tmp_path, "autohive-integrations-sdk>=2.0.1")
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *_args: None)
+
+    with pytest.raises(PackageBuildError, match="is not allowed"):
+        build_package(integration, tmp_path / "demo.zip")
+
     assert not (tmp_path / "demo.zip").exists()
 
 

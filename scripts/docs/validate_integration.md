@@ -161,6 +161,7 @@ Allowed patterns:
 |-------|----------|-------------|
 | `autohive-integrations-sdk` present | Error | SDK dependency is mandatory |
 | Version pinned and not deprecated | Warning | Should pin SDK version (e.g., `~=2.0.1`); deprecated versions warn |
+| No `>=` or `>` on the SDK | Error | Pin the SDK with `~=` or `==` so a later major version is never installed |
 
 ### 6. Tests Folder (`_check_tests_folder`)
 

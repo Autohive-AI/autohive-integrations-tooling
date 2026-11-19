@@ -17,8 +17,13 @@ _SDK_REQUIREMENT = re.compile(
 _LOWER_BOUND = re.compile(r"(?P<operator>===|==|~=|>=|>)\s*(?P<version>\d+(?:\.\d+){1,2})(?P<suffix>[^,\s;#]*)")
 
 
+# A later major SDK version can change behavior that an integration depends on, so the SDK must be
+# pinned with ~= or ==. A >= or > bound is refused, even with an upper bound, to keep the rule simple.
+_OPEN_OPERATORS = (">=", ">")
+
+
 class SdkRequirementError(ValueError):
-    """Raised when requirements.txt does not guarantee the supported SDK floor."""
+    """Raised when requirements.txt does not declare a supported SDK version range."""
 
 
 @dataclass(frozen=True)
@@ -39,7 +44,7 @@ def read_sdk_requirement(requirements_path: Path) -> SdkRequirement:
     requirements = list(_SDK_REQUIREMENT.finditer(content))
     if not requirements:
         raise SdkRequirementError(
-            f"requirements.txt must include autohive-integrations-sdk>={MINIMUM_SDK_VERSION_TEXT}"
+            f"requirements.txt must include autohive-integrations-sdk~={MINIMUM_SDK_VERSION_TEXT} or later"
         )
 
     resolved: list[SdkRequirement] = []
@@ -65,7 +70,7 @@ def read_sdk_requirement(requirements_path: Path) -> SdkRequirement:
         if not bounds:
             raise SdkRequirementError(
                 "requirements.txt must declare a stable minimum version for "
-                f"autohive-integrations-sdk, for example >={MINIMUM_SDK_VERSION_TEXT}"
+                f"autohive-integrations-sdk, for example ~={MINIMUM_SDK_VERSION_TEXT}"
             )
 
         strongest = max(bounds, key=lambda bound: bound.version)
@@ -73,6 +78,14 @@ def read_sdk_requirement(requirements_path: Path) -> SdkRequirement:
             raise SdkRequirementError(
                 f"autohive-integrations-sdk{strongest.operator}{strongest.version_text} allows an SDK below "
                 f"the required minimum {MINIMUM_SDK_VERSION_TEXT}"
+            )
+
+        open_bound = next((bound for bound in bounds if bound.operator in _OPEN_OPERATORS), None)
+        if open_bound is not None:
+            raise SdkRequirementError(
+                f"autohive-integrations-sdk{open_bound.operator}{open_bound.version_text} is not allowed. Pin the SDK "
+                f"with ~={open_bound.version_text} or =={open_bound.version_text} so a later major version "
+                "is never installed"
             )
         resolved.append(strongest)
 
