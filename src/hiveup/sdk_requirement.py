@@ -17,9 +17,10 @@ _SDK_REQUIREMENT = re.compile(
 _LOWER_BOUND = re.compile(r"(?P<operator>===|==|~=|>=|>)\s*(?P<version>\d+(?:\.\d+){1,2})(?P<suffix>[^,\s;#]*)")
 
 
-# A later major SDK version can change behavior that an integration depends on, so the SDK must be
-# pinned with ~= or ==. A >= or > bound is refused, even with an upper bound, to keep the rule simple.
-_OPEN_OPERATORS = (">=", ">")
+# A later major SDK version can change behavior that an integration depends on, so every SDK
+# requirement must include a ~= or == pin. The pin keeps the major version fixed, and other
+# specifiers next to it can only narrow the range further.
+_PIN_OPERATORS = ("~=", "==", "===")
 
 
 class SdkRequirementError(ValueError):
@@ -80,12 +81,10 @@ def read_sdk_requirement(requirements_path: Path) -> SdkRequirement:
                 f"the required minimum {MINIMUM_SDK_VERSION_TEXT}"
             )
 
-        open_bound = next((bound for bound in bounds if bound.operator in _OPEN_OPERATORS), None)
-        if open_bound is not None:
+        if not any(bound.operator in _PIN_OPERATORS for bound in bounds):
             raise SdkRequirementError(
-                f"autohive-integrations-sdk{open_bound.operator}{open_bound.version_text} is not allowed. Pin the SDK "
-                f"with ~={open_bound.version_text} or =={open_bound.version_text} so a later major version "
-                "is never installed"
+                f"autohive-integrations-sdk{strongest.operator}{strongest.version_text} can install a later major "
+                f"version of the SDK. Pin the SDK with ~={strongest.version_text} so the major version stays fixed"
             )
         resolved.append(strongest)
 
