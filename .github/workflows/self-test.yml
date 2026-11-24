@@ -503,6 +503,99 @@ jobs:
           )
           PY
 
+  test-annotation-paths:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    name: Annotation path probe — ${{ matrix.cwd }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        cwd: [repository-root, integration-directory]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install HiveUp
+        run: python -m pip install -e . -q
+
+      - name: Emit packaging warning and path controls
+        env:
+          PROBE_CWD: ${{ matrix.cwd }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          repository_path = "tests/examples/sdk-deprecated-pin/requirements.txt"
+          requirements = workspace / repository_path
+          mode = os.environ["PROBE_CWD"]
+          cwd = workspace if mode == "repository-root" else requirements.parent
+          evidence = Path(os.environ["RUNNER_TEMP"]) / "annotation-path-probe"
+          evidence.mkdir()
+          os.chdir(cwd)
+          result = subprocess.run(
+              [
+                  "hiveup", "package", str(requirements.parent), "--skip-validate",
+                  "--output", str(Path(os.environ["RUNNER_TEMP"]) / "annotation-probe.zip"),
+              ],
+              capture_output=True, text=True,
+          )
+          print(result.stdout, end="", flush=True)
+          print(result.stderr, end="", file=sys.stderr)
+          (evidence / "package-output.txt").write_text(result.stdout + result.stderr, encoding="utf-8")
+          assert result.returncode == 0, "The real packaging command must succeed"
+          assert "::warning file=" in result.stdout, "The real packaging command must emit an SDK advisory"
+
+          # All controls target the same tracked file. Cwd-relative paths deliberately
+          # differ from repository-relative paths when the command runs in the integration.
+          cases = []
+          for variant, path in (
+              ("absolute", requirements.as_posix()),
+              ("repository-relative", repository_path),
+              ("cwd-relative", os.path.relpath(requirements, cwd)),
+          ):
+              for line in (None, 1):
+                  location = "no-line" if line is None else "line-1"
+                  title = f"{mode} / {variant} / {location}"
+                  line_property = "" if line is None else f",line={line}"
+                  print(f"::warning file={path}{line_property},title={title}::Annotation path probe: {title}")
+                  cases.append({"title": title, "file": path, "line": line})
+
+          (evidence / "cases.json").write_text(
+              json.dumps({"cwd": str(cwd), "repository_path": repository_path, "cases": cases}, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
+              summary.write(f"## Annotation path probe: {mode}\n\n")
+              summary.write(f"Tracked source: `{repository_path}`\n\nWorking directory: `{cwd}`\n\n")
+              summary.write("| Control | Emitted file | Line |\n| --- | --- | --- |\n")
+              for case in cases:
+                  summary.write(f"| {case['title']} | `{case['file']}` | {case['line']} |\n")
+              summary.write(
+                  "\nThese warnings are intentional. Compare the stored annotation paths, line numbers, "
+                  "and source links; a passing job alone does not establish that a source link works.\n"
+              )
+          PY
+
+      - name: Preserve annotation probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: annotation-path-probe-${{ matrix.cwd }}
+          path: ${{ runner.temp }}/annotation-path-probe/
+          if-no-files-found: error
+
   test-action-fixtures:
     runs-on: ubuntu-latest
     name: Test Action — ${{ matrix.name }}
