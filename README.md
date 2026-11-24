@@ -313,6 +313,11 @@ mkdir my-integration && cd my-integration
 hiveup init --name "My Integration"
 ```
 
+Both commands generate `autohive-integrations-sdk~=2.1.0` requirements and a
+matching README. This range accepts SDK 2.1.x (`>=2.1.0,<2.2.0`), not SDK 3.x.
+Existing integrations keep their own SDK requirements; this starter default is
+not a new minimum enforced across all integrations.
+
 Custom auth generates an editable API-key starter schema. Platform auth requires an explicit provider; scopes are optional:
 
 ```bash

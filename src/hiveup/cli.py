@@ -618,7 +618,7 @@ def _scaffold(
     )
     files = {
         Path("config.json"): (json.dumps(config, indent=2) + "\n").encode(),
-        Path("requirements.txt"): b"autohive-integrations-sdk~=2.0.1\n",
+        Path("requirements.txt"): b"autohive-integrations-sdk~=2.1.0\n",
         Path("README.md"): _readme_source(display_name, auth_type).encode(),
         Path(".gitignore"): (
             b".coverage\n.env\n.hiveup/\n.pytest_cache/\n.ruff_cache/\n.venv/\n__pycache__/\ndependencies/\n*.zip\n"
@@ -836,7 +836,7 @@ Returns sample data from the integration.
 ## Requirements
 
 - Python 3.13
-- `autohive-integrations-sdk~=2.0.1`
+- `autohive-integrations-sdk~=2.1.0`
 
 ## Development
 

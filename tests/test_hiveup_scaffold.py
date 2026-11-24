@@ -73,8 +73,9 @@ def test_create_generates_sdk_v2_scaffold(
     readme = (integration / "README.md").read_text(encoding="utf-8")
     for heading in ("## Description", "## Authentication", "## Actions", "## Requirements", "## Development"):
         assert heading in readme
+    assert "`autohive-integrations-sdk~=2.1.0`" in readme
     assert (integration / "requirements.txt").read_text(encoding="utf-8") == (
-        "autohive-integrations-sdk~=2.0.1\n"
+        "autohive-integrations-sdk~=2.1.0\n"
     )
     icon = (integration / "icon.png").read_bytes()
     assert icon[:8] == b"\x89PNG\r\n\x1a\n"
