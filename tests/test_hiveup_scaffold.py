@@ -422,6 +422,30 @@ def test_fresh_scaffold_validates_tests_and_packages(
 
     scaffold_result = CliRunner().invoke(app, command)
     assert scaffold_result.exit_code == 0, scaffold_result.output
+    (integration / "tests" / "test_context_unit.py").write_text(
+        f"""import pytest
+
+pytestmark = pytest.mark.unit
+
+
+def test_mock_context_auth(mock_context):
+    auth = mock_context.auth
+    auth_type = "{auth_type}"
+    if auth_type == "none":
+        assert auth == {{}}
+        return
+
+    expected_type, credential_name = {{
+        "custom": ("Custom", "api_key"),
+        "platform": ("PlatformOauth2", "access_token"),
+    }}[auth_type]
+    assert auth["auth_type"] == expected_type
+    credential = auth["credentials"][credential_name]
+    assert isinstance(credential, str)
+    assert credential
+""",
+        encoding="utf-8",
+    )
     if auth_type == "custom":
         (integration / "tests" / "test_auth_unit.py").write_text(
             """import pytest
