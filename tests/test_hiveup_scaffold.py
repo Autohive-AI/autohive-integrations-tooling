@@ -395,13 +395,19 @@ def test_structure_warns_for_noncanonical_unit_test_name_without_history(tmp_pat
 
 
 @pytest.mark.parametrize("command", [["create", "sample"], ["init", "--name", "Sample"]])
-def test_fresh_scaffold_validates_tests_and_packages(tmp_path: Path, monkeypatch, command: list[str]) -> None:
+@pytest.mark.parametrize("auth_type", ["none", "custom", "platform"])
+def test_fresh_scaffold_validates_tests_and_packages(
+    tmp_path: Path, monkeypatch, command: list[str], auth_type: str
+) -> None:
     integration = tmp_path / "sample"
     if command[0] == "init":
         integration.mkdir()
         monkeypatch.chdir(integration)
     else:
         monkeypatch.chdir(tmp_path)
+    command = [*command, "--auth-type", auth_type]
+    if auth_type == "platform":
+        command.extend(["--auth-provider", "github"])
 
     isolated = IntegrationEnvironment(tmp_path / "environment", Path(sys.executable), "test", created=False)
     monkeypatch.setattr(static, "prepare_environment", lambda *args, **kwargs: isolated)
@@ -415,6 +421,27 @@ def test_fresh_scaffold_validates_tests_and_packages(tmp_path: Path, monkeypatch
     monkeypatch.setattr("hiveup.packaging.install_dependencies", stage_dependencies)
 
     scaffold_result = CliRunner().invoke(app, command)
+    assert scaffold_result.exit_code == 0, scaffold_result.output
+    if auth_type == "custom":
+        (integration / "tests" / "test_auth_unit.py").write_text(
+            """import pytest
+
+from autohive_integrations_sdk import ResultType
+from sample import sample
+
+pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
+
+
+async def test_missing_required_api_key(mock_context):
+    mock_context.auth = {"auth_type": "Custom", "credentials": {}}
+
+    result = await sample.execute_action("get_data", {}, mock_context)
+
+    assert result.type == ResultType.VALIDATION_ERROR
+    assert result.result["source"] == "auth"
+""",
+            encoding="utf-8",
+        )
     validate_result = CliRunner().invoke(
         app,
         ["validate", str(integration), "--skip", "audit,readme,version"],
@@ -426,7 +453,6 @@ def test_fresh_scaffold_validates_tests_and_packages(tmp_path: Path, monkeypatch
         ["package", str(integration), "--output", str(package_path)],
     )
 
-    assert scaffold_result.exit_code == 0, scaffold_result.output
     assert validate_result.exit_code == 0, validate_result.output
     assert test_result.exit_code == 0, test_result.output
     assert package_result.exit_code == 0, package_result.output

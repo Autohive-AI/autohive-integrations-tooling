@@ -328,6 +328,13 @@ hiveup create my-integration \
   --auth-scopes repo,read:user
 ```
 
+Generated unit-test contexts match the selected mode: no auth uses `{}`, Custom
+uses `{"auth_type": "Custom", "credentials": {"api_key": "test-only-api-key"}}`,
+and platform OAuth uses `PlatformOauth2` with a dummy `access_token` in
+`credentials`. The starter test checks successful SDK action execution without
+provider requests; it does not exercise the SDK HTTP transport. Keep required
+custom fields in the schema and update dummy credentials when those fields change.
+
 Authentication edits are always explicit. Existing compatible custom schemas and platform metadata are preserved:
 
 ```bash
@@ -335,6 +342,9 @@ hiveup auth my-integration --auth-type custom
 hiveup auth my-integration --auth-type platform --auth-provider github --auth-scopes repo
 hiveup auth my-integration --auth-type none
 ```
+
+`hiveup auth` changes `config.json` only; it does not rewrite existing unit-test
+fixtures. Update those fixtures yourself after changing auth modes or fields.
 
 `create` and `init` refuse non-empty directories by default. `--force` uses per-file atomic replacement with rollback for scaffold-owned files, preserves other developer files, and rejects symlinked targets or scaffold paths.
 

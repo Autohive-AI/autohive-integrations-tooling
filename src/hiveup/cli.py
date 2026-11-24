@@ -627,7 +627,7 @@ def _scaffold(
         Path(f"{module}.py"): _module_source(module).encode(),
         Path("icon.png"): _png_bytes(),
         Path("tests/__init__.py"): b"",
-        Path("tests/conftest.py"): _conftest_source().encode(),
+        Path("tests/conftest.py"): _conftest_source(auth_type).encode(),
         Path(f"tests/test_{module}_unit.py"): _test_source(module).encode(),
     }
     return _write_scaffold(target, files)
@@ -770,8 +770,13 @@ class GetDataAction(ActionHandler):
 """
 
 
-def _conftest_source() -> str:
-    return """import sys
+def _conftest_source(auth_type: str) -> str:
+    auth = {
+        "none": {},
+        "custom": {"auth_type": "Custom", "credentials": {"api_key": "test-only-api-key"}},
+        "platform": {"auth_type": "PlatformOauth2", "credentials": {"access_token": "test-only-access-token"}},
+    }[auth_type]
+    return f"""import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -787,7 +792,8 @@ def mock_context():
     \"\"\"Return an isolated SDK execution context for unit tests.\"\"\"
     context = MagicMock(name="ExecutionContext")
     context.fetch = AsyncMock(name="fetch")
-    context.auth = {}
+    # Dummy credentials for offline unit tests, not provider secrets.
+    context.auth = {json.dumps(auth)}  # nosec B105
     return context
 """
 
@@ -795,6 +801,7 @@ def mock_context():
 def _test_source(module: str) -> str:
     return f"""import pytest
 
+from autohive_integrations_sdk import ResultType
 from {module} import {module}
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
@@ -803,6 +810,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 async def test_get_data(mock_context):
     result = await {module}.execute_action("get_data", {{}}, mock_context)
 
+    assert result.type == ResultType.ACTION
     assert result.result.data["message"] == "hello from {module}"
 """
 
@@ -839,6 +847,12 @@ Returns sample data from the integration.
 - `autohive-integrations-sdk~=2.1.0`
 
 ## Development
+
+`tests/conftest.py` provides a mock context matching the selected auth mode,
+using dummy credentials where needed. The starter test exercises SDK action
+execution and validation without calling a provider. It does not test SDK HTTP
+transport. Update the fixture when you change the auth fields in `config.json`;
+`hiveup auth` updates configuration, not existing tests.
 
 ```bash
 hiveup validate
