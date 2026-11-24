@@ -366,6 +366,19 @@ Packaging always requires the top-level `requirements.txt` to declare
 deployment safety check still runs with `--skip-validate`, so a release workflow
 cannot package an integration that permits an older SDK.
 
+SDK **2.1.0 is the recommended minimum**. The structure check warns when the
+declared SDK lower bound is older, including SDK 1.x and 2.0.x. It checks
+`requirements.txt`, not whichever SDK happens to be installed in the Tooling
+environment. SDK 2.1.0 and newer stable SDK 2.x bounds do not trigger this
+upgrade warning. Exact pins still receive a separate recommendation to use `~=`.
+
+These advisories do not fail validation or packaging. `hiveup ci` includes them
+in the structure output, GitHub warning annotations, and PR comments.
+`hiveup package` also reports SDK advisories, even with `--skip-validate`, and
+emits warning annotations when running in GitHub Actions. Existing dependency
+pins are not rewritten. Before upgrading an SDK 1.x integration, check its
+compatibility with SDK 2.x.
+
 ## Local Testing
 
 ```bash
@@ -443,7 +456,7 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 - `config.json` - Integration configuration
 - `{name}.py` - Main implementation
 - `__init__.py` - Package init (minimal, optional for modular integrations with `actions/`)
-- `requirements.txt` - Dependencies (must include `autohive-integrations-sdk~=2.0.1` or later in the SDK 2.x line)
+- `requirements.txt` - Dependencies (SDK pin required; `autohive-integrations-sdk~=2.1.0` recommended, older supported bounds warn)
 - `README.md` - Documentation
 - `icon.png`, `icon.jpg`, or `icon.jpeg` - Integration icon (512x512 pixels)
 - `tests/` - Test folder with `__init__.py`, `context.py` or `conftest.py`, and `test_*_unit.py`

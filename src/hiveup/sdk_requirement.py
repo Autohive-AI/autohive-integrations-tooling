@@ -13,6 +13,8 @@ from packaging.version import InvalidVersion, Version
 
 MINIMUM_SDK_VERSION = (1, 0, 2)
 MINIMUM_SDK_VERSION_TEXT = ".".join(str(part) for part in MINIMUM_SDK_VERSION)
+RECOMMENDED_SDK_VERSION = (2, 1, 0)
+RECOMMENDED_SDK_VERSION_TEXT = ".".join(str(part) for part in RECOMMENDED_SDK_VERSION)
 
 _SDK_NAME = canonicalize_name("autohive-integrations-sdk")
 # Finds a line that names the SDK, so that a line packaging cannot parse is reported instead of ignored.
@@ -103,6 +105,28 @@ def read_sdk_requirement(requirements_path: Path) -> SdkRequirement:
         resolved.append(strongest)
 
     return replace(min(resolved, key=lambda bound: bound.version), exact_pin=exact_pin)
+
+
+def sdk_requirement_warnings(requirement: SdkRequirement) -> list[str]:
+    """Return non-blocking SDK advisories shared by validation and packaging."""
+
+    warnings = []
+    if requirement.exact_pin is not None:
+        warnings.append(
+            f"autohive-integrations-sdk{requirement.exact_pin} pins one exact version — "
+            f"use autohive-integrations-sdk~={requirement.version_text} so patch releases are installed"
+        )
+
+    major = requirement.version[0]
+    if major not in (1, 2):
+        warnings.append(f"Unknown SDK major version {major} in requirements.txt — expected major version 1, 2")
+    elif requirement.version < RECOMMENDED_SDK_VERSION:
+        warnings.append(
+            f"SDK requirement allows version {requirement.version_text}, "
+            f"below the recommended {RECOMMENDED_SDK_VERSION_TEXT} — "
+            f"upgrade to autohive-integrations-sdk~={RECOMMENDED_SDK_VERSION_TEXT} or later"
+        )
+    return warnings
 
 
 def _sdk_requirements(content: str):

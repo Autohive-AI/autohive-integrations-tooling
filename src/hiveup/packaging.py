@@ -14,7 +14,7 @@ from hiveup.core.deployment import (
     is_deployment_source,
     is_excluded_development_path,
 )
-from hiveup.sdk_requirement import SdkRequirementError, read_sdk_requirement
+from hiveup.sdk_requirement import SdkRequirementError, read_sdk_requirement, sdk_requirement_warnings
 
 TARGET_PLATFORM = "manylinux2014_x86_64"
 TARGET_PYTHON_VERSION = "3.13"
@@ -26,8 +26,8 @@ class PackageBuildError(RuntimeError):
     """Raised when an integration package cannot be built."""
 
 
-def build_package(directory: Path, package_path: Path) -> None:
-    """Install dependencies externally and write a deployable integration archive."""
+def build_package(directory: Path, package_path: Path) -> list[str]:
+    """Write a deployable integration archive and return non-blocking SDK advisories."""
 
     _validate_package_output(directory, package_path)
     _validate_deployment_files(directory)
@@ -35,7 +35,7 @@ def build_package(directory: Path, package_path: Path) -> None:
     if not _is_regular_file(requirements):
         raise PackageBuildError(f"requirements.txt not found: {requirements}")
     try:
-        read_sdk_requirement(requirements)
+        requirement = read_sdk_requirement(requirements)
     except SdkRequirementError as exc:
         raise PackageBuildError(str(exc)) from exc
 
@@ -43,6 +43,8 @@ def build_package(directory: Path, package_path: Path) -> None:
         dependencies = Path(temporary_directory) / "dependencies"
         install_dependencies(requirements, dependencies)
         write_package_zip(directory, package_path, dependencies if dependencies.exists() else None)
+
+    return sdk_requirement_warnings(requirement)
 
 
 def _validate_deployment_files(directory: Path) -> None:

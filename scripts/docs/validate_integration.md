@@ -160,9 +160,16 @@ Allowed patterns:
 | Check | Severity | Description |
 |-------|----------|-------------|
 | `autohive-integrations-sdk` present | Error | SDK dependency is mandatory |
-| Version pinned and not deprecated | Warning | Should pin SDK version (e.g., `~=2.0.1`); deprecated versions warn |
+| Stable SDK lower bound of at least 1.0.2 | Error | Hard deployment minimum, also enforced during packaging with `--skip-validate` |
+| SDK lower bound below 2.1.0 | Warning | Recommend `autohive-integrations-sdk~=2.1.0` or later, including for SDK 1.x and 2.0.x requirements |
 | SDK pinned with `~=` or `==` | Error | A requirement with only `>=` or `>` can install a later major version |
-| No `==` on the SDK | Warning | Use `~=` so patch releases are installed |
+| Exact SDK pin (`==` or `===`) | Warning | Use `~=` so patch releases are installed |
+
+The recommendation checks the declared lower bound, not the SDK installed in
+the Tooling environment. Newer stable SDK 2.x lower bounds do not trigger the
+upgrade warning. SDK advisories do not fail validation or packaging, and
+packaging still reports them with `--skip-validate`. Check SDK 2.x compatibility
+before upgrading an SDK 1.x integration; dependency pins are not rewritten.
 
 ### 6. Tests Folder (`_check_tests_folder`)
 

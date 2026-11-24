@@ -293,11 +293,17 @@ def package(
         raise typer.Exit(2)
     try:
         package_path = output or _default_package_path(config, directory)
-        build_package(directory, package_path)
+        sdk_warnings = build_package(directory, package_path)
     except PackageBuildError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(2)
 
+    for warning in sdk_warnings:
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            file = _escape_annotation_prop(str(directory / "requirements.txt"))
+            typer.echo(f"::warning file={file}::{_escape_annotation(warning)}")
+        else:
+            typer.echo(f"⚠️ {directory.name}: {warning}")
     typer.echo(f"✅ Wrote {package_path}")
 
 

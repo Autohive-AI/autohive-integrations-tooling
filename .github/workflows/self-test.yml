@@ -257,15 +257,15 @@ jobs:
           fi
           echo "✅ Invalid base ref correctly returns exit code 2 through check_code.py"
 
-      - name: Test validate_integration.py — deprecated SDK pin warns
+      - name: Test validate_integration.py — older SDK pin recommends 2.1.0
         run: |
           OUTPUT=$(python scripts/validate_integration.py tests/examples/sdk-deprecated-pin 2>&1)
-          if ! echo "$OUTPUT" | grep -q "deprecated"; then
-            echo "❌ Expected deprecation warning for sdk-deprecated-pin (~=1.0.2)"
+          if ! echo "$OUTPUT" | grep -q 'upgrade to autohive-integrations-sdk~=2.1.0'; then
+            echo "❌ Expected SDK 2.1.0 recommendation for sdk-deprecated-pin (~=1.0.2)"
             echo "$OUTPUT"
             exit 1
           fi
-          echo "✅ Deprecated SDK pin correctly warned"
+          echo "✅ Older SDK pin correctly warned without failing validation"
 
       - name: Test validate_integration.py — wrong icon size fails
         run: |

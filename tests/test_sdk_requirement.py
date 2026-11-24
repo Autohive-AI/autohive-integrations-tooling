@@ -179,7 +179,7 @@ def test_read_sdk_requirement_finds_an_exact_pin_in_any_position(
     assert read_sdk_requirement(requirements).exact_pin == exact_pin
 
 
-@pytest.mark.parametrize("requirement", ["autohive-integrations-sdk==2.0.1", "autohive-integrations-sdk===2.0.1"])
+@pytest.mark.parametrize("requirement", ["autohive-integrations-sdk==2.1.0", "autohive-integrations-sdk===2.1.0"])
 def test_structure_check_warns_about_an_exact_sdk_pin(tmp_path: Path, requirement: str) -> None:
     validator = IntegrationValidator(_integration(tmp_path, requirement))
 
@@ -187,12 +187,12 @@ def test_structure_check_warns_about_an_exact_sdk_pin(tmp_path: Path, requiremen
 
     assert validator.errors == []
     assert [warning.message for warning in validator.warnings] == [
-        f"{requirement} pins one exact version — use autohive-integrations-sdk~=2.0.1 so patch releases are installed"
+        f"{requirement} pins one exact version — use autohive-integrations-sdk~=2.1.0 so patch releases are installed"
     ]
 
 
 def test_structure_check_accepts_a_compatible_sdk_pin_without_warnings(tmp_path: Path) -> None:
-    validator = IntegrationValidator(_integration(tmp_path, "autohive-integrations-sdk~=2.0.1"))
+    validator = IntegrationValidator(_integration(tmp_path, "autohive-integrations-sdk~=2.1.0"))
 
     validator._check_requirements_txt()
 
@@ -203,9 +203,9 @@ def test_structure_check_accepts_a_compatible_sdk_pin_without_warnings(tmp_path:
 @pytest.mark.parametrize(
     "requirement",
     [
-        "autohive-integrations-sdk>=2.0.1,==2.0.1",
-        "autohive-integrations-sdk==2.0.1,>=2.0.1",
-        "autohive-integrations-sdk~=2.0.1,==2.0.1",
+        "autohive-integrations-sdk>=2.1.0,==2.1.0",
+        "autohive-integrations-sdk==2.1.0,>=2.1.0",
+        "autohive-integrations-sdk~=2.1.0,==2.1.0",
     ],
 )
 def test_structure_check_warns_about_an_exact_pin_in_any_position(tmp_path: Path, requirement: str) -> None:
@@ -215,17 +215,17 @@ def test_structure_check_warns_about_an_exact_pin_in_any_position(tmp_path: Path
 
     assert validator.errors == []
     assert [warning.message for warning in validator.warnings] == [
-        "autohive-integrations-sdk==2.0.1 pins one exact version — "
-        "use autohive-integrations-sdk~=2.0.1 so patch releases are installed"
+        "autohive-integrations-sdk==2.1.0 pins one exact version — "
+        "use autohive-integrations-sdk~=2.1.0 so patch releases are installed"
     ]
 
 
-def test_structure_check_suggests_a_compatible_pin_for_a_deprecated_exact_version(tmp_path: Path) -> None:
+def test_structure_check_suggests_a_compatible_pin_for_an_older_exact_version(tmp_path: Path) -> None:
     validator = IntegrationValidator(_integration(tmp_path, "autohive-integrations-sdk==2.0.0"))
 
     validator._check_requirements_txt()
 
-    assert "upgrade to autohive-integrations-sdk~=2.0.1 or later" in validator.warnings[1].message
+    assert "upgrade to autohive-integrations-sdk~=2.1.0 or later" in validator.warnings[1].message
 
 
 def _integration(root: Path, sdk_requirement: str) -> Path:
