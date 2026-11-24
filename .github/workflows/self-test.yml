@@ -351,6 +351,11 @@ jobs:
           WHEEL=$(realpath dist/hiveup-*.whl)
           ENV_DIR=$(mktemp -d)
           WORK_DIR=$(mktemp -d)
+          trap 'rm -rf "$ENV_DIR" "$WORK_DIR"' EXIT
+          printf 'autohive-integrations-sdk==2.1.0\n' > "$WORK_DIR/sdk-constraints.txt"
+          export PIP_CONSTRAINT="$WORK_DIR/sdk-constraints.txt"
+          export UV_CONSTRAINT="$PIP_CONSTRAINT"
+          export HIVEUP_CACHE_DIR="$WORK_DIR/.hiveup-cache"
           python -m venv "$ENV_DIR"
           "$ENV_DIR/bin/python" -m pip install "$WHEEL"
 
@@ -369,17 +374,52 @@ jobs:
 
           assert metadata("hiveup")["Name"] == "hiveup"
           assert version("hiveup") == "2.5.3"
+          assert version("autohive-integrations-sdk") == "2.1.0"
           assert files("hiveup").joinpath("data/ruff.toml").is_file()
           PY
 
-          "$ENV_DIR/bin/hiveup" create wheel-smoke --auth-type none
-          "$ENV_DIR/bin/hiveup" validate wheel-smoke
-          "$ENV_DIR/bin/hiveup" test wheel-smoke
-          "$ENV_DIR/bin/hiveup" auth wheel-smoke --auth-type custom
-          "$ENV_DIR/bin/hiveup" auth wheel-smoke --auth-type none
-          "$ENV_DIR/bin/hiveup" package wheel-smoke
-          "$ENV_DIR/bin/hiveup" doctor wheel-smoke
-          [ -f wheel-smoke-1.0.0.zip ]
+          cat > conftest.py <<'PY'
+          import socket
+          from importlib.metadata import version
+
+          import pytest
+
+
+          @pytest.fixture(autouse=True)
+          def released_sdk_without_network(monkeypatch):
+              assert version("autohive-integrations-sdk") == "2.1.0"
+
+              def reject_network(*args, **kwargs):
+                  raise AssertionError("Starter unit tests must not open network connections")
+
+              monkeypatch.setattr(socket, "getaddrinfo", reject_network)
+              monkeypatch.setattr(socket.socket, "connect", reject_network)
+              monkeypatch.setattr(socket.socket, "connect_ex", reject_network)
+          PY
+
+          for command in create init; do
+            for auth_type in none custom platform; do
+              integration="wheel-$command-$auth_type"
+              auth_options=(--auth-type "$auth_type")
+              if [ "$auth_type" = platform ]; then
+                auth_options+=(--auth-provider github)
+              fi
+              if [ "$command" = create ]; then
+                "$ENV_DIR/bin/hiveup" create "$integration" "${auth_options[@]}"
+              else
+                mkdir "$integration"
+                (cd "$integration" && "$ENV_DIR/bin/hiveup" init "${auth_options[@]}")
+              fi
+              "$ENV_DIR/bin/hiveup" validate "$integration"
+              "$ENV_DIR/bin/hiveup" test "$integration"
+            done
+          done
+
+          "$ENV_DIR/bin/hiveup" auth wheel-create-none --auth-type custom
+          "$ENV_DIR/bin/hiveup" auth wheel-create-none --auth-type none
+          "$ENV_DIR/bin/hiveup" package wheel-create-none
+          "$ENV_DIR/bin/hiveup" doctor wheel-create-none
+          [ -f wheel-create-none-1.0.0.zip ]
 
       - name: Upload local-install artifacts
         uses: actions/upload-artifact@v4

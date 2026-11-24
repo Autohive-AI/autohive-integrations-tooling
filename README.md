@@ -251,7 +251,10 @@ uv tool uninstall hiveup
 Pull-request CI builds both `hiveup-2.5.3-py3-none-any.whl` and
 `hiveup-2.5.3.tar.gz`, verifies their metadata, installs the wheel outside the
 source checkout, exercises the supported CLI lifecycle, and uploads them as a
-GitHub Actions artifact. It does not publish either file.
+GitHub Actions artifact. The scaffold smoke covers `create` and `init` with
+none, custom, and platform auth against SDK exactly 2.1.0 on Python 3.13. Its
+generated unit tests run with network connections blocked. It does not publish
+either distribution.
 
 ### Compatibility
 
