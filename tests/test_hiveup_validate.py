@@ -950,6 +950,91 @@ def test_github_annotations_include_validation_failures(capsys) -> None:
     assert "::error ::icon.png must be 512x512 pixels" in output
 
 
+@pytest.mark.parametrize(
+    ("specifier", "warns"),
+    [
+        ("~=1.0.2", True),
+        ("~=1.1.1", True),
+        ("~=2.0", True),
+        ("~=2.0.1", True),
+        ("~=2.1.0", False),
+        ("~=2.1.7", False),
+        ("~=2.2.0", False),
+        ("~=2.0,>=2.1.0", False),
+    ],
+)
+def test_structure_recommends_sdk_210_without_failing(tmp_path: Path, specifier: str, warns: bool) -> None:
+    integration = _integration_with_entry_point(tmp_path / "sdk-version", "demo.py")
+    (integration / "requirements.txt").write_text(f"autohive-integrations-sdk{specifier}\n", encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["check", "structure", str(integration), "--json"])
+
+    assert result.exit_code == 0, result.output
+    messages = json.loads(result.output)["results"][0]["messages"]
+    sdk_warnings = [message for message in messages if "below the recommended 2.1.0" in message["message"]]
+    assert bool(sdk_warnings) is warns
+    if warns:
+        assert sdk_warnings[0]["severity"] == "warning"
+        assert "upgrade to autohive-integrations-sdk~=2.1.0 or later" in sdk_warnings[0]["message"]
+
+
+def test_ci_reports_sdk_advisory_in_annotations_comments_and_outputs(tmp_path: Path, monkeypatch) -> None:
+    integration = _integration_with_entry_point(tmp_path / "old-sdk", "demo.py")
+    comment_file = tmp_path / "comment.md"
+    output_file = tmp_path / "github-output.txt"
+    # Exercise the real structure check and CI reporting without running unrelated dependency checks.
+    checks = cli.available_checks()
+    monkeypatch.setattr(cli, "available_checks", lambda **kwargs: {"structure": checks["structure"]})
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "ci",
+            str(integration),
+            "--github-annotations",
+            "--comment-file",
+            str(comment_file),
+            "--output-file",
+            str(output_file),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "::warning ::SDK requirement allows version 2.0.1, below the recommended 2.1.0" in result.output
+    comment = comment_file.read_text(encoding="utf-8")
+    assert "| Structure | ⚠️ Passed with warnings |" in comment
+    assert "upgrade to autohive-integrations-sdk~=2.1.0 or later" in comment
+    assert "structure_result<<EOF_structure_result\nsuccess\n" in output_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("specifier", ["~=2.0.1", "~=2.1.0"])
+@pytest.mark.parametrize("skip_validate", [False, True])
+@pytest.mark.parametrize("github_actions", [False, True])
+def test_package_reports_sdk_advisory_even_when_validation_is_skipped(
+    tmp_path: Path, monkeypatch, specifier: str, skip_validate: bool, github_actions: bool
+) -> None:
+    integration = _integration_with_entry_point(tmp_path / "sdk-package", "demo.py")
+    (integration / "requirements.txt").write_text(f"autohive-integrations-sdk{specifier}\n", encoding="utf-8")
+    package = tmp_path / "sdk-package.zip"
+    # Keep the real validator and ZIP builder; avoid external dependency installation and checks.
+    checks = cli.available_checks()
+    monkeypatch.setattr(cli, "available_checks", lambda **kwargs: {"structure": checks["structure"]})
+    monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *_args: None)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true" if github_actions else "false")
+    args = ["package", str(integration), "--output", str(package)]
+    if skip_validate:
+        args.append("--skip-validate")
+
+    result = CliRunner().invoke(app, args)
+
+    assert result.exit_code == 0, result.output
+    with zipfile.ZipFile(package) as archive:
+        assert {"config.json", "demo.py", "icon.png"} <= set(archive.namelist())
+    warns = specifier == "~=2.0.1"
+    assert ("below the recommended 2.1.0" in result.output) is warns
+    assert ("::warning file=" in result.output) is (warns and github_actions)
+
+
 def test_structure_accepts_512_pixel_jpg_and_jpeg_icons(tmp_path: Path) -> None:
     for extension in ("jpg", "jpeg"):
         integration = tmp_path / f"good-{extension}-integration"

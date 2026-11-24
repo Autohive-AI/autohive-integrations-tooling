@@ -251,7 +251,10 @@ uv tool uninstall hiveup
 Pull-request CI builds both `hiveup-2.5.3-py3-none-any.whl` and
 `hiveup-2.5.3.tar.gz`, verifies their metadata, installs the wheel outside the
 source checkout, exercises the supported CLI lifecycle, and uploads them as a
-GitHub Actions artifact. It does not publish either file.
+GitHub Actions artifact. The scaffold smoke covers `create` and `init` with
+none, custom, and platform auth against SDK exactly 2.1.0 on Python 3.13. Its
+generated unit tests run with network connections blocked. It does not publish
+either distribution.
 
 ### Compatibility
 
@@ -313,6 +316,11 @@ mkdir my-integration && cd my-integration
 hiveup init --name "My Integration"
 ```
 
+Both commands generate `autohive-integrations-sdk~=2.1.0` requirements and a
+matching README. This range accepts SDK 2.1.x (`>=2.1.0,<2.2.0`), not SDK 3.x.
+Existing integrations keep their own SDK requirements; this starter default is
+not a new minimum enforced across all integrations.
+
 Custom auth generates an editable API-key starter schema. Platform auth requires an explicit provider; scopes are optional:
 
 ```bash
@@ -323,6 +331,13 @@ hiveup create my-integration \
   --auth-scopes repo,read:user
 ```
 
+Generated unit-test contexts match the selected mode: no auth uses `{}`, Custom
+uses `{"auth_type": "Custom", "credentials": {"api_key": "test-only-api-key"}}`,
+and platform OAuth uses `PlatformOauth2` with a dummy `access_token` in
+`credentials`. The starter test checks successful SDK action execution without
+provider requests; it does not exercise the SDK HTTP transport. Keep required
+custom fields in the schema and update dummy credentials when those fields change.
+
 Authentication edits are always explicit. Existing compatible custom schemas and platform metadata are preserved:
 
 ```bash
@@ -330,6 +345,9 @@ hiveup auth my-integration --auth-type custom
 hiveup auth my-integration --auth-type platform --auth-provider github --auth-scopes repo
 hiveup auth my-integration --auth-type none
 ```
+
+`hiveup auth` changes `config.json` only; it does not rewrite existing unit-test
+fixtures. Update those fixtures yourself after changing auth modes or fields.
 
 `create` and `init` refuse non-empty directories by default. `--force` uses per-file atomic replacement with rollback for scaffold-owned files, preserves other developer files, and rejects symlinked targets or scaffold paths.
 
@@ -347,6 +365,19 @@ Packaging always requires the top-level `requirements.txt` to declare
 `autohive-integrations-sdk` with a stable lower bound of `1.0.2` or later. This
 deployment safety check still runs with `--skip-validate`, so a release workflow
 cannot package an integration that permits an older SDK.
+
+SDK **2.1.0 is the recommended minimum**. The structure check warns when the
+declared SDK lower bound is older, including SDK 1.x and 2.0.x. It checks
+`requirements.txt`, not whichever SDK happens to be installed in the Tooling
+environment. SDK 2.1.0 and newer stable SDK 2.x bounds do not trigger this
+upgrade warning. Exact pins still receive a separate recommendation to use `~=`.
+
+These advisories do not fail validation or packaging. `hiveup ci` includes them
+in the structure output, GitHub warning annotations, and PR comments.
+`hiveup package` also reports SDK advisories, even with `--skip-validate`, and
+emits warning annotations when running in GitHub Actions. Existing dependency
+pins are not rewritten. Before upgrading an SDK 1.x integration, check its
+compatibility with SDK 2.x.
 
 ## Local Testing
 
@@ -425,7 +456,7 @@ See `INTEGRATION_CHECKLIST.md` for full details.
 - `config.json` - Integration configuration
 - `{name}.py` - Main implementation
 - `__init__.py` - Package init (minimal, optional for modular integrations with `actions/`)
-- `requirements.txt` - Dependencies (must include `autohive-integrations-sdk~=2.0.1` or later in the SDK 2.x line)
+- `requirements.txt` - Dependencies (SDK pin required; `autohive-integrations-sdk~=2.1.0` recommended, older supported bounds warn)
 - `README.md` - Documentation
 - `icon.png`, `icon.jpg`, or `icon.jpeg` - Integration icon (512x512 pixels)
 - `tests/` - Test folder with `__init__.py`, `context.py` or `conftest.py`, and `test_*_unit.py`

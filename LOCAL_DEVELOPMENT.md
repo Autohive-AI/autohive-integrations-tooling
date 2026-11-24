@@ -31,7 +31,7 @@ Run this **first** — it catches structural problems before you waste time on c
 - All required files exist (`config.json`, `requirements.txt`, `README.md`, and a PNG/JPG/JPEG icon; `__init__.py` is required for single-file/package-style integrations and optional for modular integrations with `actions/`)
 - `config.json` has the required fields and valid schema
 - `__init__.py` is minimal (only import + `__all__`)
-- `requirements.txt` includes `autohive-integrations-sdk~=2.0.1` or later in the SDK 2.x line
+- `requirements.txt` pins `autohive-integrations-sdk`; `~=2.1.0` is recommended, and older supported lower bounds warn without failing
 - `tests/` folder has `__init__.py`, `context.py` or `conftest.py`, and at least one `test_*_unit.py`
 - Icon is exactly 512x512 pixels
 - OAuth scopes are actually used (heuristic)
@@ -190,6 +190,11 @@ The `validate-integration.yml` workflow uses `action.yml`, which installs HiveUp
 If no integration directories changed (only tooling or test infrastructure changed), all five groups are skipped.
 
 Results are posted as a sticky PR comment showing ✅ Passed, ⚠️ Passed with warnings, or ❌ Failed for each check.
+
+SDK lower bounds below 2.1.0 produce non-blocking warnings in structure output,
+GitHub annotations, and PR comments. Release packaging also reports these
+advisories, including with `hiveup package --skip-validate`. The hard deployment
+minimum remains 1.0.2; no integration dependency pins are changed automatically.
 
 Other repositories can use the same action — see [Usage as GitHub Action](README.md#usage-as-github-action) in the README.
 

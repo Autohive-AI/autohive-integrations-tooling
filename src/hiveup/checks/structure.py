@@ -35,7 +35,7 @@ from typing import Dict, List
 
 from hiveup.core.deployment import is_excluded_development_path
 from hiveup.core.discovery import is_ignored_top_level_dir
-from hiveup.sdk_requirement import SdkRequirementError, read_sdk_requirement
+from hiveup.sdk_requirement import SdkRequirementError, read_sdk_requirement, sdk_requirement_warnings
 
 # Fix Windows console encoding for unicode characters
 if sys.platform == "win32":
@@ -471,13 +471,6 @@ class IntegrationValidator:
                 self.add_warning(f"__init__.py should be minimal (only import and __all__). Found: '{line[:50]}...'")
                 break
 
-    # Minimum supported SDK versions per major release line.
-    # Integrations pinning older versions will receive a deprecation warning.
-    _MIN_SDK_VERSIONS = {
-        1: (1, 1, 1),  # 1.x line: minimum 1.1.1
-        2: (2, 0, 1),  # 2.x line: minimum 2.0.1
-    }
-
     def _check_requirements_txt(self):
         """Check requirements.txt has SDK dependency with a supported version pin."""
         req_path = self.path / "requirements.txt"
@@ -490,27 +483,8 @@ class IntegrationValidator:
             self.add_error(str(exc))
             return
 
-        version_str = requirement.version_text
-        parts = requirement.version
-        major = parts[0]
-
-        if requirement.exact_pin is not None:
-            self.add_warning(
-                f"autohive-integrations-sdk{requirement.exact_pin} pins one exact version — "
-                f"use autohive-integrations-sdk~={version_str} so patch releases are installed"
-            )
-
-        min_version = self._MIN_SDK_VERSIONS.get(major)
-        if min_version is None:
-            self.add_warning(
-                f"Unknown SDK major version {major} in requirements.txt — "
-                f"expected major version {', '.join(str(v) for v in sorted(self._MIN_SDK_VERSIONS))}"
-            )
-        elif parts < min_version:
-            min_str = ".".join(str(v) for v in min_version)
-            self.add_warning(
-                f"SDK version {version_str} is deprecated — upgrade to autohive-integrations-sdk~={min_str} or later"
-            )
+        for warning in sdk_requirement_warnings(requirement):
+            self.add_warning(warning)
 
     def _check_tests_folder(self):
         """Check tests folder structure."""

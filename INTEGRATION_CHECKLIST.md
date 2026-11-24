@@ -54,6 +54,8 @@ The structure check produces warnings (not errors) for these cases:
 
 | Warning | Explanation |
 |---------|-------------|
+| SDK lower bound below 2.1.0 | Recommend `autohive-integrations-sdk~=2.1.0` or later. Applies to SDK 1.x and 2.0.x; check SDK 2.x compatibility before upgrading from 1.x. Packaging also reports this advisory, even with `--skip-validate`. |
+| Exact SDK pin (`==` or `===`) | Use `~=` so patch releases can be installed. This is separate from the SDK 2.1.0 recommendation. |
 | `Integration.load(...)` not found | The check looks for `Integration.load` in Python files. Use `Integration.load()` for vendored single-file integrations, or `Integration.load(config_path)` / `Integration.load(Path(__file__).with_name("config.json"))` when an explicit config path is needed. |
 | Missing `__init__.py` | Optional for modular integrations with an `actions/` subdirectory |
 | Missing top-level `display_name` | Recommended but not required |
@@ -142,7 +144,7 @@ but only list_sites and create_site are implemented:
 | Missing icon | Add `icon.png`, `icon.jpg`, or `icon.jpeg` (512×512 pixels) |
 | Missing or incomplete README | Document all actions, auth setup, inputs/outputs |
 | Not updating main repo README | Add integration entry in alphabetical order |
-| Unpinned SDK version | Use `autohive-integrations-sdk~=2.0.1` (or `~=1.1.1` for 1.x) |
+| Unpinned or older SDK requirement | Use `autohive-integrations-sdk~=2.1.0` after checking compatibility; older supported pins warn rather than fail |
 | Sync functions for action handlers | Must be `async def execute()` |
 
 ---
