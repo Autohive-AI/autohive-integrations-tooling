@@ -127,6 +127,7 @@ For each action defined in `config.json`:
 | Older file convention in an input, with SDK 3 | Error | A `file` object or a `files` array that is not declared with the file reference |
 | Older file convention in an output, with SDK 3 | Warning | An object with `content`, `name` and `contentType` |
 | File reference where the platform does not look | Warning | A file must be a property of an object, or the items of an array property |
+| File reference under a name other than `file` or `files` | Warning | Workflows and returned files are found by these names only, for now |
 
 Root-level input-schema combinators fail validation for both new and existing
 integrations. Each error identifies the action and schema path, for example
@@ -172,6 +173,13 @@ out when that requirement cannot be read.
 - **Where a file can be declared.** The platform finds a file field in the
   `properties` of an object and in the `items` of an array. A reference in
   another place, such as inside `anyOf` or `additionalProperties`, is a warning.
+
+- **The name of a file field, for now.** The SDK accepts a file under any name,
+  and so does an agent. A workflow gives a file only to an input named `file` or
+  to an array named `files`, and the platform stores a returned file only under
+  those names. Under another name, a small returned file goes to the model as
+  base64. Until the platform finds every file by its reference, a file reference
+  under another name is a warning. This check is temporary.
 
 With an SDK requirement below 3, the older file convention is not reported.
 

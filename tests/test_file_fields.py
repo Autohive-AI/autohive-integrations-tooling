@@ -32,18 +32,50 @@ def schema_with(properties: dict) -> dict:
 # ── The file reference ───────────────────────────────────────────────────────
 
 
-def test_file_reference_is_accepted_on_sdk_3_under_any_property_name() -> None:
+def test_file_reference_named_file_or_files_is_accepted_on_sdk_3() -> None:
     schema = schema_with(
         {
-            "invoice": {"$ref": FILE_SCHEMA_ID, "description": "The invoice PDF"},
-            "attachments": {"type": "array", "items": FILE_REF},
-            "rows": {"type": "array", "items": schema_with({"scan": FILE_REF})},
+            "file": {"$ref": FILE_SCHEMA_ID, "description": "The invoice PDF"},
+            "files": {"type": "array", "items": FILE_REF},
+            "rows": {"type": "array", "items": schema_with({"file": FILE_REF})},
         }
     )
 
     assert problems(schema) == []
     assert problems(schema, is_input=False) == []
+    assert problems(schema, sdk_major=None) == []
     assert is_file_reference(FILE_REF) and not is_file_reference({"$ref": "#/definitions/file"})
+
+
+def test_file_reference_under_another_name_is_a_warning_that_names_the_platform_limit() -> None:
+    schema = schema_with(
+        {
+            "invoice": FILE_REF,
+            "attachments": {"type": "array", "items": FILE_REF},
+            "file": {"type": "array", "items": FILE_REF},
+            "files": FILE_REF,
+        }
+    )
+
+    as_input = problems(schema)
+    as_output = problems(schema, is_input=False)
+
+    paths = ["properties.invoice", "properties.attachments.items", "properties.file.items", "properties.files"]
+    marker = " is a file under another name"
+    assert [severity for severity, _ in as_input] == ["warning"] * 4
+    assert [message.split(marker)[0] for _, message in as_input] == [f"input_schema.{path}" for path in paths]
+    assert all("A workflow gives a file only to an input named 'file'" in message for _, message in as_input)
+    assert [message.split(marker)[0] for _, message in as_output] == [f"output_schema.{path}" for path in paths]
+    assert all("goes to the model as base64" in message for _, message in as_output)
+    assert all(
+        message.endswith("Name the property 'file', or 'files' for an array of files") for _, message in as_output
+    )
+
+
+def test_file_reference_under_another_name_on_an_sdk_before_3_reports_only_the_sdk_error() -> None:
+    found = problems(schema_with({"invoice": FILE_REF}), sdk_major=2)
+
+    assert [severity for severity, _ in found] == ["error"]
 
 
 @pytest.mark.parametrize("sdk_major", [1, 2])
@@ -60,7 +92,7 @@ def test_file_reference_on_an_sdk_before_3_is_an_error(sdk_major: int) -> None:
 
 
 def test_file_reference_is_not_checked_against_an_sdk_version_that_is_not_known() -> None:
-    assert problems(schema_with({"invoice": FILE_REF}), sdk_major=None) == []
+    assert problems(schema_with({"file": FILE_REF}), sdk_major=None) == []
 
 
 @pytest.mark.parametrize(
@@ -241,6 +273,20 @@ def test_structure_accepts_file_references_on_sdk_3(tmp_path: Path) -> None:
     path = integration(
         tmp_path,
         "autohive-integrations-sdk~=3.0.0",
+        schema_with({"file": FILE_REF}),
+        schema_with({"file": FILE_REF}),
+    )
+
+    status, messages = structure_messages(path)
+
+    assert status != "failed", messages
+    assert not [message for _, message in messages if "file" in message.lower() or "SDK major" in message]
+
+
+def test_structure_warns_about_a_file_reference_under_another_name(tmp_path: Path) -> None:
+    path = integration(
+        tmp_path,
+        "autohive-integrations-sdk~=3.0.0",
         schema_with({"invoice": FILE_REF}),
         schema_with({"receipt": FILE_REF}),
     )
@@ -248,7 +294,8 @@ def test_structure_accepts_file_references_on_sdk_3(tmp_path: Path) -> None:
     status, messages = structure_messages(path)
 
     assert status != "failed", messages
-    assert not [message for _, message in messages if "file" in message.lower() or "SDK major" in message]
+    found = [(severity, message.split(".")[0]) for severity, message in messages if "under another name" in message]
+    assert found == [("warning", "Action 'get_data' input_schema"), ("warning", "Action 'get_data' output_schema")]
 
 
 def test_structure_rejects_a_file_reference_on_sdk_2(tmp_path: Path) -> None:

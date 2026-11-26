@@ -220,6 +220,7 @@ def file_field_problems(
     is_input: bool,
     sdk_major: int | None,
     _property_name: str | int | None = None,
+    _array_property_name: str | int | None = None,
     _platform_looks_here: bool = True,
 ) -> list[tuple[str, str]]:
     """Return the problems with the file fields of an action schema, as (severity, message).
@@ -247,6 +248,24 @@ def file_field_problems(
                     "warning",
                     f"{path} declares a file where the platform does not look for one. Declare a file as a "
                     "property of an object, or as the items of an array property",
+                )
+            )
+        elif _property_name != "file" and _array_property_name != "files":
+            # Not every part of the platform finds a file by its reference yet. Remove this check
+            # when the platform handles a file under any name in workflows and in results.
+            if is_input:
+                limit = "A workflow gives a file only to an input named 'file', or to an array named 'files'"
+            else:
+                limit = (
+                    "The platform stores a returned file only under the name 'file', or in an array named "
+                    "'files'. Under another name, a file that is small enough to return inline goes to "
+                    "the model as base64"
+                )
+            problems.append(
+                (
+                    "warning",
+                    f"{path} is a file under another name. {limit}. "
+                    "Name the property 'file', or 'files' for an array of files",
                 )
             )
         # The keywords beside a reference do not apply, so there is nothing more to check here.
@@ -298,6 +317,7 @@ def file_field_problems(
                 is_input=is_input,
                 sdk_major=sdk_major,
                 _property_name=name if in_properties else None,
+                _array_property_name=_property_name if in_array_items else None,
                 _platform_looks_here=_platform_looks_here and (in_properties or in_array_items),
             )
         )
