@@ -31,7 +31,7 @@ import re
 import struct
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, Iterator, List
 
 from hiveup.core.deployment import is_excluded_development_path
 from hiveup.core.discovery import is_ignored_top_level_dir
@@ -149,6 +149,27 @@ _SUBSCHEMA_MAP_KEYWORDS = frozenset(
 )
 
 
+def iter_subschemas(schema: dict) -> Iterator[tuple[str, str | int | None, object, str]]:
+    """Yield each schema nested directly in ``schema``.
+
+    Each entry is the keyword that holds it, its name or index under that keyword (None for a
+    keyword that holds one schema), the nested schema, and the text to add to the parent's path.
+    """
+    for key, value in schema.items():
+        if key == "items" and isinstance(value, list):
+            # Draft-04 tuple validation allows "items" to be a list of schemas.
+            for index, subschema in enumerate(value):
+                yield key, index, subschema, f".items[{index}]"
+        elif key in _SUBSCHEMA_KEYWORDS:
+            yield key, None, value, f".{key}"
+        elif key in _SUBSCHEMA_LIST_KEYWORDS and isinstance(value, list):
+            for index, subschema in enumerate(value):
+                yield key, index, subschema, f".{key}[{index}]"
+        elif key in _SUBSCHEMA_MAP_KEYWORDS and isinstance(value, dict):
+            for name, subschema in value.items():
+                yield key, name, subschema, f".{key}.{name}"
+
+
 def arrays_without_items(schema: object, path: str) -> list[str]:
     """Return the paths of every array schema that does not define its item schema."""
     if not isinstance(schema, dict):
@@ -160,20 +181,127 @@ def arrays_without_items(schema: object, path: str) -> list[str]:
     if is_array and "items" not in schema and "prefixItems" not in schema:
         found.append(path)
 
-    for key, value in schema.items():
-        if key == "items" and isinstance(value, list):
-            # Draft-04 tuple validation allows "items" to be a list of schemas.
-            for index, subschema in enumerate(value):
-                found.extend(arrays_without_items(subschema, f"{path}.items[{index}]"))
-        elif key in _SUBSCHEMA_KEYWORDS:
-            found.extend(arrays_without_items(value, f"{path}.{key}"))
-        elif key in _SUBSCHEMA_LIST_KEYWORDS and isinstance(value, list):
-            for index, subschema in enumerate(value):
-                found.extend(arrays_without_items(subschema, f"{path}.{key}[{index}]"))
-        elif key in _SUBSCHEMA_MAP_KEYWORDS and isinstance(value, dict):
-            for name, subschema in value.items():
-                found.extend(arrays_without_items(subschema, f"{path}.{key}.{name}"))
+    for _keyword, _name, subschema, suffix in iter_subschemas(schema):
+        found.extend(arrays_without_items(subschema, f"{path}{suffix}"))
     return found
+
+
+# The reference that declares a file field. SDK 3.0.0 is the first version that knows it.
+FILE_SCHEMA_ID = "https://cdn.autohive.com/schemas/sdk/file/v1.json"
+FILE_SCHEMA_SDK_MAJOR = 3
+FILE_REFERENCE_TEXT = f'{{"$ref": "{FILE_SCHEMA_ID}"}}'
+
+# A reference to a schema that Autohive publishes. One that is not a known id is a mistake,
+# for example a typing error in the file reference.
+_AUTOHIVE_SCHEMA_REFERENCE = re.compile(
+    r"^https?://(cdn\.autohive\.com/schemas/|schemas\.autohive\.com/)", re.IGNORECASE
+)
+
+
+def is_file_reference(schema: object) -> bool:
+    """Return whether a schema is the reference that declares a file field."""
+    return isinstance(schema, dict) and schema.get("$ref") == FILE_SCHEMA_ID
+
+
+def _is_legacy_file_object(schema: dict) -> bool:
+    """The file convention of SDK 1 and 2: an object with content, name and contentType."""
+    properties = schema.get("properties")
+    return (
+        schema.get("type") == "object"
+        and isinstance(properties, dict)
+        and all(name in properties for name in ("content", "name", "contentType"))
+    )
+
+
+def file_field_problems(
+    schema: object,
+    path: str,
+    *,
+    is_input: bool,
+    sdk_major: int | None,
+    _property_name: str | int | None = None,
+    _platform_looks_here: bool = True,
+) -> list[tuple[str, str]]:
+    """Return the problems with the file fields of an action schema, as (severity, message).
+
+    ``sdk_major`` is the major version of the SDK requirement, or None when it is not known. The
+    checks that depend on the SDK version are left out then.
+    """
+    if not isinstance(schema, dict):
+        return []
+
+    problems: list[tuple[str, str]] = []
+    reference = schema.get("$ref")
+    if reference == FILE_SCHEMA_ID:
+        if sdk_major is not None and sdk_major < FILE_SCHEMA_SDK_MAJOR:
+            problems.append(
+                (
+                    "error",
+                    f"{path} uses the file reference {FILE_SCHEMA_ID}, which needs "
+                    f"autohive-integrations-sdk~={FILE_SCHEMA_SDK_MAJOR}.0.0 or later",
+                )
+            )
+        elif not _platform_looks_here:
+            problems.append(
+                (
+                    "warning",
+                    f"{path} declares a file where the platform does not look for one. Declare a file as a "
+                    "property of an object, or as the items of an array property",
+                )
+            )
+        # The keywords beside a reference do not apply, so there is nothing more to check here.
+        return problems
+    if isinstance(reference, str) and _AUTOHIVE_SCHEMA_REFERENCE.match(reference):
+        problems.append(
+            ("error", f"{path} has the unknown reference {reference}. The file reference is {FILE_SCHEMA_ID}")
+        )
+        return problems
+
+    if sdk_major is not None and sdk_major >= FILE_SCHEMA_SDK_MAJOR:
+        if is_input and _property_name == "file" and _is_legacy_file_object(schema):
+            problems.append(
+                (
+                    "error",
+                    f"{path} uses the older file convention (an object with content, name and contentType). "
+                    "With SDK 3, a large file reaches the handler as a URL that nothing downloads. "
+                    f"Declare the field as {FILE_REFERENCE_TEXT}",
+                )
+            )
+        elif is_input and _property_name == "files" and schema.get("type") == "array":
+            if not is_file_reference(schema.get("items")):
+                problems.append(
+                    (
+                        "error",
+                        f"{path} is an array named 'files', which the platform fills with files, but its items "
+                        "are not the file reference. With SDK 3, a large file reaches the handler as a URL "
+                        f"that nothing downloads. Declare its items as {FILE_REFERENCE_TEXT}",
+                    )
+                )
+        elif not is_input and _is_legacy_file_object(schema):
+            problems.append(
+                (
+                    "warning",
+                    f"{path} returns a file with the older file convention (an object with content, name and "
+                    f"contentType). Declare it as {FILE_REFERENCE_TEXT} and return a File, so that the SDK can "
+                    "upload a file that is too large to return inline",
+                )
+            )
+
+    for keyword_name, name, subschema, suffix in iter_subschemas(schema):
+        # The platform finds a file field in the properties of an object and in the items of an array.
+        in_properties = keyword_name == "properties"
+        in_array_items = keyword_name == "items" and name is None
+        problems.extend(
+            file_field_problems(
+                subschema,
+                f"{path}{suffix}",
+                is_input=is_input,
+                sdk_major=sdk_major,
+                _property_name=name if in_properties else None,
+                _platform_looks_here=_platform_looks_here and (in_properties or in_array_items),
+            )
+        )
+    return problems
 
 
 def _is_integration_load(
@@ -414,6 +542,8 @@ class IntegrationValidator:
         if len(actions) == 0:
             self.add_error("At least one action must be defined")
 
+        sdk_major = self._sdk_major_version()
+
         for action_name, action_config in actions.items():
             # Check action name format
             if action_name != action_name.lower():
@@ -446,6 +576,24 @@ class IntegrationValidator:
 
             if "output_schema" not in action_config:
                 self.add_warning(f"Action '{action_name}' missing 'output_schema'")
+
+            for schema_name in ("input_schema", "output_schema"):
+                problems = file_field_problems(
+                    action_config.get(schema_name),
+                    schema_name,
+                    is_input=schema_name == "input_schema",
+                    sdk_major=sdk_major,
+                )
+                for severity, message in problems:
+                    report = self.add_error if severity == "error" else self.add_warning
+                    report(f"Action '{action_name}' {message}")
+
+    def _sdk_major_version(self) -> int | None:
+        """Return the major version of the SDK requirement, or None when it cannot be read."""
+        try:
+            return read_sdk_requirement(self.path / "requirements.txt").version[0]
+        except SdkRequirementError:
+            return None
 
     def _check_init_py(self):
         """Check that __init__.py is minimal."""

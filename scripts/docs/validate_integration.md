@@ -122,6 +122,11 @@ For each action defined in `config.json`:
 | `input_schema` present | Warning | JSON Schema for input |
 | No root-level `anyOf`, `oneOf`, or `allOf` in `input_schema` | Error | Claude rejects these tool schemas through both Anthropic and Amazon Bedrock |
 | `output_schema` present | Warning | JSON Schema for output |
+| File reference with an SDK requirement below 3 | Error | Only SDK 3.0.0 or later knows the file reference |
+| Unknown Autohive schema reference | Error | A `$ref` to an Autohive schema that is not a known id, for example a typing error in the file reference |
+| Older file convention in an input, with SDK 3 | Error | A `file` object or a `files` array that is not declared with the file reference |
+| Older file convention in an output, with SDK 3 | Warning | An object with `content`, `name` and `contentType` |
+| File reference where the platform does not look | Warning | A file must be a property of an object, or the items of an array property |
 
 Root-level input-schema combinators fail validation for both new and existing
 integrations. Each error identifies the action and schema path, for example
@@ -134,6 +139,41 @@ such as "provide an owner ID, email, or name", describe the accepted inputs in
 the schema and enforce the cross-field requirement in the action handler.
 Combinators nested inside property schemas and root-level combinators in
 `output_schema` remain allowed.
+
+#### File fields
+
+From SDK 3.0.0, an action declares a file field with a reference to the SDK's
+file schema, under any property name:
+
+```json
+"invoice": { "$ref": "https://cdn.autohive.com/schemas/sdk/file/v1.json" },
+"attachments": {
+  "type": "array",
+  "items": { "$ref": "https://cdn.autohive.com/schemas/sdk/file/v1.json" }
+}
+```
+
+These checks run on `input_schema` and `output_schema`. The checks that depend
+on the SDK version use the SDK requirement in `requirements.txt`, and are left
+out when that requirement cannot be read.
+
+- **The reference needs SDK 3.** An earlier SDK does not have the schema, so the
+  reference is an error when the SDK requirement is below 3.0.0.
+- **An unknown Autohive reference is an error.** The only known id is the one
+  above. This catches a typing error and an id from an earlier draft.
+- **With SDK 3, an input must use the reference.** The platform puts files in a
+  property named `file` and in an array named `files`. With SDK 3 a large file
+  reaches the handler as a URL, and only a field declared with the reference is
+  downloaded. So a `file` object with `content`, `name` and `contentType`, or a
+  `files` array whose items are not the reference, is an error.
+- **With SDK 3, an output should use the reference.** An output that still has
+  the older shape works for a small file, so this is a warning. Only a `File`
+  that the handler returns can be uploaded when it is too large to return inline.
+- **Where a file can be declared.** The platform finds a file field in the
+  `properties` of an object and in the `items` of an array. A reference in
+  another place, such as inside `anyOf` or `additionalProperties`, is a warning.
+
+With an SDK requirement below 3, the older file convention is not reported.
 
 ### 4. \_\_init\_\_.py Minimality (`_check_init_py`)
 
@@ -164,6 +204,7 @@ Allowed patterns:
 | SDK lower bound below 2.1.0 | Warning | Recommend `autohive-integrations-sdk~=2.1.0` or later, including for SDK 1.x and 2.0.x requirements |
 | SDK pinned with `~=` or `==` | Error | A requirement with only `>=` or `>` can install a later major version |
 | Exact SDK pin (`==` or `===`) | Warning | Use `~=` so patch releases are installed |
+| SDK major version other than 1, 2 or 3 | Warning | The Tooling does not know this major version |
 
 The recommendation checks the declared lower bound, not the SDK installed in
 the Tooling environment. Newer stable SDK 2.x lower bounds do not trigger the

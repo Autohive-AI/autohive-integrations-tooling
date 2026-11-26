@@ -15,6 +15,7 @@ MINIMUM_SDK_VERSION = (1, 0, 2)
 MINIMUM_SDK_VERSION_TEXT = ".".join(str(part) for part in MINIMUM_SDK_VERSION)
 RECOMMENDED_SDK_VERSION = (2, 1, 0)
 RECOMMENDED_SDK_VERSION_TEXT = ".".join(str(part) for part in RECOMMENDED_SDK_VERSION)
+KNOWN_SDK_MAJOR_VERSIONS = (1, 2, 3)
 
 _SDK_NAME = canonicalize_name("autohive-integrations-sdk")
 # Finds a line that names the SDK, so that a line packaging cannot parse is reported instead of ignored.
@@ -118,8 +119,9 @@ def sdk_requirement_warnings(requirement: SdkRequirement) -> list[str]:
         )
 
     major = requirement.version[0]
-    if major not in (1, 2):
-        warnings.append(f"Unknown SDK major version {major} in requirements.txt — expected major version 1, 2")
+    if major not in KNOWN_SDK_MAJOR_VERSIONS:
+        known = ", ".join(str(version) for version in KNOWN_SDK_MAJOR_VERSIONS)
+        warnings.append(f"Unknown SDK major version {major} in requirements.txt — expected major version {known}")
     elif requirement.version < RECOMMENDED_SDK_VERSION:
         warnings.append(
             f"SDK requirement allows version {requirement.version_text}, "
