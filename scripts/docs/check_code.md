@@ -245,8 +245,19 @@ check_config_sync.py [--base-ref <ref>] <dir>
 check_fetch_pattern.py <dir>
 ```
 
-- Checks SDK 2.x integrations for old `context.fetch()` response-body access patterns
-- Ensures code uses `response.data` instead of treating the SDK 2.x fetch result as the raw body
+- Uses the same SDK requirement parser as structure validation and packaging, including normalized package names and combined version constraints. Missing, malformed, or unsupported declarations fail instead of silently skipping the check. The existing pin policy still requires a stable `~=` or exact pin; `>=2.1.0,<3` alone is not accepted.
+- For SDK 2.x and later, detects raw-response subscripts, `.get()`, `isinstance(response, dict/list)`, and raw responses passed to SDK `ActionResult(data=...)`. SDK 1.x retains raw-body semantics.
+- Tracks straightforward response and context aliases, annotated assignments, SDK import/type aliases, and reassignment to `.data` in source order. Function, lambda, and comprehension scopes are separate. `isinstance(response, FetchResponse)` and access to `.status` or `.headers` remain valid.
+- Inspects deployment Python sources, including helper modules. Excludes development paths such as root `tests/`, `dependencies/`, virtual environments, hidden paths, and `__pycache__/`.
+
+This is a bounded static check, not a type checker. It recognizes SDK `ExecutionContext` type annotations and constructors, plus the conventional unannotated `context` handler parameter. It does not assume that every client with a `.fetch()` method uses the SDK, infer return types across helper calls, or report a value as a raw SDK response when branches disagree about its type.
+
+The local `hiveup check fetch <dir>`, `hiveup validate`, `hiveup ci`, and compatibility script all use this checker. For example:
+
+```python
+response = await context.fetch(url)
+return ActionResult(data=response.data)  # Not data=response with SDK 2.x.
+```
 
 ## How It Works
 

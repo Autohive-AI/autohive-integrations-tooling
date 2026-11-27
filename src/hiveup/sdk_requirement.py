@@ -95,8 +95,8 @@ def read_sdk_requirement(requirements_path: Path) -> SdkRequirement:
 
         if not any(bound.operator in _PIN_OPERATORS for bound in bounds):
             raise SdkRequirementError(
-                f"autohive-integrations-sdk{strongest.operator}{strongest.version_text} can install a later major "
-                f"version of the SDK. Pin the SDK with ~={strongest.version_text} so the major version stays fixed"
+                "autohive-integrations-sdk must include a stable ~= or == pin; bounded ranges alone are not accepted. "
+                f"Pin the SDK with ~={strongest.version_text} so the major version stays fixed"
             )
 
         exact = next((bound for bound in bounds if bound.operator in _EXACT_OPERATORS), None)

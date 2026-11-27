@@ -28,7 +28,7 @@ hiveup check structure my-integration
 Run this **first** — it catches structural problems before you waste time on code quality checks. It validates:
 
 - Folder name is lowercase
-- All required files exist (`config.json`, `requirements.txt`, `README.md`, and a PNG/JPG/JPEG icon; `__init__.py` is required for single-file/package-style integrations and optional for modular integrations with `actions/`)
+- All required files exist (`config.json`, `requirements.txt`, `README.md`, and a PNG/JPG/JPEG icon; a missing root `__init__.py` warns except with `actions/` or a recognized vendor-package collision, where an absolute runtime import matches the directory name and a declared dependency has the same normalized name)
 - `config.json` has the required fields and valid schema
 - `__init__.py` is minimal (only import + `__all__`)
 - `requirements.txt` pins `autohive-integrations-sdk`; `~=2.1.0` is recommended, and older supported lower bounds warn without failing

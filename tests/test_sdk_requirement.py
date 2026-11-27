@@ -43,14 +43,14 @@ def test_read_sdk_requirement_accepts_supported_lower_bounds(tmp_path: Path, req
         ("autohive-integrations-sdk~=1.0.1", "allows an SDK below the required minimum 1.0.2"),
         ("autohive-integrations-sdk>=1.0", "allows an SDK below the required minimum 1.0.2"),
         ("autohive-integrations-sdk>=1.0.2rc1", "must declare a stable minimum version"),
-        ("autohive-integrations-sdk>=2.0.1", r"autohive-integrations-sdk>=2\.0\.1 can install a later major version"),
-        ("autohive-integrations-sdk>2.0.1", r"autohive-integrations-sdk>2\.0\.1 can install a later major version"),
+        ("autohive-integrations-sdk>=2.0.1", "must include a stable ~= or == pin"),
+        ("autohive-integrations-sdk>2.0.1", "must include a stable ~= or == pin"),
         ("Autohive.Integrations.SDK>=1.0.2", r"Pin the SDK with ~=1\.0\.2"),
-        ("autohive-integrations-sdk>=2.0.1,<3", "can install a later major version"),
-        ("autohive-integrations-sdk>=2.0.1,==2.0.1rc1", "can install a later major version"),
+        ("autohive-integrations-sdk>=2.0.1,<3", "bounded ranges alone are not accepted"),
+        ("autohive-integrations-sdk>=2.0.1,==2.0.1rc1", "must include a stable ~= or == pin"),
         # The pin after --config-settings is an option value, not a version specifier.
-        ("autohive-integrations-sdk>=2.0.1 --config-settings=example=~=2.0.1", "can install a later major version"),
-        ("autohive-integrations-sdk>=2.0.1 # ~=2.0.1", "can install a later major version"),
+        ("autohive-integrations-sdk>=2.0.1 --config-settings=example=~=2.0.1", "must include a stable ~= or == pin"),
+        ("autohive-integrations-sdk>=2.0.1 # ~=2.0.1", "must include a stable ~= or == pin"),
         ("autohive-integrations-sdk~=", "Could not parse the autohive-integrations-sdk requirement"),
     ],
 )
@@ -122,7 +122,7 @@ def test_build_package_rejects_an_open_sdk_range(
     integration = _integration(tmp_path, "autohive-integrations-sdk>=2.0.1")
     monkeypatch.setattr("hiveup.packaging.install_dependencies", lambda *_args: None)
 
-    with pytest.raises(PackageBuildError, match="can install a later major version"):
+    with pytest.raises(PackageBuildError, match="must include a stable ~= or == pin"):
         build_package(integration, tmp_path / "demo.zip")
 
     assert not (tmp_path / "demo.zip").exists()
