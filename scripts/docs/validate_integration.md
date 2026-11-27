@@ -89,6 +89,11 @@ distribution with the same normalized name. For example, a `supadata/`
 integration that declares `supadata` and uses `from supadata import Supadata`
 does not receive the missing-init warning, even without `actions/`.
 
+Requirement parsing joins continuation lines and ignores comments and pip
+options such as `--hash`. Option arguments are not dependency declarations,
+and requirements or constraints included through `-r` or `-c` are not resolved
+for this exception.
+
 Comments, strings, relative imports, and imports found only in excluded
 development files such as `tests/` do not qualify. The validator does not execute
 integration code or infer mappings between differently named distributions and

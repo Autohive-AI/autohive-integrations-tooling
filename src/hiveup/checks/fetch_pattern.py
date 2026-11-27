@@ -54,13 +54,33 @@ class _FetchUsage(ast.NodeVisitor):
     def _symbol(self, node: ast.AST | None) -> str | None:
         if isinstance(node, ast.Name):
             return self.bindings.get(node.id)
-        if isinstance(node, ast.Attribute) and self._symbol(node.value) == "sdk":
-            return node.attr
+        if isinstance(node, ast.Attribute):
+            module = self._symbol(node.value)
+            if module == "sdk":
+                return node.attr
+            if module == "typing":
+                return f"typing.{node.attr}"
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             try:
                 return self._symbol(ast.parse(node.value, mode="eval").body)
             except SyntaxError:
                 pass
+        members = []
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            members = [node.left, node.right]
+        elif isinstance(node, ast.Subscript):
+            symbol = self._symbol(node.value)
+            if symbol == "typing.Optional":
+                return self._symbol(node.slice)
+            if symbol == "typing.Union":
+                members = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
+        if members:
+            symbols = {
+                self._symbol(member)
+                for member in members
+                if not (isinstance(member, ast.Constant) and member.value is None)
+            }
+            return symbols.pop() if len(symbols) == 1 else None
         return None
 
     def _value_kind(self, node: ast.AST | None) -> str | None:
@@ -106,6 +126,8 @@ class _FetchUsage(ast.NodeVisitor):
             self._bind(ast.Name(id=alias.asname or alias.name.split(".")[0]))
             if alias.name == "autohive_integrations_sdk":
                 self.bindings[alias.asname or alias.name] = "sdk"
+            elif alias.name == "typing":
+                self.bindings[alias.asname or alias.name] = "typing"
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
         for alias in node.names:
@@ -113,15 +135,20 @@ class _FetchUsage(ast.NodeVisitor):
             self.bindings.pop(name, None)
             if node.level == 0 and node.module == "autohive_integrations_sdk":
                 self.bindings[name] = alias.name
+            elif node.level == 0 and node.module == "typing" and alias.name in {"Optional", "Union"}:
+                self.bindings[name] = f"typing.{alias.name}"
 
     def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef):
+        for expression in [*node.decorator_list, *node.args.defaults, *node.args.kw_defaults]:
+            if expression is not None:
+                self.visit(expression)
+        args = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+        args.extend(arg for arg in (node.args.vararg, node.args.kwarg) if arg is not None)
+        annotations = [self._symbol(arg.annotation) for arg in args]
         self.bindings.pop(node.name, None)
         outer = self.bindings
         self.bindings = outer.copy()
-        args = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
-        args.extend(arg for arg in (node.args.vararg, node.args.kwarg) if arg is not None)
-        for arg in args:
-            annotation = self._symbol(arg.annotation)
+        for arg, annotation in zip(args, annotations):
             kind = {"ExecutionContext": "context", "FetchResponse": "response"}.get(annotation)
             if arg.arg == "context" and arg.annotation is None:
                 # Preserve the conventional unannotated SDK handler parameter.
@@ -133,6 +160,9 @@ class _FetchUsage(ast.NodeVisitor):
     visit_AsyncFunctionDef = visit_FunctionDef
 
     def visit_Lambda(self, node: ast.Lambda):
+        for default in [*node.args.defaults, *node.args.kw_defaults]:
+            if default is not None:
+                self.visit(default)
         outer = self.bindings
         self.bindings = outer.copy()
         args = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
@@ -143,6 +173,8 @@ class _FetchUsage(ast.NodeVisitor):
         self.bindings = outer
 
     def visit_ClassDef(self, node: ast.ClassDef):
+        for expression in [*node.decorator_list, *node.bases, *node.keywords]:
+            self.visit(expression)
         self.bindings.pop(node.name, None)
         outer = self.bindings
         self.bindings = outer.copy()

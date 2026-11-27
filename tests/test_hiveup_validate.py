@@ -1669,6 +1669,8 @@ def test_structure_rejects_non_identifier_entry_point_stems(tmp_path: Path) -> N
         ("supadata", "from supadata.client import Supadata", "supadata[client]>=1.0 # vendor client"),
         ("supadata", "import supadata.client", "supadata; python_version >= '3.13'"),
         ("supadata", "import supadata", "supadata @ https://example.invalid/supadata.whl"),
+        ("supadata", "import supadata", "supadata \\\n  >=1.0"),
+        ("supadata", "import supadata", "supadata==1.0 --hash=sha256:abc"),
         ("vendor_client", "import vendor_client", "vendor-client>=1.0"),
     ],
 )
@@ -1708,6 +1710,9 @@ def test_structure_allows_missing_init_for_declared_vendor_package_collision(
         ("supadata", "import supadata", "# supadata"),
         ("supadata", "import supadata", "supadata-client"),
         ("supadata", "import supadata", "supadata>>1.0"),
+        ("supadata", "import supadata", "--only-binary \\\nsupadata"),
+        ("supadata", "import supadata", "-r \\\nsupadata"),
+        ("supadata", "import supadata", "-c \\\nsupadata"),
     ],
 )
 def test_structure_preserves_ordinary_missing_init_warning(

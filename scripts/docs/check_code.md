@@ -248,9 +248,10 @@ check_fetch_pattern.py <dir>
 - Uses the same SDK requirement parser as structure validation and packaging, including normalized package names and combined version constraints. Missing, malformed, or unsupported declarations fail instead of silently skipping the check. The existing pin policy still requires a stable `~=` or exact pin; `>=2.1.0,<3` alone is not accepted.
 - For SDK 2.x and later, detects raw-response subscripts, `.get()`, `isinstance(response, dict/list)`, and raw responses passed to SDK `ActionResult(data=...)`. SDK 1.x retains raw-body semantics.
 - Tracks straightforward response and context aliases, annotated assignments, SDK import/type aliases, and reassignment to `.data` in source order. Function, lambda, and comprehension scopes are separate. `isinstance(response, FetchResponse)` and access to `.status` or `.headers` remain valid.
+- Checks function and lambda defaults, decorators, and class bases and keywords in their enclosing scope, before binding the new definition or its parameters.
 - Inspects deployment Python sources, including helper modules. Excludes development paths such as root `tests/`, `dependencies/`, virtual environments, hidden paths, and `__pycache__/`.
 
-This is a bounded static check, not a type checker. It recognizes SDK `ExecutionContext` type annotations and constructors, plus the conventional unannotated `context` handler parameter. It does not assume that every client with a `.fetch()` method uses the SDK, infer return types across helper calls, or report a value as a raw SDK response when branches disagree about its type.
+This is a bounded static check, not a type checker. It recognizes SDK `ExecutionContext` type annotations and constructors, including `Optional[ExecutionContext]` and `ExecutionContext | None`, plus the conventional unannotated `context` handler parameter. It does not assume that every client with a `.fetch()` method uses the SDK, infer return types across helper calls, or report a value as a raw SDK response when branches disagree about its type. A union containing an unrelated client type is not treated as a proven SDK context.
 
 The local `hiveup check fetch <dir>`, `hiveup validate`, `hiveup ci`, and compatibility script all use this checker. For example:
 

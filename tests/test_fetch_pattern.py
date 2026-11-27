@@ -84,6 +84,17 @@ def test_focused_fetch_check_reports_unverifiable_sdk_requirements(tmp_path: Pat
         "response = await context.fetch(url)\nreturn ActionResult(data=response)",
         "return ActionResult(data=await context.fetch(url))",
         "return (await context.fetch(url))['items']",
+        "response = await context.fetch(url)\n"
+        "def response(items=response.get('items')):\n    return items\nreturn response()",
+        "response = await context.fetch(url)\n"
+        "def parse(*, response=response['items']):\n    return response\nreturn parse()",
+        "response = await context.fetch(url)\nparse = lambda response=response.get('items'): response\nreturn parse()",
+        "response = await context.fetch(url)\n"
+        "@decorate(response.get('items'))\ndef parse():\n    return []\nreturn parse()",
+        "response = await context.fetch(url)\n@decorate(response['items'])\nclass Parsed:\n    pass\nreturn Parsed()",
+        "response = await context.fetch(url)\nclass Parsed(response.get('base', object)):\n    pass\nreturn Parsed()",
+        "response = await context.fetch(url)\n"
+        "class Parsed(metaclass=response.get('metaclass', type)):\n    pass\nreturn Parsed()",
     ],
 )
 def test_fetch_check_rejects_unambiguous_raw_response_uses(tmp_path: Path, body: str) -> None:
@@ -110,6 +121,37 @@ def test_fetch_check_recognizes_sdk_type_and_module_aliases(tmp_path: Path) -> N
     )
 
     assert check_fetch(integration).status == "failed"
+
+
+@pytest.mark.parametrize(
+    "annotation",
+    [
+        "Optional[ExecutionContext]",
+        "t.Optional[ExecutionContext]",
+        "Maybe[Context]",
+        "'Optional[Context]'",
+        "ExecutionContext | None",
+        "None | Context",
+        "Union[ExecutionContext, None]",
+        "t.Union[None, Context]",
+    ],
+)
+@pytest.mark.parametrize("body_access", [".get('items')", ".data.get('items')"])
+def test_fetch_check_recognizes_nullable_sdk_context_annotations(
+    tmp_path: Path, annotation: str, body_access: str
+) -> None:
+    integration = _integration(
+        tmp_path,
+        "import typing as t\n"
+        "from typing import Optional, Optional as Maybe, Union\n"
+        "from autohive_integrations_sdk import ExecutionContext, ExecutionContext as Context\n"
+        f"async def execute(client: {annotation} = None):\n"
+        "    if client is None:\n        return []\n"
+        "    response = await client.fetch('https://example.org')\n"
+        f"    return response{body_access}\n",
+    )
+
+    assert check_fetch(integration).status == ("passed" if body_access.startswith(".data") else "failed")
 
 
 @pytest.mark.parametrize(
@@ -158,6 +200,38 @@ def test_fetch_check_recognizes_sdk_type_and_module_aliases(tmp_path: Path) -> N
             response = await context.fetch(url)
             parse = lambda response: response.get('items')
             return parse(response.data)
+        """,
+        """
+        async def execute(context):
+            response = await context.fetch(url)
+            def parse(response=response.data):
+                return response.get('items')
+            return parse()
+        """,
+        """
+        async def execute(context):
+            response = await context.fetch(url)
+            parse = lambda *, response=response.data: response.get('items')
+            return parse()
+        """,
+        """
+        from typing import Optional
+        async def execute(context: Optional[OtherClient]):
+            response = await context.fetch(url)
+            return response.get('items')
+        """,
+        """
+        from autohive_integrations_sdk import ExecutionContext
+        async def execute(context: ExecutionContext | OtherClient | None):
+            response = await context.fetch(url)
+            return response.get('items')
+        """,
+        """
+        from autohive_integrations_sdk import ExecutionContext
+        from other_client import Optional
+        async def execute(context: Optional[ExecutionContext]):
+            response = await context.fetch(url)
+            return response.get('items')
         """,
         """
         async def execute(context):

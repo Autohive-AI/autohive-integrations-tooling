@@ -38,7 +38,12 @@ from packaging.utils import canonicalize_name
 
 from hiveup.core.deployment import is_excluded_development_path
 from hiveup.core.discovery import is_ignored_top_level_dir
-from hiveup.sdk_requirement import SdkRequirementError, read_sdk_requirement, sdk_requirement_warnings
+from hiveup.sdk_requirement import (
+    SdkRequirementError,
+    read_sdk_requirement,
+    requirement_lines,
+    sdk_requirement_warnings,
+)
 
 # Fix Windows console encoding for unicode characters
 if sys.platform == "win32":
@@ -322,8 +327,7 @@ class IntegrationValidator:
 
         # Require a declared distribution with the same normalized name. Do not guess
         # mappings such as a differently named distribution providing this import.
-        for line in requirements.splitlines():
-            requirement_text = re.sub(r"(^|\s+)#.*$", "", line).strip()
+        for requirement_text in requirement_lines(requirements):
             try:
                 requirement = Requirement(requirement_text)
             except InvalidRequirement:
