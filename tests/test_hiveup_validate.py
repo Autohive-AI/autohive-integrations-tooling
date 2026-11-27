@@ -1696,6 +1696,24 @@ def test_structure_allows_missing_init_for_declared_vendor_package_collision(
     assert not marker.exists()
 
 
+@pytest.mark.parametrize("bom_file", ["requirements.txt", "demo.py"])
+def test_structure_recognizes_bom_prefixed_vendor_collision(tmp_path: Path, bom_file: str) -> None:
+    integration = _integration_with_entry_point(tmp_path / "supadata", "demo.py")
+    (integration / "__init__.py").unlink()
+    (integration / "requirements.txt").write_text("supadata\nautohive-integrations-sdk~=2.1.0\n", encoding="utf-8")
+    entry_point = integration / "demo.py"
+    entry_point.write_text(
+        entry_point.read_text(encoding="utf-8") + "\nfrom supadata import Supadata\n", encoding="utf-8"
+    )
+    target = integration / bom_file
+    target.write_bytes(b"\xef\xbb\xbf" + target.read_bytes())
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 0
+    assert not any("Missing __init__.py" in message.message for message in report.results[0].messages)
+
+
 @pytest.mark.parametrize(
     ("folder", "source", "requirement"),
     [

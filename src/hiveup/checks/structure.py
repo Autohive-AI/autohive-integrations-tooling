@@ -321,7 +321,7 @@ class IntegrationValidator:
         if not self.name.isidentifier():
             return False
         try:
-            requirements = (self.path / "requirements.txt").read_text(encoding="utf-8")
+            requirements = (self.path / "requirements.txt").read_text(encoding="utf-8-sig")
         except (OSError, UnicodeError):
             return False
 
@@ -341,7 +341,7 @@ class IntegrationValidator:
             if is_excluded_development_path(source.relative_to(self.path)) or source.is_symlink():
                 continue
             try:
-                tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+                tree = ast.parse(source.read_bytes(), filename=str(source))
             except (OSError, UnicodeError, SyntaxError):
                 continue  # Unreadable or invalid source is not evidence of a collision.
             for node in ast.walk(tree):

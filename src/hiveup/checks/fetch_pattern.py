@@ -50,6 +50,8 @@ class _FetchUsage(ast.NodeVisitor):
     def __init__(self):
         self.bindings: dict[str, str] = {}
         self.errors: list[str] = []
+        self.class_outer: dict[str, str] | None = None
+        self.deferred_annotations = False
 
     def _symbol(self, node: ast.AST | None) -> str | None:
         if isinstance(node, ast.Name):
@@ -105,11 +107,11 @@ class _FetchUsage(ast.NodeVisitor):
         elif isinstance(target, ast.Starred):
             self._bind(target.value)
 
-    def _body(self, body: list[ast.stmt]):
+    def _body(self, body: list[ast.AST]):
         for statement in body:
             self.visit(statement)
 
-    def _branches(self, bodies: list[list[ast.stmt]]):
+    def _branches(self, bodies: list[list[ast.AST]]):
         before = self.bindings.copy()
         outcomes = []
         for body in bodies:
@@ -130,6 +132,8 @@ class _FetchUsage(ast.NodeVisitor):
                 self.bindings[alias.asname or alias.name] = "typing"
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
+        if node.level == 0 and node.module == "__future__" and any(a.name == "annotations" for a in node.names):
+            self.deferred_annotations = True
         for alias in node.names:
             name = alias.asname or alias.name
             self.bindings.pop(name, None)
@@ -139,15 +143,22 @@ class _FetchUsage(ast.NodeVisitor):
                 self.bindings[name] = f"typing.{alias.name}"
 
     def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef):
+        args = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+        args.extend(arg for arg in (node.args.vararg, node.args.kwarg) if arg is not None)
         for expression in [*node.decorator_list, *node.args.defaults, *node.args.kw_defaults]:
             if expression is not None:
                 self.visit(expression)
-        args = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
-        args.extend(arg for arg in (node.args.vararg, node.args.kwarg) if arg is not None)
+        if not self.deferred_annotations:
+            for annotation in [*(arg.annotation for arg in args), node.returns]:
+                if annotation is not None:
+                    self.visit(annotation)
         annotations = [self._symbol(arg.annotation) for arg in args]
         self.bindings.pop(node.name, None)
         outer = self.bindings
-        self.bindings = outer.copy()
+        class_outer = self.class_outer
+        # Signatures use the class namespace; method bodies do not close over it.
+        self.bindings = (class_outer if class_outer is not None else outer).copy()
+        self.class_outer = None
         for arg, annotation in zip(args, annotations):
             kind = {"ExecutionContext": "context", "FetchResponse": "response"}.get(annotation)
             if arg.arg == "context" and arg.annotation is None:
@@ -156,6 +167,7 @@ class _FetchUsage(ast.NodeVisitor):
             self._bind(ast.Name(id=arg.arg), kind)
         self._body(node.body)
         self.bindings = outer
+        self.class_outer = class_outer
 
     visit_AsyncFunctionDef = visit_FunctionDef
 
@@ -164,22 +176,31 @@ class _FetchUsage(ast.NodeVisitor):
             if default is not None:
                 self.visit(default)
         outer = self.bindings
-        self.bindings = outer.copy()
+        class_outer = self.class_outer
+        self.bindings = (class_outer if class_outer is not None else outer).copy()
+        self.class_outer = None
         args = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
         args.extend(arg for arg in (node.args.vararg, node.args.kwarg) if arg is not None)
         for arg in args:
             self.bindings.pop(arg.arg, None)
         self.visit(node.body)
         self.bindings = outer
+        self.class_outer = class_outer
 
     def visit_ClassDef(self, node: ast.ClassDef):
         for expression in [*node.decorator_list, *node.bases, *node.keywords]:
             self.visit(expression)
-        self.bindings.pop(node.name, None)
         outer = self.bindings
-        self.bindings = outer.copy()
+        class_outer = self.class_outer
+        enclosing = class_outer if class_outer is not None else outer
+        self.bindings = enclosing.copy()
+        self.class_outer = enclosing.copy()
+        # The old name remains visible in the class body, but not in later methods.
+        self.class_outer.pop(node.name, None)
         self._body(node.body)
         self.bindings = outer
+        self.bindings.pop(node.name, None)
+        self.class_outer = class_outer
 
     def visit_Assign(self, node: ast.Assign):
         self.visit(node.value)
@@ -205,6 +226,27 @@ class _FetchUsage(ast.NodeVisitor):
     def visit_If(self, node: ast.If):
         self.visit(node.test)
         self._branches([node.body, node.orelse])
+
+    def visit_Match(self, node: ast.Match):
+        self.visit(node.subject)
+        branches = [[case] for case in node.cases]
+        if not any(
+            case.guard is None and isinstance(case.pattern, ast.MatchAs) and case.pattern.pattern is None
+            for case in node.cases
+        ):
+            branches.append([])  # No case is guaranteed to match.
+        self._branches(branches)
+
+    def visit_match_case(self, node: ast.match_case):
+        for pattern in ast.walk(node.pattern):
+            if isinstance(pattern, (ast.MatchAs, ast.MatchStar)) and pattern.name:
+                self.bindings.pop(pattern.name, None)
+            elif isinstance(pattern, ast.MatchMapping) and pattern.rest:
+                self.bindings.pop(pattern.rest, None)
+        self.visit(node.pattern)
+        if node.guard is not None:
+            self.visit(node.guard)
+        self._body(node.body)
 
     def visit_For(self, node: ast.For | ast.AsyncFor):
         self.visit(node.iter)
@@ -269,6 +311,13 @@ class _FetchUsage(ast.NodeVisitor):
             )
         self.generic_visit(node)
 
+    def _is_body_type(self, node: ast.AST) -> bool:
+        if isinstance(node, ast.Tuple):
+            return bool(node.elts) and all(self._is_body_type(item) for item in node.elts)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            return self._is_body_type(node.left) and self._is_body_type(node.right)
+        return isinstance(node, ast.Name) and node.id in {"dict", "list"}
+
     def visit_Call(self, node: ast.Call):
         if (
             isinstance(node.func, ast.Attribute)
@@ -279,12 +328,7 @@ class _FetchUsage(ast.NodeVisitor):
                 f"Line {node.lineno}: raw fetch response .get(...) — use response.data.get(...) with SDK 2.x"
             )
         if isinstance(node.func, ast.Name) and node.func.id == "isinstance" and len(node.args) == 2:
-            types = node.args[1].elts if isinstance(node.args[1], ast.Tuple) else [node.args[1]]
-            if (
-                types
-                and self._value_kind(node.args[0]) == "response"
-                and all(isinstance(item, ast.Name) and item.id in {"dict", "list"} for item in types)
-            ):
+            if self._value_kind(node.args[0]) == "response" and self._is_body_type(node.args[1]):
                 self.errors.append(
                     f"Line {node.lineno}: raw fetch response body type check — use isinstance(response.data, ...) with SDK 2.x"
                 )

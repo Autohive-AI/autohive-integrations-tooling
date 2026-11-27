@@ -92,7 +92,8 @@ does not receive the missing-init warning, even without `actions/`.
 Requirement parsing joins continuation lines and ignores comments and pip
 options such as `--hash`. Option arguments are not dependency declarations,
 and requirements or constraints included through `-r` or `-c` are not resolved
-for this exception.
+for this exception. A UTF-8 BOM in the requirements or Python source does not
+prevent collision recognition.
 
 Comments, strings, relative imports, and imports found only in excluded
 development files such as `tests/` do not qualify. The validator does not execute

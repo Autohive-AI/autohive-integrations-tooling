@@ -81,6 +81,7 @@ def test_focused_fetch_check_reports_unverifiable_sdk_requirements(tmp_path: Pat
         "ctx = context\nresponse = await ctx.fetch(url)\nreturn response['items']",
         "response = await context.fetch(url)\nalias = response\nreturn alias.get('items')",
         "response = await context.fetch(url)\nreturn isinstance(response, (dict, list))",
+        "response = await context.fetch(url)\nreturn isinstance(response, dict | list)",
         "response = await context.fetch(url)\nreturn ActionResult(data=response)",
         "return ActionResult(data=await context.fetch(url))",
         "return (await context.fetch(url))['items']",
@@ -95,6 +96,15 @@ def test_focused_fetch_check_reports_unverifiable_sdk_requirements(tmp_path: Pat
         "response = await context.fetch(url)\nclass Parsed(response.get('base', object)):\n    pass\nreturn Parsed()",
         "response = await context.fetch(url)\n"
         "class Parsed(metaclass=response.get('metaclass', type)):\n    pass\nreturn Parsed()",
+        "response = await context.fetch(url)\n"
+        "class Parser:\n    response = {}\n    def parse(self):\n        return response.get('items')\n"
+        "return Parser().parse()",
+        "response = await context.fetch(url)\n"
+        "class response:\n    items = response.get('items')\nreturn response.items",
+        "response = await context.fetch(url)\ndef parse(items: response.get('type', list)):\n    return items",
+        "response = await context.fetch(url)\ndef parse() -> response.get('type', list):\n    return []",
+        "response = await context.fetch(url)\n"
+        "match response.status:\n    case 200 if response.get('ready'):\n        return response.data",
     ],
 )
 def test_fetch_check_rejects_unambiguous_raw_response_uses(tmp_path: Path, body: str) -> None:
@@ -210,6 +220,55 @@ def test_fetch_check_recognizes_nullable_sdk_context_annotations(
         """,
         """
         async def execute(context):
+            fetched = await context.fetch(url)
+            response = fetched.data
+            class Parser:
+                response = fetched
+                def parse(self):
+                    return response.get('items')
+            return Parser().parse()
+        """,
+        """
+        async def execute(context):
+            fetched = await context.fetch(url)
+            response = fetched
+            class Parser:
+                response = fetched.data
+                def parse(self, items=response.get('items')):
+                    return items
+            return Parser().parse()
+        """,
+        """
+        async def execute(context):
+            response = await context.fetch(url)
+            class response:
+                items = response.data.get('items')
+            return response.items
+        """,
+        """
+        from __future__ import annotations
+        async def execute(context):
+            response = await context.fetch(url)
+            def parse(items: response.get('type', list)) -> response.get('type', list):
+                return items
+            return parse([])
+        """,
+        """
+        async def execute(context):
+            response = await context.fetch(url)
+            def parse(items: "response.get('type', list)") -> "response.get('type', list)":
+                return items
+            return parse([])
+        """,
+        """
+        async def execute(context):
+            response = await context.fetch(url)
+            def parse(items: response.data.get('type', list)) -> response.data.get('type', list):
+                return items
+            return parse([])
+        """,
+        """
+        async def execute(context):
             response = await context.fetch(url)
             parse = lambda *, response=response.data: response.get('items')
             return parse()
@@ -269,6 +328,54 @@ def test_fetch_check_preserves_valid_and_unrelated_response_uses(tmp_path: Path,
     integration = _integration(tmp_path, source)
 
     assert check_fetch(integration).status == "passed"
+
+
+@pytest.mark.parametrize("body_access", [".get('items')", ".data.get('items')"])
+def test_fetch_check_isolates_match_cases(tmp_path: Path, body_access: str) -> None:
+    integration = _integration(
+        tmp_path,
+        "async def execute(context):\n"
+        "    response = await context.fetch(url)\n"
+        "    match response.status:\n"
+        "        case 200:\n"
+        "            response = response.data\n"
+        "            return response.get('items')\n"
+        "        case 201:\n"
+        f"            return response{body_access}\n",
+    )
+
+    assert check_fetch(integration).status == ("passed" if body_access.startswith(".data") else "failed")
+
+
+@pytest.mark.parametrize("pattern", ["{'item': response}", "{'item': _, **response}", "[*response]"])
+def test_fetch_check_does_not_confuse_match_captures_with_the_response(tmp_path: Path, pattern: str) -> None:
+    integration = _integration(
+        tmp_path,
+        "async def execute(context):\n"
+        "    response = await context.fetch(url)\n"
+        "    match response.data:\n"
+        f"        case {pattern}:\n"
+        "            return isinstance(response, (dict, list))\n",
+    )
+
+    assert check_fetch(integration).status == "passed"
+
+
+@pytest.mark.parametrize("exhaustive", [True, False])
+def test_fetch_check_merges_match_cases_without_assuming_a_match(tmp_path: Path, exhaustive: bool) -> None:
+    source = (
+        "async def execute(context, enabled):\n"
+        "    response = {}\n"
+        "    match enabled:\n"
+        "        case True:\n"
+        "            response = await context.fetch(url)\n"
+    )
+    if exhaustive:
+        source += "        case _:\n            response = await context.fetch(url)\n"
+    source += "    return response.get('items')\n"
+    integration = _integration(tmp_path, source)
+
+    assert check_fetch(integration).status == ("failed" if exhaustive else "passed")
 
 
 def test_fetch_check_keeps_sdk1_body_semantics(tmp_path: Path) -> None:
