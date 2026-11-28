@@ -48,6 +48,15 @@ The repo's `ruff.toml` enforces rules `E` (pycodestyle errors), `F` (pyflakes), 
 
 Other files that need intentional "unused" imports must use `# noqa: F401` inline.
 
+### Entry-Point Export (Required)
+
+For an entry point named `demo.py`, define `demo = Integration.load(...)` at
+module scope. SDK aliases such as `demo = SDKRuntime.load()` are accepted.
+Use the default config discovery or pass an explicit config path, including
+`Path(__file__).with_name("config.json")`. The structure check uses the AST:
+comments, strings, and calls in other files do not satisfy this requirement.
+There is no separate `Integration.load` text-search warning.
+
 ### Advisory Warnings (Non-Blocking)
 
 The structure check produces warnings (not errors) for these cases:
@@ -56,8 +65,7 @@ The structure check produces warnings (not errors) for these cases:
 |---------|-------------|
 | SDK lower bound below 2.1.0 | Recommend `autohive-integrations-sdk~=2.1.0` or later. Applies to SDK 1.x and 2.0.x; check SDK 2.x compatibility before upgrading from 1.x. Packaging also reports this advisory, even with `--skip-validate`. |
 | Exact SDK pin (`==` or `===`) | Use `~=` so patch releases can be installed. This is separate from the SDK 2.1.0 recommendation. |
-| `Integration.load(...)` not found | The check looks for `Integration.load` in Python files. Use `Integration.load()` for vendored single-file integrations, or `Integration.load(config_path)` / `Integration.load(Path(__file__).with_name("config.json"))` when an explicit config path is needed. |
-| Missing `__init__.py` | Optional for modular integrations with an `actions/` subdirectory |
+| Missing `__init__.py` | Optional with `actions/` or a recognized vendor-package name collision: an absolute runtime import matches the directory name and a declared dependency has the same normalized name (for example, `supadata`). Ordinary missing-init cases still warn. |
 | Missing top-level `display_name` | Recommended but not required |
 | Missing `display_name` on actions | Recommended but not required |
 | Potentially unused OAuth scopes | Heuristic check — verify manually |

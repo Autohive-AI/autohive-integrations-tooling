@@ -1661,6 +1661,222 @@ def test_structure_rejects_non_identifier_entry_point_stems(tmp_path: Path) -> N
         assert not any("must define" in message.message for message in report.results[0].messages)
 
 
+@pytest.mark.parametrize(
+    ("package", "vendor_import", "requirement"),
+    [
+        ("supadata", "from supadata import Supadata", "supadata"),
+        ("supadata", "import supadata as vendor", "SUPADATA~=1.0"),
+        ("supadata", "from supadata.client import Supadata", "supadata[client]>=1.0 # vendor client"),
+        ("supadata", "import supadata.client", "supadata; python_version >= '3.13'"),
+        ("supadata", "import supadata", "supadata @ https://example.invalid/supadata.whl"),
+        ("supadata", "import supadata", "supadata \\\n  >=1.0"),
+        ("supadata", "import supadata", "supadata==1.0 --hash=sha256:abc"),
+        ("vendor_client", "import vendor_client", "vendor-client>=1.0"),
+    ],
+)
+def test_structure_allows_missing_init_for_declared_vendor_package_collision(
+    tmp_path: Path, package: str, vendor_import: str, requirement: str
+) -> None:
+    integration = _integration_with_entry_point(tmp_path / package, "demo.py")
+    (integration / "__init__.py").unlink()
+    (integration / "requirements.txt").write_text(
+        f"autohive-integrations-sdk~=2.1.0\n{requirement}\n", encoding="utf-8"
+    )
+    entry_point = integration / "demo.py"
+    marker = tmp_path / "executed"
+    entry_point.write_text(
+        entry_point.read_text(encoding="utf-8") + f"\n{vendor_import}\nPath({str(marker)!r}).write_text('executed')\n",
+        encoding="utf-8",
+    )
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 0
+    assert not any("Missing __init__.py" in message.message for message in report.results[0].messages)
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("bom_file", ["requirements.txt", "demo.py"])
+def test_structure_recognizes_bom_prefixed_vendor_collision(tmp_path: Path, bom_file: str) -> None:
+    integration = _integration_with_entry_point(tmp_path / "supadata", "demo.py")
+    (integration / "__init__.py").unlink()
+    (integration / "requirements.txt").write_text("supadata\nautohive-integrations-sdk~=2.1.0\n", encoding="utf-8")
+    entry_point = integration / "demo.py"
+    entry_point.write_text(
+        entry_point.read_text(encoding="utf-8") + "\nfrom supadata import Supadata\n", encoding="utf-8"
+    )
+    target = integration / bom_file
+    target.write_bytes(b"\xef\xbb\xbf" + target.read_bytes())
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 0
+    assert not any("Missing __init__.py" in message.message for message in report.results[0].messages)
+
+
+@pytest.mark.parametrize(
+    ("folder", "source", "requirement"),
+    [
+        ("ordinary", "import supadata", "supadata"),
+        ("supadata", "", "supadata"),
+        ("supadata", "# from supadata import Supadata", "supadata"),
+        ("supadata", "'from supadata import Supadata'", "supadata"),
+        ("supadata", "from .supadata import Supadata", "supadata"),
+        ("supadata", "import unrelated as supadata", "supadata"),
+        ("supadata", "from supadata_extra import Supadata", "supadata"),
+        ("supadata", "import supadata", ""),
+        ("supadata", "import supadata", "# supadata"),
+        ("supadata", "import supadata", "supadata-client"),
+        ("supadata", "import supadata", "supadata>>1.0"),
+        ("supadata", "import supadata", "--only-binary \\\nsupadata"),
+        ("supadata", "import supadata", "-r \\\nsupadata"),
+        ("supadata", "import supadata", "-c \\\nsupadata"),
+    ],
+)
+def test_structure_preserves_ordinary_missing_init_warning(
+    tmp_path: Path, folder: str, source: str, requirement: str
+) -> None:
+    integration = _integration_with_entry_point(tmp_path / folder, "demo.py")
+    (integration / "__init__.py").unlink()
+    (integration / "requirements.txt").write_text(
+        f"autohive-integrations-sdk~=2.1.0\n{requirement}\n", encoding="utf-8"
+    )
+    entry_point = integration / "demo.py"
+    entry_point.write_text(entry_point.read_text(encoding="utf-8") + f"\n{source}\n", encoding="utf-8")
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 0
+    warnings = [message for message in report.results[0].messages if "Missing __init__.py" in message.message]
+    assert len(warnings) == 1
+    assert warnings[0].severity == "warning"
+
+
+@pytest.mark.parametrize("directory", ["tests", "dependencies", ".venv"])
+def test_structure_missing_init_ignores_vendor_imports_in_development_files(tmp_path: Path, directory: str) -> None:
+    integration = _integration_with_entry_point(tmp_path / "supadata", "demo.py")
+    (integration / "__init__.py").unlink()
+    (integration / "requirements.txt").write_text("autohive-integrations-sdk~=2.1.0\nsupadata\n", encoding="utf-8")
+    development = integration / directory
+    development.mkdir(exist_ok=True)
+    (development / "vendor_import.py").write_text("from supadata import Supadata\n", encoding="utf-8")
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 0
+    assert any("Missing __init__.py" in message.message for message in report.results[0].messages)
+
+
+def test_structure_allows_missing_init_for_modular_integration(tmp_path: Path) -> None:
+    integration = _integration_with_entry_point(tmp_path / "modular", "demo.py")
+    (integration / "__init__.py").unlink()
+    (integration / "actions").mkdir()
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 0
+    assert not any("Missing __init__.py" in message.message for message in report.results[0].messages)
+
+
+@pytest.mark.parametrize(
+    ("sdk_import", "loader"),
+    [
+        ("from autohive_integrations_sdk import Integration", "Integration"),
+        ("from autohive_integrations_sdk import Integration as SDKRuntime", "SDKRuntime"),
+        ("import autohive_integrations_sdk as sdk", "sdk.Integration"),
+    ],
+)
+@pytest.mark.parametrize("arguments", ["", "'config.json'", "Path(__file__).with_name('config.json')"])
+def test_structure_accepts_sdk_load_aliases_without_redundant_warning(
+    tmp_path: Path, sdk_import: str, loader: str, arguments: str
+) -> None:
+    integration = _integration_with_entry_point(tmp_path / "load-alias", "demo.py")
+    (integration / "demo.py").write_text(
+        f"from pathlib import Path\n{sdk_import}\n"
+        "from autohive_integrations_sdk import ActionHandler\n"
+        f"demo = {loader}.load({arguments})\n",
+        encoding="utf-8",
+    )
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 0
+    assert not any("Integration.load" in message.message for message in report.results[0].messages)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "# demo = Integration.load()\n",
+        "'demo = Integration.load()'\n",
+        "app = SDKRuntime.load()\n",
+        "def factory():\n    demo = SDKRuntime.load()\n",
+        "if True:\n    demo = SDKRuntime.load()\n",
+        "demo = object()\n",
+    ],
+)
+def test_structure_rejects_missing_module_scope_export_despite_load_text(tmp_path: Path, source: str) -> None:
+    integration = _integration_with_entry_point(tmp_path / "missing-export", "demo.py")
+    (integration / "demo.py").write_text(
+        "from autohive_integrations_sdk import Integration as SDKRuntime, ActionHandler\n" + source,
+        encoding="utf-8",
+    )
+    (integration / "helper.py").write_text(
+        "from autohive_integrations_sdk import Integration\ndemo = Integration.load()\n", encoding="utf-8"
+    )
+
+    report = run_validation([integration], only={"structure"})
+
+    assert report.exit_code() == 1
+    assert any(
+        message.message == "entry point demo.py must define 'demo = Integration.load(...)' at module scope"
+        for message in report.results[0].messages
+    )
+
+
+@pytest.mark.parametrize("interface", ["check", "validate", "ci", "compatibility-script"])
+@pytest.mark.parametrize("valid_export", [True, False])
+def test_structure_rules_apply_to_all_entry_points_without_cwd_assumptions(
+    tmp_path: Path, monkeypatch, interface: str, valid_export: bool
+) -> None:
+    integration = _integration_with_entry_point(tmp_path / "supadata", "demo.py")
+    (integration / "__init__.py").unlink()
+    (integration / "requirements.txt").write_text("autohive-integrations-sdk~=2.1.0\nsupadata\n", encoding="utf-8")
+    export = "demo = SDKRuntime.load()" if valid_export else "# demo = Integration.load()"
+    (integration / "demo.py").write_text(
+        "from autohive_integrations_sdk import Integration as SDKRuntime, ActionHandler\n"
+        f"from supadata import Supadata\n{export}\n",
+        encoding="utf-8",
+    )
+    unrelated = tmp_path / "unrelated"
+    unrelated.mkdir()
+    monkeypatch.chdir(unrelated)
+    # Keep the canonical structure check; CI's other checks install dependencies.
+    structure_check = cli.available_checks()["structure"]
+    monkeypatch.setattr(cli, "available_checks", lambda **kwargs: {"structure": structure_check})
+
+    if interface == "compatibility-script":
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "validate_integration.py"), str(integration)],
+            cwd=unrelated,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        exit_code, output = result.returncode, result.stdout + result.stderr
+    else:
+        arguments = [interface]
+        if interface == "check":
+            arguments.append("structure")
+        result = CliRunner().invoke(app, [*arguments, str(integration), "--json"])
+        exit_code, output = result.exit_code, result.output
+
+    assert exit_code == (0 if valid_export else 1), output
+    assert "Missing __init__.py" not in output
+    assert "Integration should use" not in output
+    assert ("must define" in output) is not valid_export
+
+
 def test_structure_requires_named_integration_load_export(tmp_path: Path) -> None:
     integration = _integration_with_entry_point(tmp_path / "wrong-export", "demo.py")
     entry_point = integration / "demo.py"

@@ -95,8 +95,8 @@ def read_sdk_requirement(requirements_path: Path) -> SdkRequirement:
 
         if not any(bound.operator in _PIN_OPERATORS for bound in bounds):
             raise SdkRequirementError(
-                f"autohive-integrations-sdk{strongest.operator}{strongest.version_text} can install a later major "
-                f"version of the SDK. Pin the SDK with ~={strongest.version_text} so the major version stays fixed"
+                "autohive-integrations-sdk must include a stable ~= or == pin; bounded ranges alone are not accepted. "
+                f"Pin the SDK with ~={strongest.version_text} so the major version stays fixed"
             )
 
         exact = next((bound for bound in bounds if bound.operator in _EXACT_OPERATORS), None)
@@ -129,9 +129,8 @@ def sdk_requirement_warnings(requirement: SdkRequirement) -> list[str]:
     return warnings
 
 
-def _sdk_requirements(content: str):
-    """Yield each SDK requirement in requirements.txt, read the way pip reads the file."""
-
+def requirement_lines(content: str):
+    """Yield direct requirement text, excluding pip options and without resolving includes."""
     for line in _logical_lines(content):
         line = _COMMENT.sub("", line).strip()
         if not line or line.startswith("-"):
@@ -139,7 +138,13 @@ def _sdk_requirements(content: str):
 
         # pip treats everything from the first token that starts with "-" as options for this
         # requirement, for example --hash or --config-settings. They are not version specifiers.
-        requirement_text = _without_requirement_options(line)
+        yield _without_requirement_options(line)
+
+
+def _sdk_requirements(content: str):
+    """Yield each SDK requirement in requirements.txt, read the way pip reads the file."""
+
+    for requirement_text in requirement_lines(content):
         try:
             requirement = Requirement(requirement_text)
         except InvalidRequirement as exc:

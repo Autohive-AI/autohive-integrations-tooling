@@ -80,7 +80,27 @@ Checks that all mandatory files exist in the integration directory:
 | `requirements.txt` | Error | Python dependencies |
 | `README.md` | Error | Integration documentation |
 | `icon.png`, `icon.jpg`, or `icon.jpeg` | Error | Exactly one regular, non-symlink integration icon — must be exactly 512x512 pixels |
-| `__init__.py` | Warning | Python package init — optional for modular integrations with an `actions/` subdirectory (adding it causes circular imports) |
+| `__init__.py` | Warning | Python package init — optional for modular integrations with `actions/` or a recognized vendor-package name collision |
+
+Omit the root `__init__.py` when it would shadow a vendor package. The validator
+recognizes this case when runtime Python source contains an absolute import of
+the integration directory's exact name and `requirements.txt` declares a
+distribution with the same normalized name. For example, a `supadata/`
+integration that declares `supadata` and uses `from supadata import Supadata`
+does not receive the missing-init warning, even without `actions/`.
+
+Requirement parsing joins continuation lines and ignores comments and pip
+options such as `--hash`. Option arguments are not dependency declarations,
+and requirements or constraints included through `-r` or `-c` are not resolved
+for this exception. A UTF-8 BOM in the requirements or Python source does not
+prevent collision recognition.
+
+Comments, strings, relative imports, and imports found only in excluded
+development files such as `tests/` do not qualify. The validator does not execute
+integration code or infer mappings between differently named distributions and
+import packages. Ordinary missing-init cases still warn. The modular exception
+is unchanged: adding a root init can cause circular imports when action modules
+use absolute imports of the integration instance.
 
 ### 3. config.json Validation (`_check_config_json`)
 
@@ -189,13 +209,26 @@ without dereferencing content from outside the integration.
 
 ### 8. Main Python File (`_check_main_python_file`)
 
-Inspects all `.py` files in the integration directory (not just the entry point) for expected patterns. This supports modular integrations where action handlers are split across multiple files.
+Inspects the entry point's AST for the required integration export and all
+`.py` files for expected imports. This supports modular integrations where
+action handlers are split across multiple files.
 
 | Check | Severity | Description |
 |-------|----------|-------------|
 | `Integration` imported | Warning | Should import from SDK |
 | `ActionHandler` imported | Warning | Should import from SDK |
-| `Integration.load(...)` called | Warning | Standard loading pattern, with or without an explicit config path |
+| Named module-scope export | Error | Entry point `<stem>.py` must assign `<stem> = Integration.load(...)` at module scope; SDK class and module aliases are accepted |
+
+Use `Integration.load()` for SDK config discovery, or pass an explicit config
+path such as `"config.json"` or `Path(__file__).with_name("config.json")`. For
+example, `from autohive_integrations_sdk import Integration as SDKRuntime`
+followed by `demo = SDKRuntime.load()` is valid in `demo.py`. There is no
+separate text-search warning for the spelling `Integration.load`.
+
+A comment, string, call in another file, or assignment inside a function does
+not satisfy the entry-point export requirement. These rules apply to
+`hiveup check structure`, `hiveup validate`, `hiveup ci`, and the compatibility
+script `validate_integration.py`.
 
 > **Note:** Action decorator matching (config ↔ code) is handled by `check_config_sync.py`, which uses AST parsing for more accurate bidirectional validation.
 

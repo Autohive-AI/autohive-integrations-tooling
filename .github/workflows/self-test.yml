@@ -224,6 +224,9 @@ jobs:
 
       - name: Test check_code.py — input drift warns for existing integrations
         run: |
+          # Keep the missing-requirements fixture intact for the separate Action structure test.
+          trap 'rm -f tests/examples/input-drift/requirements.txt' EXIT
+          printf 'autohive-integrations-sdk~=2.1.0\n' > tests/examples/input-drift/requirements.txt
           OUTPUT=$(python scripts/check_code.py --base-ref HEAD tests/examples/input-drift 2>&1)
           if ! echo "$OUTPUT" | grep -q "historic warning"; then
             echo "❌ Expected input drift warning to flow through check_code.py"
@@ -236,6 +239,7 @@ jobs:
         run: |
           cp -R tests/examples/input-drift tmp-input-drift
           trap 'rm -rf tmp-input-drift' EXIT
+          printf 'autohive-integrations-sdk~=2.1.0\n' > tmp-input-drift/requirements.txt
           OUTPUT=$(python scripts/check_code.py --base-ref HEAD tmp-input-drift 2>&1) && {
             echo "❌ Expected input drift to fail through check_code.py for new integration"
             echo "$OUTPUT"

@@ -33,9 +33,17 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.utils import canonicalize_name
+
 from hiveup.core.deployment import is_excluded_development_path
 from hiveup.core.discovery import is_ignored_top_level_dir
-from hiveup.sdk_requirement import SdkRequirementError, read_sdk_requirement, sdk_requirement_warnings
+from hiveup.sdk_requirement import (
+    SdkRequirementError,
+    read_sdk_requirement,
+    requirement_lines,
+    sdk_requirement_warnings,
+)
 
 # Fix Windows console encoding for unicode characters
 if sys.platform == "win32":
@@ -278,10 +286,16 @@ class IntegrationValidator:
         # __init__.py is optional for modular integrations (those with an actions/
         # subdirectory) because adding it causes circular imports when action files
         # use absolute imports like 'from <integration> import <instance>'.
+        # It can also shadow a same-named vendor package used by a single-file integration.
         has_actions_dir = (self.path / "actions").is_dir()
-        if not (self.path / "__init__.py").exists() and not has_actions_dir:
+        if (
+            not (self.path / "__init__.py").exists()
+            and not has_actions_dir
+            and not self._has_vendor_package_collision()
+        ):
             self.add_warning(
-                "Missing __init__.py (required for package-style integrations, optional for modular integrations with actions/)"
+                "Missing __init__.py (recommended for package-style integrations; optional for modular integrations "
+                "with actions/ or a declared vendor-package name collision)"
             )
 
         # Check for forbidden files
@@ -301,6 +315,46 @@ class IntegrationValidator:
             self._check_icon_png_size(icon_paths[0])
         else:
             self._check_icon_jpeg_size(icon_paths[0])
+
+    def _has_vendor_package_collision(self) -> bool:
+        """Recognize same-name dependency imports without importing integration code."""
+        if not self.name.isidentifier():
+            return False
+        try:
+            requirements = (self.path / "requirements.txt").read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeError):
+            return False
+
+        # Require a declared distribution with the same normalized name. Do not guess
+        # mappings such as a differently named distribution providing this import.
+        for requirement_text in requirement_lines(requirements):
+            try:
+                requirement = Requirement(requirement_text)
+            except InvalidRequirement:
+                continue
+            if canonicalize_name(requirement.name) == canonicalize_name(self.name):
+                break
+        else:
+            return False
+
+        for source in sorted(self.path.rglob("*.py")):
+            if is_excluded_development_path(source.relative_to(self.path)) or source.is_symlink():
+                continue
+            try:
+                tree = ast.parse(source.read_bytes(), filename=str(source))
+            except (OSError, UnicodeError, SyntaxError):
+                continue  # Unreadable or invalid source is not evidence of a collision.
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import) and any(alias.name.split(".")[0] == self.name for alias in node.names):
+                    return True
+                if (
+                    isinstance(node, ast.ImportFrom)
+                    and node.level == 0
+                    and node.module
+                    and node.module.split(".")[0] == self.name
+                ):
+                    return True
+        return False
 
     def _check_icon_png_size(self, path: Path):
         """Validate PNG icon is exactly 512x512."""
@@ -544,10 +598,6 @@ class IntegrationValidator:
         for item, source in required_imports:
             if item not in all_content:
                 self.add_warning(f"Integration may be missing import: {item} ({source})")
-
-        # Check for Integration.load(...) across all Python files.
-        if "Integration.load" not in all_content:
-            self.add_warning("Integration should use 'Integration.load(...)' to load the integration")
 
     def _check_entry_point_export(self, main_file: Path):
         """Check the runtime wrapper's expected integration export without importing code."""
