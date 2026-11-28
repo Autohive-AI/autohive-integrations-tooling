@@ -6,6 +6,7 @@ pip-audit
 twine
 typer
 rich
+wcwidth>=0.2.13
 pytest>=9.0
 pytest-asyncio>=0.23
 pytest-cov>=4.0

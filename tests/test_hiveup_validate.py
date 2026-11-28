@@ -1,6 +1,7 @@
 import sys
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -28,7 +29,7 @@ from hiveup.checks.structure import (  # noqa: E402
     get_integration_folders,
     validate as validate_structure,
 )
-from hiveup.checks.tests import get_integration_dirs  # noqa: E402
+from hiveup.checks.tests import get_integration_dirs, parse_results, print_table  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
 from hiveup.core.results import CheckMessage, CheckResult, ValidationReport  # noqa: E402
 from hiveup.packaging import (  # noqa: E402
@@ -496,10 +497,249 @@ def test_markdown_summarizes_tests_and_includes_failure_detail() -> None:
     output = render_markdown(report)
 
     assert "<details><summary>❌ Tests Check output</summary>" in output
-    assert "github         103/104       88%       ❌ Failed" in output
+    assert re.search(r"github\s+103/104\s+88%\s+❌ Failed", output)
     assert "github — failure detail" in output
     assert "FAILED tests/test_github_unit.py::test_demo" in output
     assert "❌ Tests failed: github" in output
+
+
+@pytest.mark.parametrize(
+    ("total", "duration", "subtests"),
+    [
+        ("TOTAL 31 7 77%", "0.27s", ""),
+        ("TOTAL 31 7 12 3 73.91%", "60.05s (0:01:00)", ""),
+        (
+            "TOTAL 31 7 12 3 73.91%",
+            "86400.05s (1 day, 0:00:00)",
+            ", 3 subtests passed, 1 subtests failed, 2 subtests skipped",
+        ),
+    ],
+)
+def test_console_and_markdown_share_pytest_counts_and_coverage(
+    total: str, duration: str, subtests: str, capsys
+) -> None:
+    raw = (
+        f"Captured stdout: 999 passed, 888 failed\n\x1b[33m{total}\x1b[0m\n"
+        f"=== 2 failed, 13 passed{subtests} in {duration} ===\n"
+        "17 passed validation checks\n23 failed connection attempts\n1 warning was noted\n"
+    )
+    passed, failed, coverage = parse_results(raw)
+    assert (passed, failed, coverage) == (13, 2, total.split()[-1])
+
+    print_table([("demo", f"{passed}/{passed + failed}", coverage, "❌ Failed", "fail")], {"demo": raw})
+    console = capsys.readouterr().out
+    markdown = render_markdown(ValidationReport([CheckResult("tests", "demo", "failed", raw_output=raw)]))
+    for output in (console, markdown):
+        assert re.search(r"demo\s+13/15\s+" + re.escape(coverage) + r"\s+❌ Failed", output)
+        assert "demo — failure detail" in output
+
+
+def test_test_tables_align_all_statuses_by_displayed_width(capsys) -> None:
+    statuses = ["passed", "warning", "failed", "error", "skipped"]
+    labels = ["✅ Passed", "⚠️ Warning", "❌ Failed", "💥 Error", "⏭️ Skipped"]
+    names = ["界", "é", "short", "long-integration-name", "last"]
+    results = [
+        CheckResult("tests", name, status, raw_output="1 passed in 0.01s") for name, status in zip(names, statuses)
+    ]
+    rows = [
+        (name, "1/1", "n/a", label, "fail" if status in {"failed", "error"} else "pass")
+        for name, status, label in zip(names, statuses, labels)
+    ]
+    print_table(rows, {})
+    console = capsys.readouterr().out
+    markdown = render_markdown(ValidationReport(results))
+
+    # Independent widths for the exact glyphs used here: CJK/emoji occupy two cells;
+    # the combining accent occupies none, and the two variation-selector pairs two.
+    def displayed_width(value: str) -> int:
+        for glyph, replacement in [("界", "XX"), ("é", "e"), ("✅", "XX"), ("❌", "XX"), ("💥", "XX")]:
+            value = value.replace(glyph, replacement)
+        return len(value)
+
+    tables = []
+    for output in (console, markdown):
+        lines = output.splitlines()
+        start = next(index for index, line in enumerate(lines) if line.startswith("Integration"))
+        table = lines[start : start + len(results) + 4]
+        assert len({displayed_width(line) for line in table}) == 1
+        tables.append(table)
+    assert tables[0] == tables[1]
+
+    render_report(ValidationReport(results))
+    summary = capsys.readouterr().out.split("Details")[0]
+    time_columns = [displayed_width(line[: line.index("0.00s")]) for line in summary.splitlines() if "0.00s" in line]
+    assert len(set(time_columns)) == 1
+
+
+@pytest.mark.parametrize(("status", "exit_code"), [("warning", 0), ("error", 2), ("skipped", 0), ("failed", 1)])
+@pytest.mark.parametrize("mixed", [False, True])
+def test_ci_writes_reports_with_unavailable_test_counts(
+    status: str, exit_code: int, mixed: bool, tmp_path: Path, monkeypatch, capsys
+) -> None:
+    results = [CheckResult("tests", "uncounted", status, messages=[CheckMessage("info", "No counts available")])]
+    if mixed:
+        results.append(CheckResult("tests", "counted", "passed", raw_output="2 passed in 0.01s"))
+    report = ValidationReport(results)
+    monkeypatch.setattr(cli, "run_validation", lambda *args, **kwargs: report)
+    comment = tmp_path / "comment.md"
+    outputs = tmp_path / "outputs"
+    result = CliRunner().invoke(app, ["ci", "uncounted", "--comment-file", str(comment), "--output-file", str(outputs)])
+    assert result.exit_code == exit_code, result.output
+    markdown = comment.read_text()
+    assert "uncounted" in markdown
+    assert re.search(r"Total\s+" + ("2/2" if mixed else "n/a") + r"\s+", markdown)
+    assert "tests_output<<" in outputs.read_text()
+    print_table([("uncounted", "n/a", "n/a", "⚠️ Warning", "pass")], {})
+    assert re.search(r"Total\s+n/a\s+", capsys.readouterr().out)
+
+
+def test_test_totals_include_each_counted_integration_once(capsys) -> None:
+    results = [
+        CheckResult("tests", "alpha", "passed", raw_output="1 passed in 0.01s"),
+        CheckResult("tests", "beta", "failed", raw_output="3 failed, 1 passed in 0.01s"),
+        CheckResult("tests", "gamma", "passed", raw_output="1 passed in 0.01s"),
+        CheckResult("tests", "uncounted", "warning"),
+    ]
+    print_table(
+        [
+            ("alpha", "1/1", "n/a", "✅ Passed", "pass"),
+            ("beta", "1/4", "n/a", "❌ Failed", "fail"),
+            ("gamma", "1/1", "n/a", "✅ Passed", "pass"),
+            ("uncounted", "n/a", "n/a", "⚠️ Warning", "pass"),
+        ],
+        {},
+    )
+    for output in (capsys.readouterr().out, render_markdown(ValidationReport(results))):
+        assert re.search(r"^Total\s+3/6\s+❌ Some failed\s*$", output, re.MULTILINE)
+
+
+@pytest.mark.parametrize("backticks", [0, 3, 4, 5, 12])
+def test_markdown_fences_exceed_every_backtick_run(backticks: int) -> None:
+    body = "prefix\n" + "`" * backticks + "\nsuffix"
+    output = render_markdown(ValidationReport([CheckResult("readme", "demo", "passed", raw_output=body)]))
+    section = output.split("README Check output</summary>\n\n", 1)[1].split("</details>", 1)[0]
+    opening, *_, closing, blank = section.splitlines()
+    assert opening == "`" * max(3, backticks + 1) + "text"
+    assert closing == opening.removesuffix("text")
+    assert blank == ""
+    assert body in section
+
+
+@pytest.mark.parametrize("check", ["readme", "version"])
+def test_markdown_attributes_each_legacy_block_only_for_multiple_integrations(check: str) -> None:
+    first = CheckResult(check, "alpha", "passed", raw_output="First raw result")
+    second = CheckResult(check, "beta", "skipped")
+    third = CheckResult(check, "gamma", "passed")
+    single = render_markdown(ValidationReport([first]))
+    multiple = render_markdown(ValidationReport([first, second, third]))
+    assert "Integration: alpha" not in single
+    assert "Integration: alpha\nFirst raw result" in multiple
+    assert "Integration: beta\nSkipped." in multiple
+    assert "Integration: gamma\nPassed." in multiple
+
+
+def test_markdown_preserves_per_integration_code_warnings_and_failures() -> None:
+    report = ValidationReport(
+        [
+            CheckResult("sync", "alpha", "warning", messages=[CheckMessage("warning", "alpha warning")]),
+            CheckResult("syntax", "alpha", "passed"),
+            CheckResult(
+                "lint", "beta", "failed", messages=[CheckMessage("error", "beta failure")], raw_output="beta detail"
+            ),
+            CheckResult("format", "gamma", "passed"),
+        ]
+    )
+    output = render_markdown(report)
+    assert "| Code | ❌ Failed |" in output
+    alpha, beta, gamma = output.split("Checking: ")[1:]
+    assert "alpha warning" in alpha and "CODE CHECK PASSED" in alpha
+    assert "beta failure" not in alpha
+    assert "beta failure" in beta and "beta detail" in beta and "CODE CHECK FAILED" in beta
+    assert "alpha warning" not in beta
+    assert "CODE CHECK PASSED" in gamma and "CODE CHECK FAILED" not in gamma
+
+
+@pytest.mark.parametrize(
+    ("message", "raw"),
+    [
+        ("invalid action", "invalid action"),
+        ("invalid action", "  invalid action  "),
+        ("invalid action", "\x1b[31minvalid action\x1b[0m"),
+        (" \x1b[31minvalid action\x1b[0m ", "  invalid action\t"),
+    ],
+)
+def test_diagnostic_duplicates_match_across_markdown_action_and_console(
+    message: str, raw: str, tmp_path: Path, capsys
+) -> None:
+    result = CheckResult(
+        "sync",
+        "demo",
+        "failed",
+        messages=[CheckMessage("error", message)],
+        raw_output=raw + "\ninvalid action has different details",
+    )
+    report = ValidationReport([result])
+    output_file = tmp_path / "outputs"
+    _write_github_outputs(output_file, report, comment_file=None, dirs="demo")
+    render_report(report)
+    for output in (render_markdown(report), output_file.read_text(), capsys.readouterr().out):
+        assert output.count("invalid action") == 2
+        assert "invalid action has different details" in output
+    assert report.to_dict()["results"][0]["raw_output"] == raw + "\ninvalid action has different details"
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("/home/runner/work/repo/repo/shared/helper.py", "shared/helper.py"),
+        ("/tmp/test/demo/tests/test_demo_unit.py", "demo/tests/test_demo_unit.py"),
+        ("C:\\venv\\Lib\\site-packages\\vendor\\helper.py", "vendor/helper.py"),
+        ("C:\\Users\\developer\\unknown\\helper.py", "helper.py"),
+        ("/private/unknown/helper.py", "helper.py"),
+        ("//server/private/unknown/helper.py", "helper.py"),
+        ("relative/helper.py", "relative/helper.py"),
+    ],
+)
+@pytest.mark.parametrize("header", ["warnings summary", "warnings summary (final)"])
+def test_warning_sources_are_portable(source: str, expected: str, header: str, monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_WORKSPACE", "/home/runner/work/repo/repo")
+    raw = (
+        f"=== {header} ===\ndemo/tests/test_demo_unit.py::test_warns\n"
+        f"  {source}:17: UserWarning: distinct warning\n-- Docs: warnings\n1 passed in 0.01s"
+    )
+    output = render_markdown(ValidationReport([CheckResult("tests", "demo", "passed", raw_output=raw)]))
+    assert f"Source: {expected}:17" in output
+    if source != expected:
+        assert source not in output
+    assert "Affected tests:" in output
+
+
+def test_unknown_warning_paths_do_not_collapse_distinct_sources() -> None:
+    raw = "=== warnings summary ===\n"
+    for directory in ("one", "two"):
+        raw += f"  /unknown/{directory}/helper.py:7: UserWarning: identical message\n\n"
+    raw += "-- Docs: warnings\n2 passed in 0.01s"
+    output = render_markdown(ValidationReport([CheckResult("tests", "demo", "passed", raw_output=raw)]))
+    assert output.count("UserWarning — 1 occurrence") == 2
+    assert "2 occurrences" not in output
+    assert "/unknown/" not in output
+
+
+def test_markdown_keeps_both_regular_and_final_pytest_warning_sections() -> None:
+    raw = (
+        "=== warnings summary ===\n"
+        "demo/tests/test_demo_unit.py::test_warns\n"
+        "  /tmp/demo/tests/test_demo_unit.py:5: UserWarning: ordinary test warning\n\n"
+        "-- Docs: warnings\n"
+        "=== warnings summary (final) ===\n"
+        "  /tmp/demo/conftest.py:7: UserWarning: late terminal warning\n\n"
+        "-- Docs: warnings\n1 passed, 2 warnings in 0.01s"
+    )
+    output = render_markdown(ValidationReport([CheckResult("tests", "demo", "passed", raw_output=raw)]))
+    assert output.count("ordinary test warning") == 1
+    assert output.count("late terminal warning") == 1
+    assert output.count("UserWarning — 1 occurrence") == 2
+    assert output.count("Affected tests:") == 1
 
 
 def test_markdown_test_failure_summary_only_names_failed_integrations_and_strips_ansi() -> None:
@@ -529,7 +769,7 @@ def test_markdown_test_failure_summary_only_names_failed_integrations_and_strips
     assert "❌ Tests failed: failing" in output
     assert "❌ Tests failed: passing" not in output
     assert "FAILED tests/test_demo.py::test_demo" in output
-    assert "failing          0/1       90%       ❌ Failed" in output
+    assert re.search(r"failing\s+0/1\s+90%\s+❌ Failed", output)
     assert "\x1b" not in output
 
 
@@ -560,7 +800,7 @@ def test_markdown_groups_successful_pytest_warnings_without_raw_test_noise() -> 
 
     output = render_markdown(report)
 
-    assert "gmail          110/110       90%      ✅ Passed" in output
+    assert re.search(r"gmail\s+110/110\s+90%\s+✅ Passed", output)
     assert "Warnings:\n  gmail:" in output
     assert "⚠️ NoCssSanitizerWarning — 7 occurrences" in output
     assert "'style' attribute specified, but css_sanitizer not set." in output
@@ -680,19 +920,35 @@ def test_successful_legacy_check_only_reports_actual_warnings(tmp_path: Path) ->
     assert "✅ CHECK PASSED" in result.raw_output
 
 
-def test_security_check_deduplicates_bandit_nosec_warnings(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("returncode", [0, 1, 2])
+def test_security_check_deduplicates_bandit_nosec_warnings_on_every_surface(
+    tmp_path: Path, monkeypatch, capsys, returncode: int
+) -> None:
     duplicate_warning = "[tester]\tWARNING\tnosec encountered (B105), but no failed test on file demo.py:23"
     distinct_warning = "[tester]\tWARNING\tnosec encountered (B106), but no failed test on file demo.py:24"
     output = "\n".join([duplicate_warning, distinct_warning, duplicate_warning, distinct_warning])
     monkeypatch.setattr(
         "hiveup.checks.static.subprocess.run",
-        lambda *args, **kwargs: Mock(returncode=0, stdout="", stderr=output),
+        lambda *args, **kwargs: Mock(returncode=returncode, stdout="", stderr=output),
     )
 
     result = check_security(tmp_path)
 
-    assert result.status == "passed"
+    assert result.status == {0: "passed", 1: "failed", 2: "error"}[returncode]
     assert result.raw_output.splitlines() == [duplicate_warning, distinct_warning]
+    report = ValidationReport([result])
+    render_report(report)
+    output_file = tmp_path / "outputs"
+    _write_github_outputs(output_file, report, comment_file=None, dirs=result.integration)
+    for rendered in (
+        capsys.readouterr().out,
+        render_markdown(report),
+        output_file.read_text(),
+        report.to_dict()["results"][0]["raw_output"],
+        *[message["message"] for message in report.to_dict()["results"][0]["messages"]],
+    ):
+        assert rendered.count("nosec encountered (B105)") == 1
+        assert rendered.count("nosec encountered (B106)") == 1
 
 
 def test_failed_legacy_check_preserves_diagnostic_severity(tmp_path: Path) -> None:

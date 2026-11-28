@@ -33,6 +33,7 @@ from pathlib import Path
 from hiveup.core.deployment import is_deployment_source, is_excluded_development_path
 from hiveup.core.discovery import is_ignored_top_level_dir
 from hiveup.core.environment import EnvironmentBuildError, IntegrationEnvironment, prepare_environment
+from hiveup.render.text import ANSI_ESCAPE, format_table
 
 # Fix Windows console encoding for unicode characters
 if sys.platform == "win32":
@@ -192,60 +193,41 @@ def _stage_sdk_config(environment: IntegrationEnvironment, integration_dir: Path
 
 def parse_results(output: str) -> tuple[int, int, str]:
     """Parse pytest output for passed count, failed count, and coverage."""
-    passed = failed = 0
-    coverage = "n/a"
+    output = ANSI_ESCAPE.sub("", output)
+    count = r"\d+\s+(?:(?:subtests )?(?:passed|failed|skipped)|errors?|deselected|xfailed|xpassed|warnings?|rerun)"
+    summary = next(
+        (
+            line
+            for line in reversed(output.splitlines())
+            if re.fullmatch(rf"=*\s*{count}(?:,\s+{count})* in \d+(?:\.\d+)?s(?: \([^()]+\))?\s*=*\s*", line)
+        ),
+        "",
+    )
+    counts = {status: int(count) for count, status in re.findall(r"\b(\d+) (passed|failed)\b", summary)}
+    coverage = re.findall(r"^[ \t]*TOTAL(?:\s+\d+){2,}\s+(\d+(?:\.\d+)?%)[ \t]*$", output, re.MULTILINE)
+    return counts.get("passed", 0), counts.get("failed", 0), coverage[-1] if coverage else "n/a"
 
-    # Match summary line e.g. "37 passed" or "2 failed, 35 passed"
-    summary = re.search(r"(\d+) passed", output)
-    if summary:
-        passed = int(summary.group(1))
-    fail_match = re.search(r"(\d+) failed", output)
-    if fail_match:
-        failed = int(fail_match.group(1))
 
-    # Match coverage total e.g. "TOTAL   166   13   92%"
-    cov_match = re.search(r"^TOTAL\s+\d+\s+\d+\s+(\d+%)", output, re.MULTILINE)
-    if cov_match:
-        coverage = cov_match.group(1)
-
-    return passed, failed, coverage
+def format_test_table(rows: list[tuple[str, str, str, str, str]]) -> str:
+    """Format test rows and their aggregate, independently of the output destination."""
+    counted = [row for row in rows if row[1] != "n/a"]
+    total_passed = sum(int(r[1].split("/")[0]) for r in counted)
+    total_total = sum(int(r[1].split("/")[1]) for r in counted)
+    all_passed = not any(r[4] in {"fail", "failed", "error"} for r in rows)
+    total_status = "✅ All passed" if all_passed else "❌ Some failed"
+    total_tests = f"{total_passed}/{total_total}" if counted else "n/a"
+    return format_table(
+        ("Integration", "Tests", "Coverage", "Status"),
+        [row[:4] for row in rows],
+        right_align=(1, 2, 3),
+        total_row=("Total", total_tests, "", total_status),
+    )
 
 
 def print_table(rows: list[tuple[str, str, str, str, str]], failed_outputs: dict[str, str]) -> None:
     """Print a formatted results table."""
-    col_widths = [
-        max(len(r[0]) for r in rows) + 2,
-        8,  # Tests
-        10,  # Coverage
-        14,  # Status
-    ]
-
-    header = (
-        f"{'Integration':<{col_widths[0]}}"
-        f"{'Tests':>{col_widths[1]}}"
-        f"{'Coverage':>{col_widths[2]}}"
-        f"{'Status':>{col_widths[3]}}"
-    )
-    divider = "-" * len(header)
-
     print()
-    print(header)
-    print(divider)
-    for name, tests, coverage, status, _ in rows:
-        print(f"{name:<{col_widths[0]}}{tests:>{col_widths[1]}}{coverage:>{col_widths[2]}}{status:>{col_widths[3]}}")
-    print(divider)
-
-    # Total row
-    total_passed = sum(int(r[1].split("/")[0]) for r in rows if "/" in r[1])
-    total_total = sum(int(r[1].split("/")[1]) for r in rows if "/" in r[1])
-    all_passed = all(r[4] == "pass" for r in rows)
-    total_status = "✅ All passed" if all_passed else "❌ Some failed"
-    print(
-        f"{'Total':<{col_widths[0]}}"
-        f"{f'{total_passed}/{total_total}':>{col_widths[1]}}"
-        f"{'':>{col_widths[2]}}"
-        f"{total_status:>{col_widths[3]}}"
-    )
+    print(format_test_table(rows))
     print()
 
     # Print full output only for failures

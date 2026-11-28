@@ -201,6 +201,8 @@ def check_security(path: Path) -> CheckResult:
         fix_hint="Review flagged code for security risks.",
     )
     result.raw_output = _deduplicate_bandit_nosec_warnings(result.raw_output)
+    for message in result.messages:
+        message.message = _deduplicate_bandit_nosec_warnings(message.message)
     return result
 
 
@@ -354,6 +356,7 @@ def _subprocess_check(
 
 
 def _deduplicate_bandit_nosec_warnings(output: str) -> str:
+    """Drop exact duplicate nosec lines globally, including JSON, while retaining distinct warnings."""
     lines: list[str] = []
     seen_warnings: set[str] = set()
     for line in output.splitlines():
