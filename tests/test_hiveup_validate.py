@@ -503,9 +503,16 @@ def test_markdown_summarizes_tests_and_includes_failure_detail() -> None:
     assert "❌ Tests failed: github" in output
 
 
-@pytest.mark.parametrize("total", ["TOTAL 31 7 77%", "TOTAL 31 7 12 3 73.91%"])
-def test_console_and_markdown_share_pytest_counts_and_coverage(total: str, capsys) -> None:
-    raw = f"Captured stdout: 999 passed, 888 failed\n\x1b[33m{total}\x1b[0m\n=== 2 failed, 13 passed in 0.27s ==="
+@pytest.mark.parametrize(
+    ("total", "duration"),
+    [("TOTAL 31 7 77%", "0.27s"), ("TOTAL 31 7 12 3 73.91%", "60.05s (0:01:00)")],
+)
+def test_console_and_markdown_share_pytest_counts_and_coverage(total: str, duration: str, capsys) -> None:
+    raw = (
+        f"Captured stdout: 999 passed, 888 failed\n\x1b[33m{total}\x1b[0m\n"
+        f"=== 2 failed, 13 passed in {duration} ===\n"
+        "17 passed validation checks\n23 failed connection attempts\n1 warning was noted\n"
+    )
     passed, failed, coverage = parse_results(raw)
     assert (passed, failed, coverage) == (13, 2, total.split()[-1])
 
