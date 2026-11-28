@@ -504,13 +504,23 @@ def test_markdown_summarizes_tests_and_includes_failure_detail() -> None:
 
 
 @pytest.mark.parametrize(
-    ("total", "duration"),
-    [("TOTAL 31 7 77%", "0.27s"), ("TOTAL 31 7 12 3 73.91%", "60.05s (0:01:00)")],
+    ("total", "duration", "subtests"),
+    [
+        ("TOTAL 31 7 77%", "0.27s", ""),
+        ("TOTAL 31 7 12 3 73.91%", "60.05s (0:01:00)", ""),
+        (
+            "TOTAL 31 7 12 3 73.91%",
+            "86400.05s (1 day, 0:00:00)",
+            ", 3 subtests passed, 1 subtests failed, 2 subtests skipped",
+        ),
+    ],
 )
-def test_console_and_markdown_share_pytest_counts_and_coverage(total: str, duration: str, capsys) -> None:
+def test_console_and_markdown_share_pytest_counts_and_coverage(
+    total: str, duration: str, subtests: str, capsys
+) -> None:
     raw = (
         f"Captured stdout: 999 passed, 888 failed\n\x1b[33m{total}\x1b[0m\n"
-        f"=== 2 failed, 13 passed in {duration} ===\n"
+        f"=== 2 failed, 13 passed{subtests} in {duration} ===\n"
         "17 passed validation checks\n23 failed connection attempts\n1 warning was noted\n"
     )
     passed, failed, coverage = parse_results(raw)

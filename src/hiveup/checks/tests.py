@@ -194,7 +194,7 @@ def _stage_sdk_config(environment: IntegrationEnvironment, integration_dir: Path
 def parse_results(output: str) -> tuple[int, int, str]:
     """Parse pytest output for passed count, failed count, and coverage."""
     output = ANSI_ESCAPE.sub("", output)
-    count = r"\d+\s+(?:passed|failed|errors?|skipped|deselected|xfailed|xpassed|warnings?|rerun)"
+    count = r"\d+\s+(?:(?:subtests )?(?:passed|failed|skipped)|errors?|deselected|xfailed|xpassed|warnings?|rerun)"
     summary = next(
         (
             line
