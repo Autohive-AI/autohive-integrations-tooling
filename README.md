@@ -145,6 +145,21 @@ jobs:
 
 When `post_comment` is enabled, the action posts a sticky comment on the PR with a summary table showing ✅ Passed, ⚠️ Passed with warnings, or ❌ Failed for each check, along with expandable full output.
 
+Test summaries share the compatibility runner's passed/failed and coverage
+parser, including branch-coverage totals. Passing tests show concise warning
+summaries; failing tests keep their full diagnostic output. Tables use displayed
+Unicode width. Multi-integration README/version blocks identify their integration,
+and diagnostic backticks cannot close the surrounding Markdown fence.
+
+Markdown, console failure details, and Action outputs compare structured/raw
+diagnostics after removing ANSI colors and surrounding whitespace. Distinct
+diagnostics remain separate. JSON retains raw diagnostic data, except that exact
+duplicate Bandit `nosec encountered` lines are intentionally removed at the check
+level on **all** surfaces. Successful security checks also show their distinct
+`nosec` warnings in the console. Warning source summaries use package-,
+integration-, or workspace-relative paths; an unknown absolute source displays
+its basename without merging distinct original sources.
+
 ## Versioning
 
 The **major** version of this tooling matches the [Autohive Integrations SDK](https://github.com/autohive-ai/integrations-sdk) major version it targets. The **minor** and **patch** versions are the tooling's own iteration and do _not_ correspond to SDK releases.

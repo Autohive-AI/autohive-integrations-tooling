@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from hiveup.core.results import CheckResult, ValidationReport
+from hiveup.render.text import bandit_warnings, format_table, raw_output_without_messages
 
 STATUS_ICON = {
     "passed": "✅",
@@ -22,7 +23,11 @@ def render_report(report: ValidationReport) -> None:
     print("=" * 80)
     _render_table(report.results)
 
-    details = [result for result in report.results if result.messages]
+    details = [
+        result
+        for result in report.results
+        if result.messages or (result.check == "security" and bandit_warnings(result))
+    ]
     if details:
         print("\nDetails")
         print("=" * 80)
@@ -53,18 +58,7 @@ def _render_table(results: list[CheckResult]) -> None:
         for result in results
     ]
     headers = ("Integration", "Check", "Status", "Time")
-    widths = [len(header) for header in headers]
-    for row in rows:
-        for index, value in enumerate(row):
-            widths[index] = max(widths[index], len(value))
-
-    def line(values: tuple[str, ...]) -> str:
-        return "  ".join(value.ljust(widths[index]) for index, value in enumerate(values))
-
-    print(line(headers))
-    print(line(tuple("-" * width for width in widths)))
-    for row in rows:
-        print(line(row))
+    print(format_table(headers, rows))
 
 
 def _render_result_details(result: CheckResult) -> None:
@@ -80,11 +74,11 @@ def _render_result_details(result: CheckResult) -> None:
         print(f"  {prefix} {location}{message.message}")
         if message.fix_hint:
             print(f"     Fix: {message.fix_hint}")
-    if (
-        result.status in {"failed", "error"}
-        and result.raw_output
-        and all(result.raw_output != message.message for message in result.messages)
-    ):
+    if result.check == "security" and result.status not in {"failed", "error"}:
+        for warning in bandit_warnings(result):
+            print(f"  ⚠️ {warning}")
+    output = raw_output_without_messages(result)
+    if result.status in {"failed", "error"} and output:
         print("  Output:")
-        for line in result.raw_output.splitlines():
+        for line in output.splitlines():
             print(f"    {line}")

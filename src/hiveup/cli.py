@@ -38,6 +38,7 @@ from hiveup.release import (
 )
 from hiveup.render.console import render_report
 from hiveup.render.markdown import GROUPS, render_markdown
+from hiveup.render.text import ANSI_ESCAPE, raw_output_without_messages
 
 app = typer.Typer(help="Developer CLI for Autohive integrations.", no_args_is_help=True)
 
@@ -550,13 +551,11 @@ def _group_output(results: list[CheckResult]) -> str:
     lines = []
     for result in results:
         lines.append(f"[{result.integration}] {result.check}: {result.status}")
-        message_texts = {message.message for message in result.messages}
         for message in result.messages:
-            lines.append(f"  {message.severity}: {message.message}")
-        if result.raw_output and result.raw_output not in message_texts:
-            raw_lines = [line for line in result.raw_output.splitlines() if line not in message_texts]
-            if raw_lines:
-                lines.append("\n".join(raw_lines))
+            lines.append(f"  {message.severity}: {ANSI_ESCAPE.sub('', message.message).strip()}")
+        output = raw_output_without_messages(result)
+        if output:
+            lines.append(output)
     return "\n".join(lines)
 
 
