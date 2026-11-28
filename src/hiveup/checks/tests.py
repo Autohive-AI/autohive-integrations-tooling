@@ -211,11 +211,12 @@ def parse_results(output: str) -> tuple[int, int, str]:
 
 def format_test_table(rows: list[tuple[str, str, str, str, str]]) -> str:
     """Format test rows and their aggregate, independently of the output destination."""
-    total_passed = sum(int(r[1].split("/")[0]) for r in rows if "/" in r[1])
-    total_total = sum(int(r[1].split("/")[1]) for r in rows if "/" in r[1])
+    counted = [row for row in rows if row[1] != "n/a"]
+    total_passed = sum(int(r[1].split("/")[0]) for r in counted)
+    total_total = sum(int(r[1].split("/")[1]) for r in counted)
     all_passed = not any(r[4] in {"fail", "failed", "error"} for r in rows)
     total_status = "✅ All passed" if all_passed else "❌ Some failed"
-    total_tests = f"{total_passed}/{total_total}" if any("/" in r[1] for r in rows) else "n/a"
+    total_tests = f"{total_passed}/{total_total}" if counted else "n/a"
     return format_table(
         ("Integration", "Tests", "Coverage", "Status"),
         [row[:4] for row in rows],

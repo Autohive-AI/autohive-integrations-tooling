@@ -554,6 +554,28 @@ def test_test_tables_align_all_statuses_by_displayed_width(capsys) -> None:
     assert len(set(time_columns)) == 1
 
 
+@pytest.mark.parametrize(("status", "exit_code"), [("warning", 0), ("error", 2), ("skipped", 0), ("failed", 1)])
+@pytest.mark.parametrize("mixed", [False, True])
+def test_ci_writes_reports_with_unavailable_test_counts(
+    status: str, exit_code: int, mixed: bool, tmp_path: Path, monkeypatch, capsys
+) -> None:
+    results = [CheckResult("tests", "uncounted", status, messages=[CheckMessage("info", "No counts available")])]
+    if mixed:
+        results.append(CheckResult("tests", "counted", "passed", raw_output="2 passed in 0.01s"))
+    report = ValidationReport(results)
+    monkeypatch.setattr(cli, "run_validation", lambda *args, **kwargs: report)
+    comment = tmp_path / "comment.md"
+    outputs = tmp_path / "outputs"
+    result = CliRunner().invoke(app, ["ci", "uncounted", "--comment-file", str(comment), "--output-file", str(outputs)])
+    assert result.exit_code == exit_code, result.output
+    markdown = comment.read_text()
+    assert "uncounted" in markdown
+    assert re.search(r"Total\s+" + ("2/2" if mixed else "n/a") + r"\s+", markdown)
+    assert "tests_output<<" in outputs.read_text()
+    print_table([("uncounted", "n/a", "n/a", "⚠️ Warning", "pass")], {})
+    assert re.search(r"Total\s+n/a\s+", capsys.readouterr().out)
+
+
 @pytest.mark.parametrize("backticks", [0, 3, 4, 5, 12])
 def test_markdown_fences_exceed_every_backtick_run(backticks: int) -> None:
     body = "prefix\n" + "`" * backticks + "\nsuffix"
