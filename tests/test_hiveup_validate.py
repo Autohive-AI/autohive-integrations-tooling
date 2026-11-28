@@ -593,6 +593,26 @@ def test_ci_writes_reports_with_unavailable_test_counts(
     assert re.search(r"Total\s+n/a\s+", capsys.readouterr().out)
 
 
+def test_test_totals_include_each_counted_integration_once(capsys) -> None:
+    results = [
+        CheckResult("tests", "alpha", "passed", raw_output="1 passed in 0.01s"),
+        CheckResult("tests", "beta", "failed", raw_output="3 failed, 1 passed in 0.01s"),
+        CheckResult("tests", "gamma", "passed", raw_output="1 passed in 0.01s"),
+        CheckResult("tests", "uncounted", "warning"),
+    ]
+    print_table(
+        [
+            ("alpha", "1/1", "n/a", "✅ Passed", "pass"),
+            ("beta", "1/4", "n/a", "❌ Failed", "fail"),
+            ("gamma", "1/1", "n/a", "✅ Passed", "pass"),
+            ("uncounted", "n/a", "n/a", "⚠️ Warning", "pass"),
+        ],
+        {},
+    )
+    for output in (capsys.readouterr().out, render_markdown(ValidationReport(results))):
+        assert re.search(r"^Total\s+3/6\s+❌ Some failed\s*$", output, re.MULTILINE)
+
+
 @pytest.mark.parametrize("backticks", [0, 3, 4, 5, 12])
 def test_markdown_fences_exceed_every_backtick_run(backticks: int) -> None:
     body = "prefix\n" + "`" * backticks + "\nsuffix"
@@ -683,7 +703,10 @@ def test_diagnostic_duplicates_match_across_markdown_action_and_console(
 @pytest.mark.parametrize("header", ["warnings summary", "warnings summary (final)"])
 def test_warning_sources_are_portable(source: str, expected: str, header: str, monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_WORKSPACE", "/home/runner/work/repo/repo")
-    raw = f"=== {header} ===\ndemo/tests/test_demo_unit.py::test_warns\n  {source}:17: UserWarning: distinct warning\n-- Docs: warnings\n1 passed in 0.01s"
+    raw = (
+        f"=== {header} ===\ndemo/tests/test_demo_unit.py::test_warns\n"
+        f"  {source}:17: UserWarning: distinct warning\n-- Docs: warnings\n1 passed in 0.01s"
+    )
     output = render_markdown(ValidationReport([CheckResult("tests", "demo", "passed", raw_output=raw)]))
     assert f"Source: {expected}:17" in output
     if source != expected:
