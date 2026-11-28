@@ -16,7 +16,13 @@ from hiveup.core.deployment import (
 )
 from hiveup.sdk_requirement import SdkRequirementError, read_sdk_requirement, sdk_requirement_warnings
 
-TARGET_PLATFORM = "manylinux2014_x86_64"
+# Lambda Python 3.13 uses AL2023/glibc 2.34. pip treats --platform tags
+# literally, so include every compatible PEP 600 floor and legacy alias.
+TARGET_PLATFORMS = tuple(f"manylinux_2_{minor}_x86_64" for minor in range(34, 4, -1)) + (
+    "manylinux2014_x86_64",
+    "manylinux2010_x86_64",
+    "manylinux1_x86_64",
+)
 TARGET_PYTHON_VERSION = "3.13"
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 ZIP_FILE_MODE = 0o100644
@@ -127,10 +133,13 @@ def install_dependencies(requirements: Path, target: Path) -> None:
         "install",
         "-r",
         str(requirements),
-        "--platform",
-        TARGET_PLATFORM,
+        *(argument for platform in TARGET_PLATFORMS for argument in ("--platform", platform)),
         "--python-version",
         TARGET_PYTHON_VERSION,
+        "--implementation",
+        "cp",
+        "--abi",
+        "cp313",
         "--only-binary=:all:",
         "--target",
         str(target),
@@ -143,7 +152,8 @@ def install_dependencies(requirements: Path, target: Path) -> None:
     output = (result.stderr or result.stdout).strip()
     detail = f"\n{output}" if output else ""
     raise PackageBuildError(
-        f"Could not install dependencies for Python {TARGET_PYTHON_VERSION} on {TARGET_PLATFORM}. "
+        f"Could not install dependencies for CPython {TARGET_PYTHON_VERSION} on "
+        "Amazon Linux 2023 (x86-64, glibc 2.34). "
         f"All dependencies must provide compatible wheels.{detail}"
     )
 

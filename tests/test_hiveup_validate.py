@@ -32,7 +32,7 @@ from hiveup.checks.tests import get_integration_dirs  # noqa: E402
 from hiveup.core.discovery import changed_integrations, discover_integrations  # noqa: E402
 from hiveup.core.results import CheckMessage, CheckResult, ValidationReport  # noqa: E402
 from hiveup.packaging import (  # noqa: E402
-    TARGET_PLATFORM,
+    TARGET_PLATFORMS,
     TARGET_PYTHON_VERSION,
     PackageBuildError,
     build_package,
@@ -2183,10 +2183,13 @@ def test_package_dependencies_target_deployment_runtime(tmp_path: Path, monkeypa
             "install",
             "-r",
             str(requirements),
-            "--platform",
-            TARGET_PLATFORM,
+            *(argument for platform in TARGET_PLATFORMS for argument in ("--platform", platform)),
             "--python-version",
             TARGET_PYTHON_VERSION,
+            "--implementation",
+            "cp",
+            "--abi",
+            "cp313",
             "--only-binary=:all:",
             "--target",
             str(target),
@@ -2212,7 +2215,8 @@ def test_package_dependency_error_explains_wheel_contract(tmp_path: Path, monkey
     else:
         raise AssertionError("Expected dependency installation to fail")
 
-    assert f"Python {TARGET_PYTHON_VERSION} on {TARGET_PLATFORM}" in message
+    assert f"CPython {TARGET_PYTHON_VERSION}" in message
+    assert "Amazon Linux 2023 (x86-64, glibc 2.34)" in message
     assert "must provide compatible wheels" in message
     assert "No matching distribution found" in message
 

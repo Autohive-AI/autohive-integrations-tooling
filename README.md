@@ -367,6 +367,23 @@ Packaging always requires the top-level `requirements.txt` to declare
 deployment safety check still runs with `--skip-validate`, so a release workflow
 cannot package an integration that permits an older SDK.
 
+Dependency wheels target **CPython 3.13, x86-64, and Amazon Linux 2023 / glibc
+2.34**, the Lambda Python 3.13 runtime. Pip receives every compatible PEP 600
+platform tag from `manylinux_2_34_x86_64` down to `manylinux_2_5_x86_64`, plus
+the legacy `manylinux2014`, `manylinux2010`, and `manylinux1` x86-64 aliases.
+A single `--platform` value is insufficient: pip treats manylinux platform
+arguments literally rather than expanding all older glibc floors. Passing
+only `manylinux2014_x86_64` can therefore select an older dependency release
+even when a newer compatible wheel is available.
+
+Packaging remains binary-only (`--only-binary=:all:`), accepts compatible
+stable-ABI and pure-Python wheels, and excludes wheels tagged for newer glibc,
+other architectures, musl, or free-threaded CPython. Compatibility relies on
+the wheel's declared tags; it is not a vulnerability scan. Requirements and
+exact pins still control which versions can be selected. Rebuild and inspect
+the affected archives before deployment; this change does not update existing
+deployed packages. See [issue #51](https://github.com/Autohive-AI/autohive-integrations-tooling/issues/51).
+
 SDK **2.1.0 is the recommended minimum**. The structure check warns when the
 declared SDK lower bound is older, including SDK 1.x and 2.0.x. It checks
 `requirements.txt`, not whichever SDK happens to be installed in the Tooling

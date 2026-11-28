@@ -13,7 +13,7 @@ on:
       - '.github/workflows/self-test.yml'
 
   pull_request:
-    branches: [master, main]
+    # Test stacked PRs as well as PRs targeting the default branch.
     paths:
       - 'action.yml'
       - 'pyproject.toml'
